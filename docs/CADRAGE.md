@@ -10,28 +10,29 @@ Une couche d'orchestration **déterministe**, sans IA générative, qui se branc
 - le manifeste d'exécution permet un **rejeu à l'identique** et prouve l'absence de dérive ;
 - batterie de tests de validation exécutée automatiquement, avec rapport horodaté.
 
-## État du MVP (v0.2)
-- `mf-core` : DAG, hachage des entrées/sorties/code, manifeste, vérification de rejeu.
-- `mf-validate` : VaR historique, backtest glissant, test de Kupiec.
-- `mf-runtime` : pipelines en TOML, étapes CSV / intégrées / **processus externes (tout langage)**, stockage SQLite des exécutions.
-- `mf-cli` : `mf run | verify | runs | show`.
-- Exemple : desk actions, VaR historique vs. modèle EWMA en Python, tous deux backtestés.
-- 13 tests unitaires + scénarios bout en bout (rejeu identique, code modifié sans version, donnée altérée).
+## État (v0.3)
+- `mf-core` : DAG, empreintes des entrées, des sorties et du code, manifeste, vérification du rejeu.
+- `mf-validate` : VaR historique ; Kupiec, Christoffersen, feux tricolores de Bâle ; PSI ; AUC, Gini, KS ; calibration binomiale par classe et Hosmer-Lemeshow.
+- `mf-runtime` : pipelines TOML, étapes CSV (série ou table), étapes intégrées, processus externes avec délai maximal, stockage SQLite, rapport de validation HTML.
+- `mf-cli` : `mf run | verify | runs | show | report`.
+- Deux exemples : desk actions (VaR) et scorecard PD.
+- CI GitHub : format, clippy, tests, exécution des exemples et rapports en artefacts.
 
-Décision 1 tranchée : intégration par **processus externe** (JSON stdin/stdout).
+Décision 1 tranchée : les modèles existants sont intégrés comme **processus externes** (JSON sur stdin/stdout).
 
 ## Limites connues
-- Les sorties complètes sont stockées dans le manifeste (à remplacer par un stockage adressé par contenu pour les gros volumes).
-- Pas encore de timeout ni d'isolation des processus externes.
-- Entrées CSV simples uniquement (pas de guillemets, pas de Parquet).
+- Les sorties complètes sont stockées dans le manifeste : à remplacer par un stockage adressé par contenu pour les gros volumes.
+- Les processus externes ont un délai maximal mais ne sont pas isolés (pas de bac à sable).
+- Le lecteur CSV est simple (pas de guillemets) ; Parquet n'est pas encore pris en charge.
+- Les étapes intégrées sont versionnées manuellement : à lier à la version du moteur.
 
 ## Feuille de route (8 semaines)
 | Sem. | Livrable |
 |---|---|
-| 1-2 | ~~Étapes externes, CSV, stockage SQLite~~ (fait) ; reste : stockage par contenu, timeout/isolation, Parquet, PostgreSQL |
-| 3-4 | Tests de validation : Christoffersen, traffic-light Bâle, stabilité (PSI), benchmark modèle vs. modèle challenger, PD/LGD (Gini, KS, calibration) |
+| 1-2 | ~~Étapes externes, CSV, SQLite, délai maximal~~ (fait) ; reste : stockage par contenu, isolation, Parquet, PostgreSQL |
+| 3-4 | ~~Christoffersen, feux tricolores, PSI, Gini/KS, calibration PD~~ (fait) ; reste : modèle challenger, LGD/EAD, tests de sensibilité |
 | 5 | Pricing : adaptateur QuantLib, jeux de référence, tolérances par produit |
-| 6 | Rapport de validation (HTML/PDF), inventaire des modèles, piste d'audit signée |
+| 6 | ~~Rapport de validation HTML~~ (fait) ; reste : export PDF, inventaire des modèles, piste d'audit signée |
 | 7 | Planification, API REST/gRPC, authentification, rôles (modèle owner / validateur) |
 | 8 | Packaging Docker/Kubernetes on-premise, documentation, pilote |
 

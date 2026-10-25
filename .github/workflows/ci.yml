@@ -1,0 +1,34 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - name: Exemples de bout en bout
+        run: |
+          cargo build --release
+          for e in var-equity pd-scorecard; do
+            p=examples/$e/pipeline.toml
+            target/release/mf run "$p"
+            target/release/mf verify "$p"
+            target/release/mf report "$p" -o "report-$e.html"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rapports-validation
+          path: report-*.html
