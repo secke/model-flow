@@ -1,0 +1,20 @@
+# Entrée : uniquement depuis le contrôleur d'ingress (TLS terminé à l'ingress).
+# Sortie : aucune — les modèles externes s'exécutent sans accès réseau.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: modelflow
+  namespace: modelflow
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: modelflow
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 8080
+  egress: []

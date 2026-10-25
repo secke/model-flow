@@ -20,13 +20,15 @@ $mf show $p --run 1        # manifeste JSON complet
 | `examples/var-equity` | VaR historique et modèle EWMA externe (Python), backtests complets |
 | `examples/pd-scorecard` | Modèle de PD à 7 classes : Gini/KS, calibration par classe, stabilité de la population |
 | `examples/pricing-benchmark` | Validation de QuantLib 1.44 sur 12 transactions (options européennes et américaines, Black-76, obligations) |
-| `examples/rates-benchmark` | Courbe EUR 6M (dépôts + swaps), re-pricing, validation de QuantLib sur 7 swaps et 3 zéro-coupons |
+| `examples/rates-benchmark` | Courbe simple EUR 6M (dépôts + swaps), re-pricing, validation de QuantLib sur 7 swaps et 3 zéro-coupons |
+| `examples/multicurve-benchmark` | Multi-courbes €STR / Euribor 6M aux conventions de marché, validation de QuantLib sur 8 swaps (2 à 30 ans) |
 
 ## Types d'étapes
 | kind | rôle | paramètres |
 |---|---|---|
-| `csv` | lit une colonne (`column`) ou une table (`columns`) numérique | `path` |
-| `process` | **modèle externe, tout langage** | `command`, `code`, `timeout_secs` (300) |
+| `csv` | lit une colonne (`column`) ou une table (`columns`) numérique ; guillemets RFC 4180 | `path`, `delimiter` (`,`) |
+| `parquet` | idem pour un fichier Parquet (colonnes numériques) | `path` |
+| `process` | **modèle externe, tout langage** | `command`, `code`, `timeout_secs` (300), `env`, `pass_env`, `memory_mb`, `cpu_secs`, `file_size_mb`, `max_output_mb` (256) |
 | `var_historical` | VaR historique | `alpha` |
 | `kupiec_backtest` | backtest glissant de la VaR historique | `alpha`, `window` |
 | `backtest_forecasts` | backtest de prévisions de VaR d'un modèle | `returns`, `forecasts`, `alpha` |
@@ -55,11 +57,19 @@ Format des transactions : voir `examples/pricing-benchmark/trades.json`.
 - **Courbes** : bootstrap séquentiel sur dépôts (taux simple) et swaps par, interpolation log-linéaire des facteurs d'actualisation (forwards constants par morceaux), extrapolation au dernier forward.
 - **Produits** : swap de taux vanille payeur ou receveur (NPV, taux par, annuité, jambes, DV01 par déplacement de 1 pb de toutes les cotations) et zéro-coupon (taux zéro, DV01).
 - **Contrôle** : `curve_bootstrap` re-price chaque instrument d'entrée (écart observé de l'ordre de 1e-16) et publie facteurs d'actualisation, taux zéro et forwards.
-- **Simplifications** : une seule courbe pour projeter et actualiser, fractions d'année égales à 1/fréquence, pas de calendrier ni de jours de fixing. Le multi-courbes (OIS en actualisation) et les conventions de marché sont à venir.
+- **Simplifications de ce mode** : une seule courbe pour projeter et actualiser, fractions d'année égales à 1/fréquence, pas de calendrier. Pour la production, utiliser les courbes datées ci-dessous.
 
 Résultat de l'exemple : avec les mêmes conventions (calendrier nul, SimpleDayCounter, PiecewiseLogLinearDiscount), QuantLib et la référence coïncident à environ 1e-8 en devise sur des notionnels de 8 à 50 millions, et à 2e-7 en extrapolation à 40 ans.
 
 Format du marché : voir `examples/rates-benchmark/market.json`.
+
+### Multi-courbes et conventions de marché (`mf_pricing::curves`, `mf_pricing::dates`)
+- **Conventions** : calendrier TARGET (Pâques calculée), décalage spot en jours ouvrés, Following / Modified Following / Preceding, bases Act/360, Act/365F et 30/360, règle de fin de mois des indices, échéanciers générés à rebours.
+- **Courbe OIS** (`"kind": "ois"`) : swaps €STR au pair, jambe fixe annuelle (paiement unique jusqu'à 1 an), jambe variable capitalisée.
+- **Courbe de projection** (`"kind": "ibor"`) : dépôt et swaps Euribor actualisés sur la courbe OIS désignée par `discount_curve`. Les courbes sont construites dans l'ordre de leurs dépendances.
+- **Swap daté** (`"product": "vanilla_swap"`) : départ spot, conventions de la courbe de projection, actualisation OIS ; NPV, taux par, annuité, jambes et DV01 (toutes les cotations déplacées de 1 pb, courbes reconstruites).
+
+Résultat de l'exemple : la courbe €STR et la courbe Euribor 6M re-pricent leurs instruments à 1e-16 près. Sur 8 swaps de 8 à 50 millions de notionnel et de 2 à 30 ans, QuantLib (OISRateHelper, SwapRateHelper actualisé €STR, MakeVanillaSwap) et la référence coïncident à moins de 4e-6 en devise.
 
 ## API REST (`mf-server`)
 ```bash
@@ -77,6 +87,12 @@ curl -H "Authorization: Bearer $JETON" localhost:8080/api/pipelines
 | POST | `/api/pipelines/{p}/runs/{id}/decisions` `{"decision": "approved" \| "rejected", "comment": "…"}` | `validator` |
 | GET | `/api/audit?limit=100` | `auditor`, `admin` |
 
+Fonctionnement :
+- `POST …/runs` place l'exécution en file d'attente et répond `202` avec un travail à suivre sur `GET /api/jobs/{id}` (`queued`, `running`, `succeeded`, `failed`). `?wait=true` attend la fin et renvoie le résultat.
+- `max_concurrent_runs` (2) borne les exécutions simultanées. Les travaux interrompus par un arrêt du serveur sont marqués en échec au redémarrage.
+- `rate_limit_per_minute` (120) limite les requêtes par utilisateur (réponse `429` au-delà).
+- Section `[tls]` (`cert`, `key`, fichiers PEM) pour servir directement en HTTPS ; sinon, placer le serveur derrière un proxy HTTPS.
+
 Règles de gouvernance :
 - La configuration ne contient que l'empreinte SHA-256 des jetons.
 - Un validateur ne peut pas statuer sur une exécution qu'il a lancée (séparation des tâches).
@@ -86,6 +102,36 @@ Règles de gouvernance :
 
 ## Protocole des modèles externes
 Le processus reçoit sur stdin `{"inputs": {<dep>: <sortie>}, "params": {...}}` et écrit un document JSON sur stdout. Un code de sortie non nul signale un échec, et stderr est remonté. Les fichiers listés dans `code` sont hachés : une modification du code sans changement de `version` est signalée au rejeu.
+
+Isolation :
+- L'environnement est vidé. Seuls `PATH`, `LANG`, `HOME`, `TMPDIR` et `PYTHONHASHSEED=0` sont fournis, plus les variables `env` (prises en compte dans l'empreinte) et celles nommées dans `pass_env`.
+- Sous Unix, des limites de ressources s'appliquent : mémoire (`memory_mb`), temps CPU (`cpu_secs`, par défaut le délai), taille des fichiers (`file_size_mb`), pas de fichier core.
+- La sortie est plafonnée (`max_output_mb`).
+- Le processus tourne dans son propre groupe, tué à la fin de l'étape : aucun processus orphelin ne survit.
+- L'isolation réseau est assurée par le déploiement (NetworkPolicy sans sortie, voir plus bas).
+
+## Stockage et intégrité
+- Les sorties des étapes sont stockées une seule fois, adressées par leur empreinte SHA-256 : deux exécutions identiques ne dupliquent pas les données.
+- Le manifeste ne garde que les empreintes. À la relecture, chaque sortie est re-hachée et toute altération de la base est détectée.
+- Les étapes intégrées portent une empreinte de l'implémentation (version du moteur). Une montée de version du moteur est donc signalée au rejeu des anciennes exécutions.
+
+## Déploiement
+```bash
+docker build -t modelflow:0.6.0 .
+docker run --rm modelflow:0.6.0 new-token          # renseigner deploy/server.docker.toml
+docker compose up --build                          # http://127.0.0.1:8080
+kubectl apply -k deploy/k8s                        # après avoir renseigné deploy/k8s/secret.yaml
+```
+- **Image** : binaires `mf` et `mf-server`, Python 3.12 et QuantLib, utilisateur non root (10001). Les exemples sont livrés dans `/opt/modelflow/examples`.
+- **docker-compose** : système de fichiers en lecture seule, aucune capacité, `no-new-privileges`, port lié à 127.0.0.1.
+- **Kubernetes** (`deploy/k8s`) :
+  - espace de noms en Pod Security `restricted`, conteneur non root en lecture seule, seccomp `RuntimeDefault` ;
+  - sondes sur `/api/health`, limites de ressources ;
+  - configuration dans un Secret, espace de travail sur un volume persistant ;
+  - NetworkPolicy : entrée depuis l'ingress uniquement, aucune sortie ;
+  - une seule réplique, car SQLite n'accepte qu'un écrivain ;
+  - en production, alimenter `/workspace` depuis Git (git-sync ou CI) plutôt que par l'initContainer de démonstration.
+- **CI** : construction de l'image, essai de bout en bout dans le conteneur (lecture seule, sans capacités) et validation des manifestes avec kubeconform.
 
 ## Écarts détectés par `verify`
 - `code modifié sans changement de version`

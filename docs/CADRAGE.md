@@ -10,34 +10,37 @@ Une couche d'orchestration **déterministe**, sans IA générative, qui se branc
 - le manifeste d'exécution permet un **rejeu à l'identique** et prouve l'absence de dérive ;
 - batterie de tests de validation exécutée automatiquement, avec rapport horodaté.
 
-## État (v0.5)
+## État (v0.6)
 - `mf-core` : DAG, empreintes des entrées, des sorties et du code, manifeste, vérification du rejeu.
 - `mf-validate` : VaR historique ; Kupiec, Christoffersen, feux tricolores de Bâle ; PSI ; AUC, Gini, KS ; calibration binomiale par classe et Hosmer-Lemeshow.
 - `mf-runtime` : pipelines TOML, étapes CSV (série ou table), étapes intégrées, processus externes avec délai maximal, stockage SQLite, rapport de validation HTML.
 - `mf-pricing` : pricers de référence (BSM et sensibilités, Black-76, CRR américain, obligations, volatilité implicite), courbes de taux (bootstrap dépôts + swaps), swaps de taux et zéro-coupons avec DV01, benchmark de pricers avec tolérances par produit.
 - `mf-server` : API REST, jetons hachés, rôles (propriétaire du modèle, validateur, auditeur, admin), décisions de validation avec séparation des tâches, journal d'audit en ajout seul.
 - `mf-cli` : `mf run | verify | runs | show | report`.
-- Quatre exemples : desk actions (VaR), scorecard PD, validation de QuantLib sur options et obligations, puis sur courbe et swaps.
+- Taux multi-courbes : calendrier TARGET, conventions de marché, courbe €STR et projection Euribor 6M actualisée OIS, swaps datés.
+- Stockage des sorties adressé par contenu, avec contrôle d'intégrité ; isolation des processus externes ; CSV RFC 4180 et Parquet.
+- API : file d'attente des exécutions, limitation de débit, TLS natif.
+- Déploiement : image Docker non root, docker-compose durci, manifestes Kubernetes (Pod Security restricted, NetworkPolicy).
+- Cinq exemples : desk actions (VaR), scorecard PD, validation de QuantLib sur options et obligations, sur courbe simple et swaps, et en multi-courbes.
 - CI GitHub : format, clippy, tests, exécution des exemples et rapports en artefacts.
 
 Décision 1 tranchée : les modèles existants sont intégrés comme **processus externes** (JSON sur stdin/stdout).
 
 ## Limites connues
-- Les sorties complètes sont stockées dans le manifeste : à remplacer par un stockage adressé par contenu pour les gros volumes.
-- Les processus externes ont un délai maximal mais ne sont pas isolés (pas de bac à sable).
-- Le lecteur CSV est simple (pas de guillemets) ; Parquet n'est pas encore pris en charge.
-- Les étapes intégrées sont versionnées manuellement : à lier à la version du moteur.
-- API : exécutions synchrones (la requête attend la fin du pipeline), pas encore de file d'attente ni de limitation de débit ; TLS à assurer par un proxy inverse.
+- Stockage SQLite : une seule instance du serveur (pas de haute disponibilité) ; PostgreSQL à prévoir pour plusieurs répliques.
+- L'isolation réseau des modèles externes dépend du déploiement (NetworkPolicy) ; en exécution locale, ils ont accès au réseau.
+- Taux : pas encore de swaptions, caps/floors, produits de change, jours de fixing historiques (fixings passés) ni d'autres calendriers que TARGET.
+- Authentification par jetons statiques : SSO (OIDC/LDAP) à prévoir pour un déploiement en banque.
 
 ## Feuille de route (8 semaines)
 | Sem. | Livrable |
 |---|---|
-| 1-2 | ~~Étapes externes, CSV, SQLite, délai maximal~~ (fait) ; reste : stockage par contenu, isolation, Parquet, PostgreSQL |
+| 1-2 | ~~Étapes externes, CSV/Parquet, SQLite, délai, isolation, stockage par contenu~~ (fait) ; reste : PostgreSQL |
 | 3-4 | ~~Christoffersen, feux tricolores, PSI, Gini/KS, calibration PD~~ (fait) ; reste : modèle challenger, LGD/EAD, tests de sensibilité |
-| 5 | ~~Pricers de référence, validation de QuantLib, tolérances par produit, courbes et swaps~~ (fait) ; reste : multi-courbes (OIS), conventions de marché (calendriers, jours ouvrés), swaptions, caps/floors, change |
+| 5 | ~~Pricers de référence, validation de QuantLib, courbes, swaps, multi-courbes OIS, conventions de marché~~ (fait) ; reste : fixings historiques, swaptions, caps/floors, change |
 | 6 | ~~Rapport de validation HTML~~ (fait) ; reste : export PDF, inventaire des modèles, piste d'audit signée |
-| 7 | ~~API REST, authentification, rôles, décisions, audit~~ (fait) ; reste : planification des exécutions, SSO (OIDC/LDAP), interface web |
-| 8 | Packaging Docker/Kubernetes on-premise, documentation, pilote |
+| 7 | ~~API REST, authentification, rôles, décisions, audit, file d'attente, limitation, TLS~~ (fait) ; reste : planification, SSO (OIDC/LDAP), interface web |
+| 8 | ~~Image Docker, docker-compose, manifestes Kubernetes, CI de l'image~~ (fait) ; reste : chart Helm, pilote |
 
 ## Décisions ouvertes
 1. ~~Mode d'intégration~~ : processus externe retenu.

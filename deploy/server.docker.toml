@@ -1,0 +1,20 @@
+# Configuration du conteneur. Remplacer les empreintes : `docker run --rm modelflow new-token`.
+workspace = "/workspace"
+bind = "0.0.0.0:8080"
+max_concurrent_runs = 2
+rate_limit_per_minute = 120
+
+[[user]]
+name = "alice"
+role = "model_owner"
+token_sha256 = "remplacer-par-l-empreinte-du-jeton-0000000000000000000000000000"
+
+[[user]]
+name = "bob"
+role = "validator"
+token_sha256 = "remplacer-par-l-empreinte-du-jeton-0000000000000000000000000000"
+
+[[user]]
+name = "carol"
+role = "auditor"
+token_sha256 = "remplacer-par-l-empreinte-du-jeton-0000000000000000000000000000"

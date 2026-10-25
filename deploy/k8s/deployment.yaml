@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: modelflow
+  namespace: modelflow
+  labels:
+    app.kubernetes.io/name: modelflow
+spec:
+  # Une seule réplique : les bases SQLite n'acceptent qu'un écrivain.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: modelflow
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: modelflow
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Démonstration : copie les exemples dans l'espace de travail s'il est vide.
+        # En production, alimenter /workspace depuis un dépôt Git (git-sync) ou un pipeline CI.
+        - name: seed-examples
+          image: modelflow:0.6.0
+          command: ["sh", "-c", "[ -n \"$(ls -A /workspace)\" ] || cp -r /opt/modelflow/examples/. /workspace/"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+      containers:
+        - name: modelflow
+          image: modelflow:0.6.0
+          args: ["serve", "--config", "/etc/modelflow/server.toml"]
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "4"
+              memory: 4Gi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: config
+              mountPath: /etc/modelflow
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: modelflow-workspace
+        - name: config
+          secret:
+            secretName: modelflow-config
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi

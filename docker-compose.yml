@@ -1,0 +1,18 @@
+# Démarrage local : renseigner deploy/server.docker.toml puis `docker compose up --build`.
+services:
+  modelflow:
+    build: .
+    image: modelflow:0.6.0
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./examples:/workspace
+      - ./deploy/server.docker.toml:/etc/modelflow/server.toml:ro
+    user: "${UID:-10001}:${GID:-10001}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped

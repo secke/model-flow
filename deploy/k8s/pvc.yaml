@@ -1,0 +1,11 @@
+# Espace de travail : pipelines, données, historiques SQLite des exécutions et gouvernance.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: modelflow-workspace
+  namespace: modelflow
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
