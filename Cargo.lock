@@ -191,10 +191,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "mf-pricing"
+version = "0.1.0"
+dependencies = [
+ "mf-validate",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "mf-runtime"
 version = "0.1.0"
 dependencies = [
  "mf-core",
+ "mf-pricing",
  "mf-validate",
  "rusqlite",
  "serde",

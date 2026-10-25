@@ -1,0 +1,45 @@
+name = "pricing-library-benchmark"
+
+[[step]]
+name = "trades"
+kind = "json"
+version = "1.0.0"
+path = "trades.json"
+
+# Valorisation de référence (formules fermées, arbre CRR) avec sensibilités
+[[step]]
+name = "reference_valuation"
+kind = "price_portfolio"
+version = "1.0.0"
+deps = ["trades"]
+
+# Pricer de production à valider : QuantLib
+[[step]]
+name = "quantlib"
+kind = "process"
+version = "1.44.0"
+deps = ["trades"]
+command = ["python3", "models/quantlib_pricer.py"]
+code = ["models/quantlib_pricer.py"]
+timeout_secs = 120
+
+# Écarts admis par produit : abs + rel × |prix de référence|
+[[step]]
+name = "benchmark_quantlib"
+kind = "pricing_benchmark"
+version = "1.0.0"
+deps = ["trades", "quantlib", "reference_valuation"]
+
+[step.params]
+trades = "trades"
+candidate = "quantlib"
+reference = "reference_valuation"
+
+[step.params.tolerances]
+default = { abs = 1e-8, rel = 1e-8 }
+european_option = { abs = 1e-8, rel = 1e-9 }
+black76 = { abs = 1e-8, rel = 1e-9 }
+# Arbres : QuantLib (CRR) utilise une probabilité linéarisée en log, la référence la probabilité
+# martingale exacte ; l'écart est en O(Δt) (~5e-5 à 800 pas) et non une erreur de pricing.
+american_option = { abs = 1e-4, rel = 1e-6 }
+fixed_rate_bond = { abs = 1e-8, rel = 1e-9 }

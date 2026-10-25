@@ -1,4 +1,5 @@
 use mf_core::{hash_bytes, Error, Inputs, Step};
+use mf_pricing::benchmark::{compare, prices_from_value, reference_prices, trades_from_value, Tolerances};
 use mf_validate::{calibration, discrimination, historical_var, psi, rolling_backtest, var_backtest};
 use serde_json::{json, Value};
 use std::io::{Read, Write};
@@ -114,6 +115,31 @@ impl Step for CsvStep {
     }
 }
 
+// ---------- JSON ----------
+/// Lit un document JSON (transactions, paramètres de marché, prix…).
+pub struct JsonStep {
+    pub name: String,
+    pub version: String,
+    pub path: PathBuf,
+}
+
+impl Step for JsonStep {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn version(&self) -> &str {
+        &self.version
+    }
+    fn deps(&self) -> &[String] {
+        &[]
+    }
+    fn run(&self, _: &Inputs) -> Result<Value, Error> {
+        let text = std::fs::read_to_string(&self.path)
+            .map_err(|e| err(&self.name, format!("{}: {e}", self.path.display())))?;
+        serde_json::from_str(&text).map_err(|e| err(&self.name, format!("JSON invalide: {e}")))
+    }
+}
+
 // ---------- Étapes intégrées ----------
 pub struct BuiltinStep {
     pub name: String,
@@ -129,6 +155,8 @@ impl BuiltinStep {
         "kupiec_backtest",
         "backtest_forecasts",
         "psi",
+        "price_portfolio",
+        "pricing_benchmark",
         "pd_discrimination",
         "pd_calibration",
     ];
@@ -223,6 +251,28 @@ impl Step for BuiltinStep {
                 let pd = self.table_col(t, "pd", "pd")?;
                 let def = flags(&self.table_col(t, "default", "default")?);
                 self.json(calibration(&grade, &pd, &def), "données invalides")
+            }
+            "price_portfolio" => {
+                let trades = trades_from_value(self.dep(inputs, "trades", 0)?).map_err(|e| err(&self.name, e))?;
+                let vals: Result<Vec<_>, _> = trades
+                    .iter()
+                    .map(|t| mf_pricing::value(t).map_err(|e| err(&self.name, format!("{}: {e}", t.id))))
+                    .collect();
+                Ok(serde_json::to_value(vals?).unwrap())
+            }
+            // Pricer candidat vs. référence (dépendance `reference`, sinon bibliothèque intégrée).
+            "pricing_benchmark" => {
+                let trades = trades_from_value(self.dep(inputs, "trades", 0)?).map_err(|e| err(&self.name, e))?;
+                let candidate = prices_from_value(self.dep(inputs, "candidate", 1)?).map_err(|e| err(&self.name, e))?;
+                let reference = match self.params.get("reference").and_then(Value::as_str) {
+                    Some(_) => prices_from_value(self.dep(inputs, "reference", 2)?),
+                    None => reference_prices(&trades),
+                }
+                .map_err(|e| err(&self.name, e))?;
+                let tol = Tolerances::from_value(self.params.get("tolerances").unwrap_or(&Value::Null))
+                    .map_err(|e| err(&self.name, e))?;
+                let b = compare(&trades, &reference, &candidate, &tol).map_err(|e| err(&self.name, e))?;
+                Ok(serde_json::to_value(b).unwrap())
             }
             k => Err(err(&self.name, format!("type inconnu `{k}`"))),
         }

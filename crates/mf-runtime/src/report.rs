@@ -81,6 +81,9 @@ fn scalar(v: &Value) -> String {
 }
 
 fn numeric_summary(a: &[Value]) -> String {
+    if a.is_empty() {
+        return "<span class=\"muted\">aucun</span>".into();
+    }
     let xs: Vec<f64> = a.iter().filter_map(Value::as_f64).collect();
     if xs.is_empty() {
         return format!("[{} éléments]", a.len());
@@ -120,9 +123,10 @@ fn render(v: &Value, depth: usize) -> String {
         }
         Value::Array(a) if a.first().is_some_and(Value::is_object) => {
             let rank = |k: &str| match k {
-                "grade" | "name" => 0,
-                "status" => 2,
-                _ => 1,
+                "id" | "grade" | "name" => 0,
+                "product" => 1,
+                "status" => 3,
+                _ => 2,
             };
             let mut cols: Vec<&String> = a[0].as_object().unwrap().keys().collect();
             cols.sort_by_key(|k| rank(k));
@@ -179,8 +183,8 @@ main{{max-width:1040px;margin:0 auto;padding:32px 16px 64px}}h1{{font-size:24px;
 .ok{{color:var(--ok);background:var(--okb)}}.warn{{color:var(--warn);background:var(--warnb)}}.bad{{color:var(--bad);background:var(--badb)}}.na{{color:var(--muted);background:var(--line)}}
 table{{border-collapse:collapse;width:100%}}.wrap,details{{max-width:100%;min-width:0}}details>div{{max-width:100%}}.wrap{{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:10px}}
 .steps th,.steps td,.grid th,.grid td{{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}}
-.steps tr:last-child td{{border-bottom:0}}th{{font-weight:600;color:var(--muted);font-size:12px}}
-.kv th{{width:34%;padding:4px 10px 4px 0;font-weight:500;text-align:left;vertical-align:top}}.kv td{{padding:4px 0}}.kv .kv th{{width:40%}}
+.grid td,.grid th{{white-space:nowrap}}.steps tr:last-child td{{border-bottom:0}}th{{font-weight:600;color:var(--muted);font-size:12px}}
+.kv>tbody>tr>th{{width:34%;padding:4px 10px 4px 0;font-weight:500;text-align:left;vertical-align:top}}.kv>tbody>tr>td{{padding:4px 0}}.kv .kv>tbody>tr>th{{width:40%}}
 details{{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:10px}}summary{{cursor:pointer;padding:12px 16px;display:flex;gap:10px;align-items:center}}
 details>div{{padding:0 16px 16px;overflow-x:auto}}.verdict{{font-size:16px;font-weight:600;margin-top:14px}}
 footer{{margin-top:40px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}}@media print{{details{{break-inside:avoid}}details>div{{display:block}}}}

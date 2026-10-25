@@ -1,4 +1,4 @@
-use crate::steps::{BuiltinStep, CsvStep, ProcessStep};
+use crate::steps::{BuiltinStep, CsvStep, JsonStep, ProcessStep};
 use mf_core::Pipeline;
 use serde::Deserialize;
 use serde_json::Value;
@@ -63,6 +63,11 @@ pub fn build(spec: &PipelineSpec, base: &Path) -> Result<Pipeline, String> {
                     table,
                 })
             }
+            "json" => p.step(JsonStep {
+                name: s.name.clone(),
+                version: s.version.clone(),
+                path: base.join(need(&s.path, "path")?),
+            }),
             "process" => {
                 let command = s
                     .command

@@ -16,13 +16,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: pip install QuantLib==1.44
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       - name: Exemples de bout en bout
         run: |
           cargo build --release
-          for e in var-equity pd-scorecard; do
+          for e in var-equity pd-scorecard pricing-benchmark; do
             p=examples/$e/pipeline.toml
             target/release/mf run "$p"
             target/release/mf verify "$p"

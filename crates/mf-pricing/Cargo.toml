@@ -1,0 +1,9 @@
+[package]
+name = "mf-pricing"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mf-validate = { path = "../mf-validate" }
+serde.workspace = true
+serde_json.workspace = true

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/mf-core", "crates/mf-validate", "crates/mf-runtime", "crates/mf-cli"]
+members = ["crates/mf-core", "crates/mf-validate", "crates/mf-pricing", "crates/mf-runtime", "crates/mf-cli"]
 
 [workspace.package]
 edition = "2021"
