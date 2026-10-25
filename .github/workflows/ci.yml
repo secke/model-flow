@@ -23,7 +23,7 @@ jobs:
       - name: Exemples de bout en bout
         run: |
           cargo build --release
-          for e in var-equity pd-scorecard pricing-benchmark rates-benchmark; do
+          for e in var-equity pd-scorecard pricing-benchmark rates-benchmark multicurve-benchmark; do
             p=examples/$e/pipeline.toml
             target/release/mf run "$p"
             target/release/mf verify "$p"

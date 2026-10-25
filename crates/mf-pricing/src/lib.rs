@@ -7,6 +7,8 @@ use std::collections::BTreeMap;
 use std::f64::consts::PI;
 
 pub mod benchmark;
+pub mod curves;
+pub mod dates;
 pub mod rates;
 
 use rates::{swap_npv, Market};
@@ -108,6 +110,18 @@ pub enum Instrument {
         pay_fixed: bool,
         curve: String,
     },
+    /// Swap Euribor contre fixe au départ spot, conventions de la courbe de projection, actualisé OIS.
+    VanillaSwap {
+        notional: f64,
+        fixed_rate: f64,
+        tenor: String,
+        #[serde(default = "yes")]
+        pay_fixed: bool,
+        forward_curve: String,
+        /// Par défaut : la courbe d'actualisation de `forward_curve`.
+        #[serde(default)]
+        discount_curve: Option<String>,
+    },
     /// Zéro-coupon actualisé sur la courbe `curve`.
     ZeroCouponBond {
         #[serde(default = "default_face")]
@@ -126,6 +140,7 @@ impl Instrument {
             Instrument::FixedRateBond { .. } => "fixed_rate_bond",
             Instrument::InterestRateSwap { .. } => "interest_rate_swap",
             Instrument::ZeroCouponBond { .. } => "zero_coupon_bond",
+            Instrument::VanillaSwap { .. } => "vanilla_swap",
         }
     }
 }
@@ -439,6 +454,30 @@ pub fn value_in(trade: &Trade, market: &Market) -> Result<Valuation, String> {
             ]);
             (npv, m)
         }
+        Instrument::VanillaSwap {
+            notional,
+            fixed_rate,
+            ref tenor,
+            pay_fixed,
+            ref forward_curve,
+            ref discount_curve,
+        } => {
+            let npv_in = |m: &Market| -> Result<(f64, f64, f64), String> {
+                let (a, f) = vanilla_swap_legs(m, tenor, forward_curve, discount_curve.as_deref())?;
+                let (fixed, float) = (notional * fixed_rate * a, notional * f);
+                Ok((if pay_fixed { float - fixed } else { fixed - float }, a, f))
+            };
+            let (npv, a, f) = npv_in(market)?;
+            let (up, _, _) = npv_in(&market.bumped_dated(1.0)?)?;
+            let m = map([
+                ("par_rate", f / a),
+                ("annuity", notional * a),
+                ("fixed_leg_pv", notional * fixed_rate * a),
+                ("float_leg_pv", notional * f),
+                ("dv01", up - npv),
+            ]);
+            (npv, m)
+        }
         Instrument::ZeroCouponBond {
             face,
             maturity,
@@ -457,6 +496,39 @@ pub fn value_in(trade: &Trade, market: &Market) -> Result<Valuation, String> {
         price,
         measures,
     })
+}
+
+/// Annuité et jambe variable (par unité de notionnel) d'un swap daté.
+fn vanilla_swap_legs(m: &Market, tenor: &str, fwd: &str, disc: Option<&str>) -> Result<(f64, f64), String> {
+    use curves::DatedCurveSpec;
+    let fc = m.dated_curve(fwd)?;
+    let DatedCurveSpec::Ibor {
+        calendar,
+        index_tenor,
+        float_day_count,
+        fixed_frequency,
+        fixed_day_count,
+        convention,
+        discount_curve,
+        ..
+    } = &fc.spec
+    else {
+        return Err(format!("`{fwd}` n'est pas une courbe de projection Ibor"));
+    };
+    let dc = m.dated_curve(disc.unwrap_or(discount_curve))?;
+    let (a, f, _) = curves::ibor_swap_legs(
+        fc,
+        dc,
+        fc.spot(),
+        dates::Tenor::parse(tenor)?,
+        *calendar,
+        *convention,
+        12 / *fixed_frequency as i64,
+        *fixed_day_count,
+        dates::Tenor::parse(index_tenor)?.months()?,
+        *float_day_count,
+    )?;
+    Ok((a, f))
 }
 
 #[cfg(test)]

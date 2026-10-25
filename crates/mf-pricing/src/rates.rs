@@ -195,27 +195,70 @@ impl Curve {
     }
 }
 
-/// Courbes de marché nommées.
+/// Courbes de marché nommées : courbes simples (temps en années) et courbes datées multi-courbes.
 #[derive(Debug, Clone, Default)]
 pub struct Market {
     pub curves: BTreeMap<String, Curve>,
+    pub as_of: Option<crate::dates::Date>,
+    pub dated: BTreeMap<String, crate::curves::DatedCurve>,
+    dated_specs: BTreeMap<String, crate::curves::DatedCurveSpec>,
 }
 
 impl Market {
-    /// `{"curves": {"<nom>": {"instruments": [...], "float_frequency": 2}}}`.
+    /// `{"as_of": "AAAA-MM-JJ", "curves": {"<nom>": {...}}}`. Une courbe avec `kind` (`ois`, `ibor`)
+    /// est datée et requiert `as_of` ; sinon c'est une courbe simple (maturités en années).
     pub fn from_value(v: &Value) -> Result<Self, String> {
-        let specs: BTreeMap<String, CurveSpec> =
-            serde_json::from_value(v.get("curves").cloned().unwrap_or(Value::Null))
-                .map_err(|e| format!("marché invalide: {e}"))?;
-        let curves = specs
-            .into_iter()
-            .map(|(n, s)| {
-                Curve::bootstrap(&s)
-                    .map(|c| (n.clone(), c))
-                    .map_err(|e| format!("courbe {n}: {e}"))
-            })
-            .collect::<Result<_, _>>()?;
-        Ok(Self { curves })
+        let raw: BTreeMap<String, Value> = serde_json::from_value(v.get("curves").cloned().unwrap_or(Value::Null))
+            .map_err(|e| format!("marché invalide: {e}"))?;
+        let mut curves = BTreeMap::new();
+        let mut dated_specs = BTreeMap::new();
+        for (n, spec) in raw {
+            if spec.get("kind").is_some() {
+                let s: crate::curves::DatedCurveSpec =
+                    serde_json::from_value(spec).map_err(|e| format!("courbe {n}: {e}"))?;
+                dated_specs.insert(n, s);
+            } else {
+                let s: CurveSpec = serde_json::from_value(spec).map_err(|e| format!("courbe {n}: {e}"))?;
+                curves.insert(n.clone(), Curve::bootstrap(&s).map_err(|e| format!("courbe {n}: {e}"))?);
+            }
+        }
+        let as_of = match v.get("as_of").and_then(Value::as_str) {
+            Some(d) => Some(crate::dates::Date::parse(d)?),
+            None if !dated_specs.is_empty() => return Err("`as_of` requis pour les courbes datées".into()),
+            None => None,
+        };
+        let dated = match as_of {
+            Some(d) => crate::curves::build_all(d, &dated_specs)?,
+            None => BTreeMap::new(),
+        };
+        Ok(Self {
+            curves,
+            as_of,
+            dated,
+            dated_specs,
+        })
+    }
+
+    /// Marché reconstruit après déplacement de toutes les cotations datées de `bp` points de base.
+    pub fn bumped_dated(&self, bp: f64) -> Result<Self, String> {
+        let specs: BTreeMap<_, _> = self
+            .dated_specs
+            .iter()
+            .map(|(k, s)| (k.clone(), s.bumped(bp * 1e-4)))
+            .collect();
+        let as_of = self.as_of.ok_or("marché sans date")?;
+        Ok(Self {
+            curves: self.curves.clone(),
+            as_of: self.as_of,
+            dated: crate::curves::build_all(as_of, &specs)?,
+            dated_specs: specs,
+        })
+    }
+
+    pub fn dated_curve(&self, name: &str) -> Result<&crate::curves::DatedCurve, String> {
+        self.dated
+            .get(name)
+            .ok_or_else(|| format!("courbe datée `{name}` absente du marché"))
     }
 
     pub fn curve(&self, name: &str) -> Result<&Curve, String> {
@@ -223,6 +266,86 @@ impl Market {
             .get(name)
             .ok_or_else(|| format!("courbe `{name}` absente du marché"))
     }
+}
+
+/// Rapport de construction d'une courbe : re-pricing des instruments et structure par terme.
+pub fn curve_report(market: &Market, name: &str, tolerance: f64, step_years: f64) -> Result<Value, String> {
+    use serde_json::json;
+    let status = |e: f64| {
+        if e <= tolerance {
+            "pass"
+        } else if e <= 100.0 * tolerance {
+            "warn"
+        } else {
+            "fail"
+        }
+    };
+    if let Some(c) = market.dated.get(name) {
+        let disc = c.discount_curve_name().map(|d| market.dated_curve(d)).transpose()?;
+        let rep = c.repricing(disc)?;
+        let max_err = rep.iter().map(|(_, _, q, m)| (q - m).abs()).fold(0.0, f64::max);
+        let pillars: Vec<Value> = rep
+            .iter()
+            .map(|(l, d, q, m)| {
+                json!({"instrument": l, "maturity": d.to_string(), "t": c.time(*d), "quote": q, "model_rate": m,
+                       "repricing_error": (q - m).abs(), "discount_factor": c.discount(*d), "zero_rate": c.zero_rate(*d)})
+            })
+            .collect();
+        let last = *c.pillars().last().ok_or("courbe vide")?;
+        let months = (step_years * 12.0).round().max(1.0) as i64;
+        let mut grid = vec![];
+        let mut k = 1;
+        loop {
+            let d = c.as_of.add_months(k * months);
+            if d > last {
+                break;
+            }
+            let prev = c.as_of.add_months((k - 1) * months);
+            let fwd = (c.discount(prev) / c.discount(d)).ln() / (c.time(d) - c.time(prev));
+            grid.push(
+                json!({"t": c.time(d), "date": d.to_string(), "discount_factor": c.discount(d),
+                             "zero_rate": c.zero_rate(d), "forward_rate": fwd}),
+            );
+            k += 1;
+        }
+        let negative = grid
+            .iter()
+            .filter(|g| g["forward_rate"].as_f64().unwrap_or(0.0) < 0.0)
+            .count();
+        return Ok(
+            json!({"curve": name, "as_of": c.as_of.to_string(), "spot": c.spot().to_string(),
+                         "discount_curve": c.discount_curve_name(), "pillars": pillars,
+                         "max_repricing_error": max_err, "tolerance": tolerance, "negative_forwards": negative,
+                         "term_structure": grid, "status": status(max_err)}),
+        );
+    }
+    let c = market.curve(name)?;
+    let rep = c.repricing()?;
+    let max_err = rep.iter().map(|(_, _, q, m)| (q - m).abs()).fold(0.0, f64::max);
+    let pillars: Vec<Value> = rep
+        .iter()
+        .map(|(l, t, q, m)| {
+            json!({"instrument": l, "maturity": t, "quote": q, "model_rate": m, "repricing_error": (q - m).abs(),
+                   "discount_factor": c.discount(*t), "zero_rate": c.zero_rate(*t)})
+        })
+        .collect();
+    let last = c.pillars().last().copied().unwrap_or(0.0);
+    let step = step_years.max(1e-3);
+    let grid: Vec<Value> = (1..=(last / step).round() as usize)
+        .map(|i| {
+            let t = i as f64 * step;
+            json!({"t": t, "discount_factor": c.discount(t), "zero_rate": c.zero_rate(t),
+                   "forward_rate": c.forward_rate(t - step, t)})
+        })
+        .collect();
+    let negative = grid
+        .iter()
+        .filter(|g| g["forward_rate"].as_f64().unwrap_or(0.0) < 0.0)
+        .count();
+    Ok(
+        json!({"curve": name, "pillars": pillars, "max_repricing_error": max_err, "tolerance": tolerance,
+              "negative_forwards": negative, "term_structure": grid, "status": status(max_err)}),
+    )
 }
 
 /// NPV d'un swap de taux vanille au départ immédiat, côté payeur ou receveur du fixe.

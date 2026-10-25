@@ -1,0 +1,12 @@
+{
+  "trades": [
+    {"id": "SWP-001", "product": "vanilla_swap", "notional": 10000000, "fixed_rate": 0.02489, "tenor": "5Y", "pay_fixed": true, "forward_curve": "EUR-6M"},
+    {"id": "SWP-002", "product": "vanilla_swap", "notional": 25000000, "fixed_rate": 0.0300, "tenor": "10Y", "pay_fixed": false, "forward_curve": "EUR-6M"},
+    {"id": "SWP-003", "product": "vanilla_swap", "notional": 50000000, "fixed_rate": 0.0215, "tenor": "2Y", "pay_fixed": true, "forward_curve": "EUR-6M"},
+    {"id": "SWP-004", "product": "vanilla_swap", "notional": 15000000, "fixed_rate": 0.0255, "tenor": "6Y", "pay_fixed": false, "forward_curve": "EUR-6M"},
+    {"id": "SWP-005", "product": "vanilla_swap", "notional": 8000000, "fixed_rate": 0.0280, "tenor": "11Y", "pay_fixed": true, "forward_curve": "EUR-6M"},
+    {"id": "SWP-006", "product": "vanilla_swap", "notional": 30000000, "fixed_rate": 0.0275, "tenor": "25Y", "pay_fixed": false, "forward_curve": "EUR-6M"},
+    {"id": "SWP-007", "product": "vanilla_swap", "notional": 20000000, "fixed_rate": 0.0240, "tenor": "8Y", "pay_fixed": true, "forward_curve": "EUR-6M"},
+    {"id": "SWP-008", "product": "vanilla_swap", "notional": 40000000, "fixed_rate": 0.0290, "tenor": "30Y", "pay_fixed": true, "forward_curve": "EUR-6M"}
+  ]
+}

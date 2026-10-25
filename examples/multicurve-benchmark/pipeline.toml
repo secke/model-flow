@@ -1,0 +1,60 @@
+name = "multicurve-swap-benchmark"
+
+[[step]]
+name = "market"
+kind = "json"
+version = "2026-01-13"
+path = "market.json"
+
+[[step]]
+name = "trades"
+kind = "json"
+version = "1.0.0"
+path = "trades.json"
+
+# Courbe d'actualisation €STR (swaps OIS)
+[[step]]
+name = "curve_estr"
+kind = "curve_bootstrap"
+version = "1.0.0"
+deps = ["market"]
+params = { curve = "EUR-ESTR", tolerance = 1e-12 }
+
+# Courbe de projection Euribor 6M, actualisée €STR
+[[step]]
+name = "curve_euribor_6m"
+kind = "curve_bootstrap"
+version = "1.0.0"
+deps = ["market"]
+params = { curve = "EUR-6M", tolerance = 1e-12 }
+
+[[step]]
+name = "reference_valuation"
+kind = "price_portfolio"
+version = "1.0.0"
+deps = ["trades", "market"]
+params = { trades = "trades", market = "market" }
+
+[[step]]
+name = "quantlib"
+kind = "process"
+version = "1.44.0"
+deps = ["trades", "market"]
+command = ["python3", "models/quantlib_multicurve.py"]
+code = ["models/quantlib_multicurve.py"]
+timeout_secs = 120
+memory_mb = 2048
+
+[[step]]
+name = "benchmark_quantlib"
+kind = "pricing_benchmark"
+version = "1.0.0"
+deps = ["trades", "quantlib", "reference_valuation"]
+
+[step.params]
+trades = "trades"
+candidate = "quantlib"
+reference = "reference_valuation"
+
+[step.params.tolerances]
+vanilla_swap = { abs = 0.01, rel = 0.0 }

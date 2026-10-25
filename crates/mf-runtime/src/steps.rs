@@ -353,47 +353,19 @@ impl Step for BuiltinStep {
             // Construction de courbe et contrôle de re-pricing des instruments d'entrée.
             "curve_bootstrap" => {
                 let market = Market::from_value(self.dep(inputs, "market", 0)?).map_err(|e| err(&self.name, e))?;
+                let all: Vec<String> = market.curves.keys().chain(market.dated.keys()).cloned().collect();
                 let name = match self.params.get("curve").and_then(Value::as_str) {
                     Some(n) => n.to_string(),
-                    None if market.curves.len() == 1 => market.curves.keys().next().unwrap().clone(),
+                    None if all.len() == 1 => all[0].clone(),
                     None => return Err(err(&self.name, "plusieurs courbes : préciser `curve`")),
                 };
-                let c = market.curve(&name).map_err(|e| err(&self.name, e))?;
-                let tol = param_f64(&self.params, "tolerance", 1e-10);
-                let step = param_f64(&self.params, "grid_step", 1.0).max(1e-3);
-                let rep = c.repricing().map_err(|e| err(&self.name, e))?;
-                let max_err = rep.iter().map(|(_, _, q, m)| (q - m).abs()).fold(0.0, f64::max);
-                let pillars: Vec<Value> = rep
-                    .iter()
-                    .map(|(label, t, q, m)| {
-                        json!({"instrument": label, "maturity": t, "quote": q, "model_rate": m,
-                               "repricing_error": (q - m).abs(), "discount_factor": c.discount(*t), "zero_rate": c.zero_rate(*t)})
-                    })
-                    .collect();
-                let last = c.pillars().last().copied().unwrap_or(0.0);
-                let n = (last / step).round() as usize;
-                let grid: Vec<Value> = (1..=n)
-                    .map(|i| {
-                        let t = i as f64 * step;
-                        json!({"t": t, "discount_factor": c.discount(t), "zero_rate": c.zero_rate(t),
-                               "forward_rate": c.forward_rate(t - step, t)})
-                    })
-                    .collect();
-                let negative_forwards = grid
-                    .iter()
-                    .filter(|g| g["forward_rate"].as_f64().unwrap_or(0.0) < 0.0)
-                    .count();
-                let status = if max_err <= tol {
-                    "pass"
-                } else if max_err <= 100.0 * tol {
-                    "warn"
-                } else {
-                    "fail"
-                };
-                Ok(
-                    json!({"curve": name, "pillars": pillars, "max_repricing_error": max_err, "tolerance": tol,
-                          "negative_forwards": negative_forwards, "term_structure": grid, "status": status}),
+                mf_pricing::rates::curve_report(
+                    &market,
+                    &name,
+                    param_f64(&self.params, "tolerance", 1e-10),
+                    param_f64(&self.params, "grid_step", 1.0),
                 )
+                .map_err(|e| err(&self.name, e))
             }
             k => Err(err(&self.name, format!("type inconnu `{k}`"))),
         }
