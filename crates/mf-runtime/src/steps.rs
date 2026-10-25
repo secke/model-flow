@@ -48,17 +48,101 @@ fn param_str<'a>(p: &'a Value, k: &str, default: &'a str) -> &'a str {
     p.get(k).and_then(Value::as_str).unwrap_or(default)
 }
 
-// ---------- CSV ----------
-/// Lit une colonne (série) ou plusieurs colonnes (table `{col: [...]}`) numériques.
-pub struct CsvStep {
+/// Identifiant de l'implémentation des étapes intégrées : une montée de version du moteur
+/// modifie leur empreinte de code, ce que signale le rejeu.
+pub const ENGINE: &str = concat!("mf-runtime ", env!("CARGO_PKG_VERSION"));
+
+fn engine_hash(kind: &str) -> Option<String> {
+    Some(hash_bytes(format!("{ENGINE} {kind}").as_bytes()))
+}
+
+// ---------- Tables (CSV, Parquet) ----------
+#[derive(Debug, Clone, PartialEq)]
+pub enum TableFormat {
+    Csv { delimiter: u8 },
+    Parquet,
+}
+
+/// Lit une colonne (série) ou plusieurs colonnes (table `{col: [...]}`) numériques d'un fichier CSV
+/// (RFC 4180 : guillemets, séparateur configurable) ou Parquet.
+pub struct TableStep {
     pub name: String,
     pub version: String,
     pub path: PathBuf,
     pub columns: Vec<String>,
     pub table: bool,
+    pub format: TableFormat,
 }
 
-impl Step for CsvStep {
+fn read_csv(path: &std::path::Path, columns: &[String], delimiter: u8) -> Result<Vec<Vec<f64>>, String> {
+    let mut rdr = csv::ReaderBuilder::new()
+        .delimiter(delimiter)
+        .trim(csv::Trim::All)
+        .from_path(path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let header = rdr.headers().map_err(|e| e.to_string())?.clone();
+    let idx: Vec<usize> = columns
+        .iter()
+        .map(|c| {
+            header
+                .iter()
+                .position(|h| h == c)
+                .ok_or_else(|| format!("colonne `{c}` absente"))
+        })
+        .collect::<Result<_, _>>()?;
+    let mut cols = vec![vec![]; idx.len()];
+    for (n, rec) in rdr.records().enumerate() {
+        let rec = rec.map_err(|e| format!("ligne {}: {e}", n + 2))?;
+        for (k, &i) in idx.iter().enumerate() {
+            let cell = rec
+                .get(i)
+                .ok_or_else(|| format!("ligne {}: colonne manquante", n + 2))?;
+            cols[k].push(
+                cell.parse::<f64>()
+                    .map_err(|_| format!("ligne {}: `{cell}` non numérique", n + 2))?,
+            );
+        }
+    }
+    Ok(cols)
+}
+
+fn read_parquet(path: &std::path::Path, columns: &[String]) -> Result<Vec<Vec<f64>>, String> {
+    use parquet::file::reader::{FileReader, SerializedFileReader};
+    use parquet::record::Field;
+    let file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let reader = SerializedFileReader::new(file).map_err(|e| format!("{}: {e}", path.display()))?;
+    let schema = reader.metadata().file_metadata().schema_descr_ptr();
+    for c in columns {
+        if !schema.columns().iter().any(|d| d.name() == c) {
+            return Err(format!("colonne `{c}` absente"));
+        }
+    }
+    let mut cols = vec![vec![]; columns.len()];
+    for (n, row) in reader.get_row_iter(None).map_err(|e| e.to_string())?.enumerate() {
+        let row = row.map_err(|e| e.to_string())?;
+        for (name, field) in row.get_column_iter() {
+            if let Some(k) = columns.iter().position(|c| c == name) {
+                let v = match field {
+                    Field::Double(x) => *x,
+                    Field::Float(x) => *x as f64,
+                    Field::Long(x) => *x as f64,
+                    Field::Int(x) => *x as f64,
+                    Field::Short(x) => *x as f64,
+                    Field::Byte(x) => *x as f64,
+                    Field::UInt(x) => *x as f64,
+                    Field::ULong(x) => *x as f64,
+                    Field::Bool(b) => f64::from(u8::from(*b)),
+                    Field::Null => return Err(format!("ligne {}: valeur manquante dans `{name}`", n + 1)),
+                    other => return Err(format!("ligne {}: `{name}` non numérique ({other})", n + 1)),
+                };
+                cols[k].push(v);
+            }
+        }
+    }
+    Ok(cols)
+}
+
+impl Step for TableStep {
     fn name(&self) -> &str {
         &self.name
     }
@@ -68,40 +152,15 @@ impl Step for CsvStep {
     fn deps(&self) -> &[String] {
         &[]
     }
+    fn code_hash(&self) -> Option<String> {
+        engine_hash(&format!("table {:?}", self.format))
+    }
     fn run(&self, _: &Inputs) -> Result<Value, Error> {
-        let text = std::fs::read_to_string(&self.path)
-            .map_err(|e| err(&self.name, format!("{}: {e}", self.path.display())))?;
-        let mut lines = text.lines().filter(|l| !l.trim().is_empty());
-        let header: Vec<&str> = lines
-            .next()
-            .ok_or_else(|| err(&self.name, "fichier vide"))?
-            .split(',')
-            .map(str::trim)
-            .collect();
-        let idx: Vec<usize> = self
-            .columns
-            .iter()
-            .map(|c| {
-                header
-                    .iter()
-                    .position(|h| h == c)
-                    .ok_or_else(|| err(&self.name, format!("colonne `{c}` absente")))
-            })
-            .collect::<Result<_, _>>()?;
-        let mut cols: Vec<Vec<f64>> = vec![vec![]; idx.len()];
-        for (n, l) in lines.enumerate() {
-            let cells: Vec<&str> = l.split(',').collect();
-            for (k, &i) in idx.iter().enumerate() {
-                let cell = cells
-                    .get(i)
-                    .ok_or_else(|| err(&self.name, format!("ligne {}: colonne manquante", n + 2)))?
-                    .trim();
-                let v = cell
-                    .parse::<f64>()
-                    .map_err(|_| err(&self.name, format!("ligne {}: `{cell}` non numérique", n + 2)))?;
-                cols[k].push(v);
-            }
+        let mut cols = match self.format {
+            TableFormat::Csv { delimiter } => read_csv(&self.path, &self.columns, delimiter),
+            TableFormat::Parquet => read_parquet(&self.path, &self.columns),
         }
+        .map_err(|e| err(&self.name, e))?;
         if self.table {
             Ok(Value::Object(
                 self.columns
@@ -125,6 +184,9 @@ pub struct JsonStep {
 }
 
 impl Step for JsonStep {
+    fn code_hash(&self) -> Option<String> {
+        engine_hash("json")
+    }
     fn name(&self) -> &str {
         &self.name
     }
@@ -199,6 +261,9 @@ impl BuiltinStep {
 }
 
 impl Step for BuiltinStep {
+    fn code_hash(&self) -> Option<String> {
+        engine_hash(&self.kind)
+    }
     fn name(&self) -> &str {
         &self.name
     }
@@ -336,8 +401,36 @@ impl Step for BuiltinStep {
 }
 
 // ---------- Processus externe ----------
+/// Limites appliquées au processus externe (Unix : `setrlimit`).
+#[derive(Debug, Clone)]
+pub struct Limits {
+    /// Mémoire virtuelle maximale (RLIMIT_AS), en Mo.
+    pub memory_mb: Option<u64>,
+    /// Temps CPU maximal (RLIMIT_CPU), en secondes.
+    pub cpu_secs: Option<u64>,
+    /// Taille maximale d'un fichier écrit (RLIMIT_FSIZE), en Mo.
+    pub file_size_mb: Option<u64>,
+    /// Taille maximale de la sortie standard, en Mo.
+    pub max_output_mb: u64,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            memory_mb: None,
+            cpu_secs: None,
+            file_size_mb: None,
+            max_output_mb: 256,
+        }
+    }
+}
+
 /// Protocole : le processus reçoit sur stdin `{"inputs": {...}, "params": {...}}`
 /// et écrit un unique document JSON sur stdout. Code de sortie ≠ 0 = échec.
+///
+/// Isolation : environnement vidé (seuls `PATH`, `LANG`, `HOME`, `TMPDIR`, `PYTHONHASHSEED`, les
+/// variables `env` et celles listées dans `pass_env` sont transmises), limites de ressources,
+/// plafond de sortie, groupe de processus dédié tué à l'issue (aucun processus orphelin).
 pub struct ProcessStep {
     pub name: String,
     pub version: String,
@@ -348,7 +441,58 @@ pub struct ProcessStep {
     pub params: Value,
     pub cwd: PathBuf,
     pub timeout: Duration,
+    pub env: std::collections::BTreeMap<String, String>,
+    pub pass_env: Vec<String>,
+    pub limits: Limits,
 }
+
+#[cfg(unix)]
+fn kill_group(pid: u32) {
+    // SAFETY : appel système sans effet sur la mémoire du processus courant.
+    unsafe {
+        libc::kill(-(pid as i32), libc::SIGKILL);
+    }
+}
+
+#[cfg(not(unix))]
+fn kill_group(_pid: u32) {}
+
+#[cfg(unix)]
+fn apply_limits(cmd: &mut Command, l: &Limits) {
+    use std::os::unix::process::CommandExt;
+    let mb = |x: u64| x.saturating_mul(1024 * 1024);
+    let (mem, cpu, fsize) = (l.memory_mb.map(mb), l.cpu_secs, l.file_size_mb.map(mb));
+    cmd.process_group(0);
+    // SAFETY : la fermeture n'appelle que setrlimit, sûr entre fork et exec.
+    unsafe {
+        cmd.pre_exec(move || {
+            let set = |res, v: u64| {
+                let r = libc::rlimit {
+                    rlim_cur: v as libc::rlim_t,
+                    rlim_max: v as libc::rlim_t,
+                };
+                if libc::setrlimit(res, &r) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            };
+            set(libc::RLIMIT_CORE, 0)?;
+            if let Some(v) = mem {
+                set(libc::RLIMIT_AS, v)?;
+            }
+            if let Some(v) = cpu {
+                set(libc::RLIMIT_CPU, v)?;
+            }
+            if let Some(v) = fsize {
+                set(libc::RLIMIT_FSIZE, v)?;
+            }
+            Ok(())
+        });
+    }
+}
+
+#[cfg(not(unix))]
+fn apply_limits(_cmd: &mut Command, _l: &Limits) {}
 
 impl Step for ProcessStep {
     fn name(&self) -> &str {
@@ -372,43 +516,82 @@ impl Step for ProcessStep {
             );
             buf.extend(std::fs::read(f).unwrap_or_else(|_| b"<absent>".to_vec()));
         }
+        // L'environnement explicite influe sur le calcul ; seuls les noms des variables transmises comptent.
+        buf.extend(serde_json::to_vec(&(&self.env, &self.pass_env)).unwrap());
         Some(hash_bytes(&buf))
     }
 
     fn run(&self, inputs: &Inputs) -> Result<Value, Error> {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
         let payload = serde_json::to_vec(&json!({ "inputs": inputs, "params": self.params })).unwrap();
-        let mut child = Command::new(&self.command[0])
-            .args(&self.command[1..])
+        let mut cmd = Command::new(&self.command[0]);
+        cmd.args(&self.command[1..])
             .current_dir(&self.cwd)
-            .env("PYTHONHASHSEED", "0")
+            .env_clear()
+            .env(
+                "PATH",
+                std::env::var("PATH").unwrap_or_else(|_| "/usr/local/bin:/usr/bin:/bin".into()),
+            )
+            .env("LANG", "C.UTF-8")
+            .env("HOME", &self.cwd)
+            .env("TMPDIR", std::env::temp_dir())
+            .env("PYTHONHASHSEED", "0");
+        for k in &self.pass_env {
+            if let Ok(v) = std::env::var(k) {
+                cmd.env(k, v);
+            }
+        }
+        cmd.envs(&self.env)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::piped());
+        apply_limits(&mut cmd, &self.limits);
+        let mut child = cmd
             .spawn()
             .map_err(|e| err(&self.name, format!("lancement `{}`: {e}", self.command[0])))?;
+        let pid = child.id();
         let mut stdin = child.stdin.take().unwrap();
-        let mut stdout = child.stdout.take().unwrap();
+        let stdout = child.stdout.take().unwrap();
         let mut stderr = child.stderr.take().unwrap();
         std::thread::spawn(move || {
             let _ = stdin.write_all(&payload);
         });
+        let cap = self.limits.max_output_mb.saturating_mul(1024 * 1024);
+        let overflow = Arc::new(AtomicBool::new(false));
+        let flag = overflow.clone();
         let out = std::thread::spawn(move || {
             let mut b = vec![];
-            let _ = stdout.read_to_end(&mut b);
+            let _ = stdout.take(cap + 1).read_to_end(&mut b);
+            if b.len() as u64 > cap {
+                flag.store(true, Ordering::SeqCst);
+            }
             b
         });
         let errs = std::thread::spawn(move || {
             let mut b = vec![];
-            let _ = stderr.read_to_end(&mut b);
+            let _ = (&mut stderr).take(64 * 1024).read_to_end(&mut b);
             b
         });
         let deadline = Instant::now() + self.timeout;
+        let finish = |child: &mut std::process::Child| {
+            kill_group(pid);
+            let _ = child.kill();
+            let _ = child.wait();
+        };
         let status = loop {
+            if overflow.load(Ordering::SeqCst) {
+                finish(&mut child);
+                return Err(err(
+                    &self.name,
+                    format!("sortie supérieure à {} Mo", self.limits.max_output_mb),
+                ));
+            }
             match child.try_wait().map_err(|e| err(&self.name, e.to_string()))? {
                 Some(s) => break s,
                 None if Instant::now() >= deadline => {
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    finish(&mut child);
                     return Err(err(
                         &self.name,
                         format!("délai dépassé ({} s)", self.timeout.as_secs_f64()),
@@ -417,7 +600,15 @@ impl Step for ProcessStep {
                 None => std::thread::sleep(Duration::from_millis(5)),
             }
         };
+        // Les éventuels processus descendants restés actifs sont arrêtés (et libèrent les tubes).
+        kill_group(pid);
         let stdout = out.join().unwrap_or_default();
+        if overflow.load(Ordering::SeqCst) {
+            return Err(err(
+                &self.name,
+                format!("sortie supérieure à {} Mo", self.limits.max_output_mb),
+            ));
+        }
         if !status.success() {
             let msg = String::from_utf8_lossy(&errs.join().unwrap_or_default())
                 .trim()
@@ -443,7 +634,142 @@ mod tests {
             params: json!({"k": 1}),
             cwd: ".".into(),
             timeout: Duration::from_millis(timeout_ms),
+            env: Default::default(),
+            pass_env: vec![],
+            limits: Limits::default(),
         }
+    }
+
+    fn tmp(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("mf-tables-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        d.join(name)
+    }
+
+    fn table(path: PathBuf, cols: &[&str], format: TableFormat) -> TableStep {
+        TableStep {
+            name: "t".into(),
+            version: "1".into(),
+            path,
+            columns: cols.iter().map(|c| c.to_string()).collect(),
+            table: true,
+            format,
+        }
+    }
+
+    #[test]
+    fn csv_handles_quotes_and_delimiters() {
+        let p = tmp("q.csv");
+        std::fs::write(
+            &p,
+            "\"desk; name\";pd;default\n\"Equity; EU\";0.02;1\n \"Rates\" ; 0.01 ;0\n",
+        )
+        .unwrap();
+        let out = table(p.clone(), &["pd", "default"], TableFormat::Csv { delimiter: b';' })
+            .run(&BTreeMap::new())
+            .unwrap();
+        assert_eq!(out["pd"], json!([0.02, 0.01]));
+        std::fs::write(&p, "a,b\n1,x\n").unwrap();
+        let e = table(p, &["b"], TableFormat::Csv { delimiter: b',' })
+            .run(&BTreeMap::new())
+            .unwrap_err();
+        assert!(e.to_string().contains("ligne 2"));
+    }
+
+    #[test]
+    fn parquet_roundtrip() {
+        use parquet::data_type::{DoubleType, Int64Type};
+        use parquet::file::writer::SerializedFileWriter;
+        use parquet::schema::parser::parse_message_type;
+        use std::sync::Arc;
+        let p = tmp("r.parquet");
+        let schema = Arc::new(parse_message_type("message m { REQUIRED INT64 day; REQUIRED DOUBLE ret; }").unwrap());
+        let mut w = SerializedFileWriter::new(std::fs::File::create(&p).unwrap(), schema, Default::default()).unwrap();
+        let mut rg = w.next_row_group().unwrap();
+        let mut c = rg.next_column().unwrap().unwrap();
+        c.typed::<Int64Type>().write_batch(&[1, 2, 3], None, None).unwrap();
+        c.close().unwrap();
+        let mut c = rg.next_column().unwrap().unwrap();
+        c.typed::<DoubleType>()
+            .write_batch(&[0.01, -0.02, 0.005], None, None)
+            .unwrap();
+        c.close().unwrap();
+        rg.close().unwrap();
+        w.close().unwrap();
+        let out = table(p.clone(), &["ret", "day"], TableFormat::Parquet)
+            .run(&BTreeMap::new())
+            .unwrap();
+        assert_eq!(
+            (out["ret"].clone(), out["day"].clone()),
+            (json!([0.01, -0.02, 0.005]), json!([1.0, 2.0, 3.0]))
+        );
+        assert!(table(p, &["absent"], TableFormat::Parquet)
+            .run(&BTreeMap::new())
+            .is_err());
+    }
+
+    #[test]
+    fn builtin_code_hash_tracks_engine() {
+        let b = BuiltinStep {
+            name: "b".into(),
+            version: "1".into(),
+            deps: vec![],
+            kind: "psi".into(),
+            params: Value::Null,
+        };
+        assert_eq!(b.code_hash(), engine_hash("psi"));
+        assert_ne!(engine_hash("psi"), engine_hash("pd_calibration"));
+    }
+
+    #[test]
+    fn environment_is_cleared() {
+        std::env::set_var("MF_TEST_SECRET", "fuite");
+        let mut p = sh(
+            r#"printf '{"secret":"%s","explicit":"%s"}' "$MF_TEST_SECRET" "$MF_EXPLICIT""#,
+            5000,
+        );
+        p.env.insert("MF_EXPLICIT".into(), "ok".into());
+        let out = p.run(&BTreeMap::new()).unwrap();
+        assert_eq!(
+            (out["secret"].as_str(), out["explicit"].as_str()),
+            (Some(""), Some("ok"))
+        );
+        p.pass_env = vec!["MF_TEST_SECRET".into()];
+        assert_eq!(p.run(&BTreeMap::new()).unwrap()["secret"], "fuite");
+    }
+
+    #[test]
+    fn output_cap_is_enforced() {
+        let mut p = sh("yes", 10_000);
+        p.limits.max_output_mb = 1;
+        let t = Instant::now();
+        assert!(p
+            .run(&BTreeMap::new())
+            .unwrap_err()
+            .to_string()
+            .contains("sortie supérieure"));
+        assert!(t.elapsed() < Duration::from_secs(5));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn orphan_processes_do_not_block() {
+        let t = Instant::now();
+        let out = sh(r#"sleep 30 & echo '{"ok":1}'"#, 10_000)
+            .run(&BTreeMap::new())
+            .unwrap();
+        assert_eq!(out["ok"], 1);
+        assert!(t.elapsed() < Duration::from_secs(5), "{:?}", t.elapsed());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn memory_limit_is_enforced() {
+        let mut p = sh(r#"python3 -c "x = bytearray(800 * 1024 * 1024); print('{}')""#, 20_000);
+        p.limits.memory_mb = Some(200);
+        assert!(p.run(&BTreeMap::new()).is_err());
+        p.limits.memory_mb = None;
+        assert!(p.run(&BTreeMap::new()).is_ok());
     }
 
     #[test]

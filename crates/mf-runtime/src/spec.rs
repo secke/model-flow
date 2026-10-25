@@ -1,4 +1,4 @@
-use crate::steps::{BuiltinStep, CsvStep, JsonStep, ProcessStep};
+use crate::steps::{BuiltinStep, JsonStep, Limits, ProcessStep, TableFormat, TableStep};
 use mf_core::Pipeline;
 use serde::Deserialize;
 use serde_json::Value;
@@ -25,12 +25,22 @@ pub struct StepSpec {
     pub column: Option<String>,
     #[serde(default)]
     pub columns: Vec<String>,
+    pub delimiter: Option<String>,
     // process
     pub command: Option<Vec<String>>,
     #[serde(default)]
     pub code: Vec<String>,
     /// Délai maximal d'un processus externe (défaut : 300 s).
     pub timeout_secs: Option<u64>,
+    /// Variables d'environnement transmises au processus (l'environnement est vidé par défaut).
+    #[serde(default)]
+    pub env: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    pub pass_env: Vec<String>,
+    pub memory_mb: Option<u64>,
+    pub cpu_secs: Option<u64>,
+    pub file_size_mb: Option<u64>,
+    pub max_output_mb: Option<u64>,
 }
 
 pub fn parse(text: &str) -> Result<PipelineSpec, String> {
@@ -49,18 +59,30 @@ pub fn build(spec: &PipelineSpec, base: &Path) -> Result<Pipeline, String> {
     for s in &spec.steps {
         let need = |o: &Option<String>, f: &str| o.clone().ok_or(format!("étape {}: champ `{f}` requis", s.name));
         p = match s.kind.as_str() {
-            "csv" => {
+            "csv" | "parquet" => {
                 let (columns, table) = match (&s.column, s.columns.is_empty()) {
                     (Some(c), true) => (vec![c.clone()], false),
                     (None, false) => (s.columns.clone(), true),
                     _ => return Err(format!("étape {}: indiquer `column` ou `columns`", s.name)),
                 };
-                p.step(CsvStep {
+                let format = if s.kind == "parquet" {
+                    TableFormat::Parquet
+                } else {
+                    let d = s.delimiter.as_deref().unwrap_or(",");
+                    if d.len() != 1 {
+                        return Err(format!("étape {}: `delimiter` doit être un caractère ASCII", s.name));
+                    }
+                    TableFormat::Csv {
+                        delimiter: d.as_bytes()[0],
+                    }
+                };
+                p.step(TableStep {
                     name: s.name.clone(),
                     version: s.version.clone(),
                     path: base.join(need(&s.path, "path")?),
                     columns,
                     table,
+                    format,
                 })
             }
             "json" => p.step(JsonStep {
@@ -83,6 +105,14 @@ pub fn build(spec: &PipelineSpec, base: &Path) -> Result<Pipeline, String> {
                     params: s.params.clone(),
                     cwd: base.to_path_buf(),
                     timeout: std::time::Duration::from_secs(s.timeout_secs.unwrap_or(300)),
+                    env: s.env.clone(),
+                    pass_env: s.pass_env.clone(),
+                    limits: Limits {
+                        memory_mb: s.memory_mb,
+                        cpu_secs: s.cpu_secs.or(Some(s.timeout_secs.unwrap_or(300))),
+                        file_size_mb: s.file_size_mb,
+                        max_output_mb: s.max_output_mb.unwrap_or(256),
+                    },
                 })
             }
             k if BuiltinStep::KINDS.contains(&k) => p.step(BuiltinStep {
