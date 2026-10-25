@@ -4,6 +4,15 @@ use mf_core::{Manifest, Mismatch};
 use serde_json::Value;
 use std::fmt::Write;
 
+/// Décision de validation enregistrée (approbation ou rejet).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Decision {
+    pub user: String,
+    pub decision: String,
+    pub comment: String,
+    pub created_at: i64,
+}
+
 pub struct ReportMeta<'a> {
     pub pipeline: &'a str,
     pub run_id: i64,
@@ -11,6 +20,7 @@ pub struct ReportMeta<'a> {
     pub generated_at: i64,
     /// `None` si le rejeu n'a pas été effectué.
     pub replay: Option<&'a [Mismatch]>,
+    pub decisions: &'a [Decision],
 }
 
 fn esc(s: &str) -> String {
@@ -215,6 +225,26 @@ footer{{margin-top:40px;color:var(--muted);font-size:12px;overflow-wrap:anywhere
         );
         for x in mm {
             let _ = write!(h, "<tr><td>{}</td><td>{}</td></tr>", esc(&x.step), esc(&x.reason));
+        }
+        h.push_str("</table></div>");
+    }
+
+    if !meta.decisions.is_empty() {
+        h.push_str("<h2>Décisions de validation</h2><div class=\"wrap\"><table class=\"steps\"><tr><th>Date</th><th>Validateur</th><th>Décision</th><th>Commentaire</th></tr>");
+        for d in meta.decisions {
+            let b = if d.decision == "approved" {
+                badge("pass")
+            } else {
+                badge("fail")
+            };
+            let _ = write!(
+                h,
+                "<tr><td>{}</td><td>{}</td><td>{b} {}</td><td>{}</td></tr>",
+                utc(d.created_at),
+                esc(&d.user),
+                esc(&d.decision),
+                esc(&d.comment)
+            );
         }
         h.push_str("</table></div>");
     }

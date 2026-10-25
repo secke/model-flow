@@ -1,0 +1,24 @@
+[package]
+name = "mf-server"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "mf-server"
+path = "src/main.rs"
+
+[dependencies]
+mf-core = { path = "../mf-core" }
+mf-runtime = { path = "../mf-runtime" }
+axum = "0.7"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+rusqlite.workspace = true
+sha2.workspace = true
+getrandom = "0.2"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

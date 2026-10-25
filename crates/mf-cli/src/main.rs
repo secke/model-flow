@@ -59,7 +59,8 @@ fn real_main(args: &[String]) -> Result<bool, String> {
             for s in &m.steps {
                 println!("{:<20} v{:<8} {}", s.name, s.version, short(&s.output));
             }
-            let id = store.save(&sp.name, &m)?;
+            let user = std::env::var("USER").unwrap_or_else(|_| "inconnu".into());
+            let id = store.save(&sp.name, &m, &format!("cli:{user}"))?;
             println!("\nexécution #{id}  run_hash={}", m.run_hash);
             Ok(true)
         }
@@ -81,7 +82,13 @@ fn real_main(args: &[String]) -> Result<bool, String> {
         }
         "runs" => {
             for r in store.list(&sp.name)? {
-                println!("#{:<4} {}  {}  {}", r.id, r.created_at, r.pipeline, &r.run_hash[..16]);
+                println!(
+                    "#{:<4} {}  {:<16} {}",
+                    r.id,
+                    report::utc(r.created_at),
+                    r.triggered_by,
+                    &r.run_hash[..16]
+                );
             }
             Ok(true)
         }
@@ -100,9 +107,10 @@ fn real_main(args: &[String]) -> Result<bool, String> {
             let meta = report::ReportMeta {
                 pipeline: &sp.name,
                 run_id: id,
-                created_at: store.created_at(id)?,
+                created_at: store.info(&sp.name, id)?.map(|r| r.created_at).unwrap_or_default(),
                 generated_at: now(),
                 replay: mismatches.as_deref(),
+                decisions: &[],
             };
             let out = flag_value(args, "-o")
                 .map(Into::into)

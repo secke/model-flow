@@ -1,0 +1,22 @@
+# Configuration du serveur ModelFlow.
+# Générer un jeton : `mf-server new-token`. Transmettre le jeton à l'utilisateur
+# et ne conserver ici que son empreinte SHA-256.
+
+# Dossier contenant un sous-dossier par pipeline (<dossier>/pipeline.toml), relatif à ce fichier.
+workspace = "../examples"
+bind = "127.0.0.1:8080"
+
+[[user]]
+name = "alice"
+role = "model_owner"      # lance les exécutions
+token_sha256 = "remplacer-par-l-empreinte-du-jeton-0000000000000000000000000000"
+
+[[user]]
+name = "bob"
+role = "validator"        # rejoue, approuve ou rejette (jamais ses propres exécutions)
+token_sha256 = "remplacer-par-l-empreinte-du-jeton-0000000000000000000000000000"
+
+[[user]]
+name = "carol"
+role = "auditor"          # lecture seule et journal d'audit
+token_sha256 = "remplacer-par-l-empreinte-du-jeton-0000000000000000000000000000"
