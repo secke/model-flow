@@ -7,6 +7,9 @@ use std::collections::BTreeMap;
 use std::f64::consts::PI;
 
 pub mod benchmark;
+pub mod rates;
+
+use rates::{swap_npv, Market};
 
 /// Fonction de répartition de la loi normale centrée réduite.
 pub fn norm_cdf(x: f64) -> f64 {
@@ -46,6 +49,9 @@ fn default_steps() -> usize {
 }
 fn default_face() -> f64 {
     100.0
+}
+fn yes() -> bool {
+    true
 }
 
 /// Instruments pris en charge (taux continus, maturités en années).
@@ -92,6 +98,23 @@ pub enum Instrument {
         frequency: u32,
         yield_rate: f64,
     },
+    /// Swap de taux vanille au départ immédiat, actualisé et projeté sur la courbe `curve`.
+    InterestRateSwap {
+        notional: f64,
+        fixed_rate: f64,
+        maturity: f64,
+        fixed_frequency: u32,
+        #[serde(default = "yes")]
+        pay_fixed: bool,
+        curve: String,
+    },
+    /// Zéro-coupon actualisé sur la courbe `curve`.
+    ZeroCouponBond {
+        #[serde(default = "default_face")]
+        face: f64,
+        maturity: f64,
+        curve: String,
+    },
 }
 
 impl Instrument {
@@ -101,6 +124,8 @@ impl Instrument {
             Instrument::AmericanOption { .. } => "american_option",
             Instrument::Black76 { .. } => "black76",
             Instrument::FixedRateBond { .. } => "fixed_rate_bond",
+            Instrument::InterestRateSwap { .. } => "interest_rate_swap",
+            Instrument::ZeroCouponBond { .. } => "zero_coupon_bond",
         }
     }
 }
@@ -322,8 +347,17 @@ fn greeks_map(g: &Greeks) -> BTreeMap<String, f64> {
     .collect()
 }
 
-/// Valorisation d'une transaction par le pricer de référence.
+/// Valorisation d'une transaction sans données de marché (instruments auto-suffisants).
 pub fn value(trade: &Trade) -> Result<Valuation, String> {
+    value_in(trade, &Market::default())
+}
+
+fn map<const N: usize>(xs: [(&str, f64); N]) -> BTreeMap<String, f64> {
+    xs.into_iter().map(|(k, v)| (k.to_string(), v)).collect()
+}
+
+/// Valorisation d'une transaction par le pricer de référence, avec les courbes de `market`.
+pub fn value_in(trade: &Trade, market: &Market) -> Result<Valuation, String> {
     let (price, measures) = match trade.instrument {
         Instrument::EuropeanOption {
             option_type,
@@ -376,6 +410,45 @@ pub fn value(trade: &Trade) -> Result<Valuation, String> {
                 ("convexity", b.convexity),
             ];
             (b.price, m.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
+        }
+        Instrument::InterestRateSwap {
+            notional,
+            fixed_rate,
+            maturity,
+            fixed_frequency,
+            pay_fixed,
+            ref curve,
+        } => {
+            let c = market.curve(curve)?;
+            let npv = swap_npv(c, notional, fixed_rate, maturity, fixed_frequency, pay_fixed)?;
+            let up = swap_npv(
+                &c.bumped(1.0)?,
+                notional,
+                fixed_rate,
+                maturity,
+                fixed_frequency,
+                pay_fixed,
+            )?;
+            let annuity = c.annuity(maturity, fixed_frequency)?;
+            let m = map([
+                ("par_rate", c.par_swap_rate(maturity, fixed_frequency)?),
+                ("annuity", notional * annuity),
+                ("fixed_leg_pv", notional * fixed_rate * annuity),
+                ("float_leg_pv", notional * (1.0 - c.discount(maturity))),
+                ("dv01", up - npv),
+            ]);
+            (npv, m)
+        }
+        Instrument::ZeroCouponBond {
+            face,
+            maturity,
+            ref curve,
+        } => {
+            positive("maturity", maturity)?;
+            let c = market.curve(curve)?;
+            let p = face * c.discount(maturity);
+            let up = face * c.bumped(1.0)?.discount(maturity);
+            (p, map([("zero_rate", c.zero_rate(maturity)), ("dv01", up - p)]))
         }
     };
     Ok(Valuation {

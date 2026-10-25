@@ -1,6 +1,7 @@
 //! Comparaison d'un pricer candidat à une référence, avec tolérances par produit.
 
-use crate::{value, Trade};
+use crate::rates::Market;
+use crate::{value_in, Trade};
 use mf_validate::Status;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -107,11 +108,11 @@ pub fn trades_from_value(v: &Value) -> Result<Vec<Trade>, String> {
 }
 
 /// Prix de référence calculés par la bibliothèque intégrée.
-pub fn reference_prices(trades: &[Trade]) -> Result<BTreeMap<String, f64>, String> {
+pub fn reference_prices(trades: &[Trade], market: &Market) -> Result<BTreeMap<String, f64>, String> {
     trades
         .iter()
         .map(|t| {
-            value(t)
+            value_in(t, market)
                 .map(|v| (t.id.clone(), v.price))
                 .map_err(|e| format!("{}: {e}", t.id))
         })
@@ -212,7 +213,7 @@ mod tests {
     #[test]
     fn statuses_follow_tolerances() {
         let t = trades();
-        let r = reference_prices(&t).unwrap();
+        let r = reference_prices(&t, &Market::default()).unwrap();
         let tol = Tolerances::from_value(&json!({"default": {"abs": 1e-4}})).unwrap();
         let exact = compare(&t, &r, &r, &tol).unwrap();
         assert_eq!((exact.passed, exact.status), (2, Status::Pass));

@@ -1,5 +1,6 @@
 use mf_core::{hash_bytes, Error, Inputs, Step};
 use mf_pricing::benchmark::{compare, prices_from_value, reference_prices, trades_from_value, Tolerances};
+use mf_pricing::rates::Market;
 use mf_validate::{calibration, discrimination, historical_var, psi, rolling_backtest, var_backtest};
 use serde_json::{json, Value};
 use std::io::{Read, Write};
@@ -157,6 +158,7 @@ impl BuiltinStep {
         "psi",
         "price_portfolio",
         "pricing_benchmark",
+        "curve_bootstrap",
         "pd_discrimination",
         "pd_calibration",
     ];
@@ -180,6 +182,14 @@ impl BuiltinStep {
 
     fn table_col(&self, t: &Value, key: &str, default: &str) -> Result<Vec<f64>, Error> {
         series(t, Some(param_str(&self.params, key, default)), &self.name)
+    }
+
+    /// Courbes de marché : dépendance désignée par le paramètre `market` (facultatif).
+    fn market(&self, inputs: &Inputs) -> Result<Market, Error> {
+        match self.params.get("market").and_then(Value::as_str) {
+            Some(_) => Market::from_value(self.dep(inputs, "market", usize::MAX)?).map_err(|e| err(&self.name, e)),
+            None => Ok(Market::default()),
+        }
     }
 
     fn json<T: serde::Serialize>(&self, v: Option<T>, why: &str) -> Result<Value, Error> {
@@ -254,9 +264,10 @@ impl Step for BuiltinStep {
             }
             "price_portfolio" => {
                 let trades = trades_from_value(self.dep(inputs, "trades", 0)?).map_err(|e| err(&self.name, e))?;
+                let market = self.market(inputs)?;
                 let vals: Result<Vec<_>, _> = trades
                     .iter()
-                    .map(|t| mf_pricing::value(t).map_err(|e| err(&self.name, format!("{}: {e}", t.id))))
+                    .map(|t| mf_pricing::value_in(t, &market).map_err(|e| err(&self.name, format!("{}: {e}", t.id))))
                     .collect();
                 Ok(serde_json::to_value(vals?).unwrap())
             }
@@ -266,13 +277,58 @@ impl Step for BuiltinStep {
                 let candidate = prices_from_value(self.dep(inputs, "candidate", 1)?).map_err(|e| err(&self.name, e))?;
                 let reference = match self.params.get("reference").and_then(Value::as_str) {
                     Some(_) => prices_from_value(self.dep(inputs, "reference", 2)?),
-                    None => reference_prices(&trades),
+                    None => reference_prices(&trades, &self.market(inputs)?),
                 }
                 .map_err(|e| err(&self.name, e))?;
                 let tol = Tolerances::from_value(self.params.get("tolerances").unwrap_or(&Value::Null))
                     .map_err(|e| err(&self.name, e))?;
                 let b = compare(&trades, &reference, &candidate, &tol).map_err(|e| err(&self.name, e))?;
                 Ok(serde_json::to_value(b).unwrap())
+            }
+            // Construction de courbe et contrôle de re-pricing des instruments d'entrée.
+            "curve_bootstrap" => {
+                let market = Market::from_value(self.dep(inputs, "market", 0)?).map_err(|e| err(&self.name, e))?;
+                let name = match self.params.get("curve").and_then(Value::as_str) {
+                    Some(n) => n.to_string(),
+                    None if market.curves.len() == 1 => market.curves.keys().next().unwrap().clone(),
+                    None => return Err(err(&self.name, "plusieurs courbes : préciser `curve`")),
+                };
+                let c = market.curve(&name).map_err(|e| err(&self.name, e))?;
+                let tol = param_f64(&self.params, "tolerance", 1e-10);
+                let step = param_f64(&self.params, "grid_step", 1.0).max(1e-3);
+                let rep = c.repricing().map_err(|e| err(&self.name, e))?;
+                let max_err = rep.iter().map(|(_, _, q, m)| (q - m).abs()).fold(0.0, f64::max);
+                let pillars: Vec<Value> = rep
+                    .iter()
+                    .map(|(label, t, q, m)| {
+                        json!({"instrument": label, "maturity": t, "quote": q, "model_rate": m,
+                               "repricing_error": (q - m).abs(), "discount_factor": c.discount(*t), "zero_rate": c.zero_rate(*t)})
+                    })
+                    .collect();
+                let last = c.pillars().last().copied().unwrap_or(0.0);
+                let n = (last / step).round() as usize;
+                let grid: Vec<Value> = (1..=n)
+                    .map(|i| {
+                        let t = i as f64 * step;
+                        json!({"t": t, "discount_factor": c.discount(t), "zero_rate": c.zero_rate(t),
+                               "forward_rate": c.forward_rate(t - step, t)})
+                    })
+                    .collect();
+                let negative_forwards = grid
+                    .iter()
+                    .filter(|g| g["forward_rate"].as_f64().unwrap_or(0.0) < 0.0)
+                    .count();
+                let status = if max_err <= tol {
+                    "pass"
+                } else if max_err <= 100.0 * tol {
+                    "warn"
+                } else {
+                    "fail"
+                };
+                Ok(
+                    json!({"curve": name, "pillars": pillars, "max_repricing_error": max_err, "tolerance": tol,
+                          "negative_forwards": negative_forwards, "term_structure": grid, "status": status}),
+                )
             }
             k => Err(err(&self.name, format!("type inconnu `{k}`"))),
         }

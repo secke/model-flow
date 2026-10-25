@@ -1,0 +1,22 @@
+{
+  "as_of": "2026-01-15",
+  "curves": {
+    "EUR-6M": {
+      "float_frequency": 2,
+      "instruments": [
+        {"type": "deposit", "maturity": 0.25, "rate": 0.0212},
+        {"type": "deposit", "maturity": 0.5, "rate": 0.0218},
+        {"type": "swap", "maturity": 1, "rate": 0.0221, "fixed_frequency": 1},
+        {"type": "swap", "maturity": 2, "rate": 0.0226, "fixed_frequency": 1},
+        {"type": "swap", "maturity": 3, "rate": 0.0234, "fixed_frequency": 1},
+        {"type": "swap", "maturity": 4, "rate": 0.0242, "fixed_frequency": 1},
+        {"type": "swap", "maturity": 5, "rate": 0.0249, "fixed_frequency": 1},
+        {"type": "swap", "maturity": 7, "rate": 0.0261, "fixed_frequency": 1},
+        {"type": "swap", "maturity": 10, "rate": 0.0274, "fixed_frequency": 1},
+        {"type": "swap", "maturity": 15, "rate": 0.0287, "fixed_frequency": 1},
+        {"type": "swap", "maturity": 20, "rate": 0.0291, "fixed_frequency": 1},
+        {"type": "swap", "maturity": 30, "rate": 0.0283, "fixed_frequency": 1}
+      ]
+    }
+  }
+}

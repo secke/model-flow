@@ -1,0 +1,14 @@
+{
+  "trades": [
+    {"id": "IRS-001", "product": "interest_rate_swap", "notional": 10000000, "fixed_rate": 0.0249, "maturity": 5, "fixed_frequency": 1, "pay_fixed": true, "curve": "EUR-6M"},
+    {"id": "IRS-002", "product": "interest_rate_swap", "notional": 25000000, "fixed_rate": 0.0300, "maturity": 10, "fixed_frequency": 1, "pay_fixed": false, "curve": "EUR-6M"},
+    {"id": "IRS-003", "product": "interest_rate_swap", "notional": 50000000, "fixed_rate": 0.0215, "maturity": 2, "fixed_frequency": 1, "pay_fixed": true, "curve": "EUR-6M"},
+    {"id": "IRS-004", "product": "interest_rate_swap", "notional": 15000000, "fixed_rate": 0.0255, "maturity": 6, "fixed_frequency": 1, "pay_fixed": false, "curve": "EUR-6M"},
+    {"id": "IRS-005", "product": "interest_rate_swap", "notional": 8000000, "fixed_rate": 0.0280, "maturity": 12, "fixed_frequency": 1, "pay_fixed": true, "curve": "EUR-6M"},
+    {"id": "IRS-006", "product": "interest_rate_swap", "notional": 30000000, "fixed_rate": 0.0275, "maturity": 25, "fixed_frequency": 1, "pay_fixed": false, "curve": "EUR-6M"},
+    {"id": "IRS-007", "product": "interest_rate_swap", "notional": 20000000, "fixed_rate": 0.0240, "maturity": 8, "fixed_frequency": 2, "pay_fixed": true, "curve": "EUR-6M"},
+    {"id": "ZCB-001", "product": "zero_coupon_bond", "face": 1000000, "maturity": 2.75, "curve": "EUR-6M"},
+    {"id": "ZCB-002", "product": "zero_coupon_bond", "face": 1000000, "maturity": 12.5, "curve": "EUR-6M"},
+    {"id": "ZCB-003", "product": "zero_coupon_bond", "face": 1000000, "maturity": 40, "curve": "EUR-6M"}
+  ]
+}

@@ -133,7 +133,8 @@ fn render(v: &Value, depth: usize) -> String {
         }
         Value::Array(a) if a.first().is_some_and(Value::is_object) => {
             let rank = |k: &str| match k {
-                "id" | "grade" | "name" => 0,
+                "id" | "grade" | "name" | "t" | "instrument" => 0,
+                "maturity" => 1,
                 "product" => 1,
                 "status" => 3,
                 _ => 2,
