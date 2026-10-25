@@ -39,7 +39,9 @@ pub trait Step {
     fn deps(&self) -> &[String];
     fn run(&self, inputs: &Inputs) -> Result<Value, Error>;
     /// Empreinte du code exécuté (scripts, binaires) si connue.
-    fn code_hash(&self) -> Option<String> { None }
+    fn code_hash(&self) -> Option<String> {
+        None
+    }
 }
 
 type StepFn = Box<dyn Fn(&Inputs) -> Result<Value, String>>;
@@ -69,11 +71,20 @@ impl FnStep {
 }
 
 impl Step for FnStep {
-    fn name(&self) -> &str { &self.name }
-    fn version(&self) -> &str { &self.version }
-    fn deps(&self) -> &[String] { &self.deps }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn version(&self) -> &str {
+        &self.version
+    }
+    fn deps(&self) -> &[String] {
+        &self.deps
+    }
     fn run(&self, inputs: &Inputs) -> Result<Value, Error> {
-        (self.f)(inputs).map_err(|msg| Error::Step { step: self.name.clone(), msg })
+        (self.f)(inputs).map_err(|msg| Error::Step {
+            step: self.name.clone(),
+            msg,
+        })
     }
 }
 
@@ -107,9 +118,11 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-    pub fn add(mut self, s: impl Step + 'static) -> Self {
+    pub fn step(mut self, s: impl Step + 'static) -> Self {
         self.steps.push(Box::new(s));
         self
     }
@@ -140,10 +153,14 @@ impl Pipeline {
             order.push(i);
             for &k in &out[i] {
                 indeg[k] -= 1;
-                if indeg[k] == 0 { q.push_back(k); }
+                if indeg[k] == 0 {
+                    q.push_back(k);
+                }
             }
         }
-        if order.len() != self.steps.len() { return Err(Error::Cycle); }
+        if order.len() != self.steps.len() {
+            return Err(Error::Cycle);
+        }
         Ok(order)
     }
 
@@ -165,10 +182,19 @@ impl Pipeline {
             });
             outputs.insert(s.name().into(), output);
         }
-        let run_hash = hash_value(&serde_json::to_value(
-            records.iter().map(|r| (&r.name, &r.version, &r.input_hash, &r.output_hash, &r.code_hash)).collect::<Vec<_>>(),
-        ).unwrap());
-        Ok(Manifest { steps: records, run_hash })
+        let run_hash = hash_value(
+            &serde_json::to_value(
+                records
+                    .iter()
+                    .map(|r| (&r.name, &r.version, &r.input_hash, &r.output_hash, &r.code_hash))
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap(),
+        );
+        Ok(Manifest {
+            steps: records,
+            run_hash,
+        })
     }
 
     /// Ré-exécute le pipeline et compare avec un manifeste de référence.
@@ -176,16 +202,43 @@ impl Pipeline {
         let fresh = self.execute()?;
         let mut mm = vec![];
         if fresh.steps.len() != reference.steps.len() {
-            mm.push(Mismatch { step: "*".into(), reason: "nombre d'étapes différent".into() });
+            mm.push(Mismatch {
+                step: "*".into(),
+                reason: "nombre d'étapes différent".into(),
+            });
         }
         for (a, b) in fresh.steps.iter().zip(&reference.steps) {
-            if a.name != b.name { mm.push(Mismatch { step: b.name.clone(), reason: "étape différente".into() }); continue; }
-            if a.version != b.version { mm.push(Mismatch { step: a.name.clone(), reason: format!("version {} -> {}", b.version, a.version) }); }
-            if a.code_hash != b.code_hash && a.version == b.version {
-                mm.push(Mismatch { step: a.name.clone(), reason: "code modifié sans changement de version".into() });
+            if a.name != b.name {
+                mm.push(Mismatch {
+                    step: b.name.clone(),
+                    reason: "étape différente".into(),
+                });
+                continue;
             }
-            if a.input_hash != b.input_hash { mm.push(Mismatch { step: a.name.clone(), reason: "entrées différentes".into() }); }
-            if a.output_hash != b.output_hash { mm.push(Mismatch { step: a.name.clone(), reason: "résultat non reproductible".into() }); }
+            if a.version != b.version {
+                mm.push(Mismatch {
+                    step: a.name.clone(),
+                    reason: format!("version {} -> {}", b.version, a.version),
+                });
+            }
+            if a.code_hash != b.code_hash && a.version == b.version {
+                mm.push(Mismatch {
+                    step: a.name.clone(),
+                    reason: "code modifié sans changement de version".into(),
+                });
+            }
+            if a.input_hash != b.input_hash {
+                mm.push(Mismatch {
+                    step: a.name.clone(),
+                    reason: "entrées différentes".into(),
+                });
+            }
+            if a.output_hash != b.output_hash {
+                mm.push(Mismatch {
+                    step: a.name.clone(),
+                    reason: "résultat non reproductible".into(),
+                });
+            }
         }
         Ok(mm)
     }
@@ -198,8 +251,10 @@ mod tests {
 
     fn pipe(k: i64) -> Pipeline {
         Pipeline::new()
-            .add(FnStep::new("b", "1", &["a"], |i| Ok(json!(i["a"].as_i64().unwrap() * 2))))
-            .add(FnStep::new("a", "1", &[], move |_| Ok(json!(k))))
+            .step(FnStep::new("b", "1", &["a"], |i| {
+                Ok(json!(i["a"].as_i64().unwrap() * 2))
+            }))
+            .step(FnStep::new("a", "1", &[], move |_| Ok(json!(k))))
     }
 
     #[test]
@@ -226,10 +281,10 @@ mod tests {
     #[test]
     fn detects_cycle_and_unknown_dep() {
         let c = Pipeline::new()
-            .add(FnStep::new("x", "1", &["y"], |_| Ok(json!(0))))
-            .add(FnStep::new("y", "1", &["x"], |_| Ok(json!(0))));
+            .step(FnStep::new("x", "1", &["y"], |_| Ok(json!(0))))
+            .step(FnStep::new("y", "1", &["x"], |_| Ok(json!(0))));
         assert!(matches!(c.execute(), Err(Error::Cycle)));
-        let u = Pipeline::new().add(FnStep::new("x", "1", &["zz"], |_| Ok(json!(0))));
+        let u = Pipeline::new().step(FnStep::new("x", "1", &["zz"], |_| Ok(json!(0))));
         assert!(matches!(u.execute(), Err(Error::UnknownDep { .. })));
     }
 }

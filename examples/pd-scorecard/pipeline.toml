@@ -1,0 +1,38 @@
+name = "pd-retail-scorecard"
+
+[[step]]
+name = "development"
+kind = "csv"
+version = "1.0.0"
+path = "data/development.csv"
+columns = ["grade", "pd", "default"]
+
+[[step]]
+name = "current"
+kind = "csv"
+version = "1.0.0"
+path = "data/current.csv"
+columns = ["grade", "pd", "default"]
+
+# Pouvoir discriminant sur le portefeuille courant
+[[step]]
+name = "discrimination"
+kind = "pd_discrimination"
+version = "1.0.0"
+deps = ["current"]
+params = { score = "pd", default = "default", min_gini_pass = 0.40, min_gini_warn = 0.25 }
+
+# Calibration par classe (binomial) + Hosmer-Lemeshow
+[[step]]
+name = "calibration"
+kind = "pd_calibration"
+version = "1.0.0"
+deps = ["current"]
+
+# Stabilité de la population : développement vs. courant
+[[step]]
+name = "stability"
+kind = "psi"
+version = "1.0.0"
+deps = ["development", "current"]
+params = { baseline = "development", current = "current", column = "pd", bins = 10 }

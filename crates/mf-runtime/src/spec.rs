@@ -23,10 +23,14 @@ pub struct StepSpec {
     // csv
     pub path: Option<String>,
     pub column: Option<String>,
+    #[serde(default)]
+    pub columns: Vec<String>,
     // process
     pub command: Option<Vec<String>>,
     #[serde(default)]
     pub code: Vec<String>,
+    /// Délai maximal d'un processus externe (défaut : 300 s).
+    pub timeout_secs: Option<u64>,
 }
 
 pub fn parse(text: &str) -> Result<PipelineSpec, String> {
@@ -45,16 +49,27 @@ pub fn build(spec: &PipelineSpec, base: &Path) -> Result<Pipeline, String> {
     for s in &spec.steps {
         let need = |o: &Option<String>, f: &str| o.clone().ok_or(format!("étape {}: champ `{f}` requis", s.name));
         p = match s.kind.as_str() {
-            "csv" => p.add(CsvStep {
-                name: s.name.clone(),
-                version: s.version.clone(),
-                path: base.join(need(&s.path, "path")?),
-                column: need(&s.column, "column")?,
-            }),
+            "csv" => {
+                let (columns, table) = match (&s.column, s.columns.is_empty()) {
+                    (Some(c), true) => (vec![c.clone()], false),
+                    (None, false) => (s.columns.clone(), true),
+                    _ => return Err(format!("étape {}: indiquer `column` ou `columns`", s.name)),
+                };
+                p.step(CsvStep {
+                    name: s.name.clone(),
+                    version: s.version.clone(),
+                    path: base.join(need(&s.path, "path")?),
+                    columns,
+                    table,
+                })
+            }
             "process" => {
-                let command = s.command.clone().filter(|c| !c.is_empty())
+                let command = s
+                    .command
+                    .clone()
+                    .filter(|c| !c.is_empty())
                     .ok_or(format!("étape {}: `command` requis", s.name))?;
-                p.add(ProcessStep {
+                p.step(ProcessStep {
                     name: s.name.clone(),
                     version: s.version.clone(),
                     deps: s.deps.clone(),
@@ -62,9 +77,10 @@ pub fn build(spec: &PipelineSpec, base: &Path) -> Result<Pipeline, String> {
                     code: s.code.iter().map(|c| base.join(c)).collect(),
                     params: s.params.clone(),
                     cwd: base.to_path_buf(),
+                    timeout: std::time::Duration::from_secs(s.timeout_secs.unwrap_or(300)),
                 })
             }
-            k if BuiltinStep::KINDS.contains(&k) => p.add(BuiltinStep {
+            k if BuiltinStep::KINDS.contains(&k) => p.step(BuiltinStep {
                 name: s.name.clone(),
                 version: s.version.clone(),
                 deps: s.deps.clone(),
@@ -89,7 +105,10 @@ mod tests {
 
     #[test]
     fn parses_params() {
-        let s = parse("name='x'\n[[step]]\nname='v'\nkind='var_historical'\nversion='1'\ndeps=['r']\nparams={alpha=0.99}\n").unwrap();
+        let s = parse(
+            "name='x'\n[[step]]\nname='v'\nkind='var_historical'\nversion='1'\ndeps=['r']\nparams={alpha=0.99}\n",
+        )
+        .unwrap();
         assert_eq!(s.steps[0].params["alpha"], 0.99);
     }
 }
