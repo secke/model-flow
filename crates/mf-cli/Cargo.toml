@@ -1,0 +1,13 @@
+[package]
+name = "mf-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "mf"
+path = "src/main.rs"
+
+[dependencies]
+mf-core = { path = "../mf-core" }
+mf-validate = { path = "../mf-validate" }
+serde_json.workspace = true
