@@ -33,6 +33,11 @@ impl Gov {
                 id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL,
                 user TEXT NOT NULL, role TEXT NOT NULL, action TEXT NOT NULL,
                 target TEXT NOT NULL, outcome TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pipeline TEXT NOT NULL, user TEXT NOT NULL,
+                status TEXT NOT NULL, run_id INTEGER, error TEXT,
+                created_at INTEGER NOT NULL, started_at INTEGER, finished_at INTEGER);
              CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit
                 BEGIN SELECT RAISE(ABORT, 'journal d''audit en ajout seul'); END;
              CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit
@@ -40,6 +45,65 @@ impl Gov {
         )
         .map_err(|e| e.to_string())?;
         Ok(Self(c))
+    }
+
+    pub fn create_job(&self, pipeline: &str, user: &str) -> Result<i64, String> {
+        self.0
+            .execute(
+                "INSERT INTO jobs (pipeline, user, status, created_at) VALUES (?1, ?2, 'queued', ?3)",
+                params![pipeline, user, now()],
+            )
+            .map_err(|e| e.to_string())?;
+        Ok(self.0.last_insert_rowid())
+    }
+
+    pub fn job_started(&self, id: i64) -> Result<(), String> {
+        self.0
+            .execute(
+                "UPDATE jobs SET status = 'running', started_at = ?2 WHERE id = ?1",
+                params![id, now()],
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    pub fn job_finished(&self, id: i64, run_id: Option<i64>, error: Option<&str>) -> Result<(), String> {
+        let status = if error.is_none() { "succeeded" } else { "failed" };
+        self.0
+            .execute(
+                "UPDATE jobs SET status = ?2, run_id = ?3, error = ?4, finished_at = ?5 WHERE id = ?1",
+                params![id, status, run_id, error, now()],
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    pub fn fail_interrupted_jobs(&self) -> Result<(), String> {
+        self.0
+            .execute(
+                "UPDATE jobs SET status = 'failed', error = 'interrompu par un arrêt du serveur', finished_at = ?1
+                 WHERE status IN ('queued', 'running')",
+                params![now()],
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    pub fn job(&self, id: i64) -> Result<Option<Value>, String> {
+        use rusqlite::OptionalExtension;
+        self.0
+            .query_row(
+                "SELECT id, pipeline, user, status, run_id, error, created_at, started_at, finished_at FROM jobs WHERE id = ?1",
+                params![id],
+                |r| {
+                    Ok(json!({"id": r.get::<_, i64>(0)?, "pipeline": r.get::<_, String>(1)?, "user": r.get::<_, String>(2)?,
+                              "status": r.get::<_, String>(3)?, "run_id": r.get::<_, Option<i64>>(4)?,
+                              "error": r.get::<_, Option<String>>(5)?, "created_at": r.get::<_, i64>(6)?,
+                              "started_at": r.get::<_, Option<i64>>(7)?, "finished_at": r.get::<_, Option<i64>>(8)?}))
+                },
+            )
+            .optional()
+            .map_err(|e| e.to_string())
     }
 
     pub fn audit(&self, user: &str, role: Role, action: &str, target: &str, outcome: &str) -> Result<(), String> {

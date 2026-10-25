@@ -37,8 +37,13 @@ params = { alpha = 0.99, window = 250 }
 }
 
 fn app(ws: &std::path::Path) -> axum::Router {
+    app_with(ws, 120)
+}
+
+fn app_with(ws: &std::path::Path, rate: u32) -> axum::Router {
     let cfg = format!(
         r#"workspace = "{}"
+rate_limit_per_minute = {rate}
 [[user]]
 name = "alice"
 role = "model_owner"
@@ -115,7 +120,14 @@ async fn full_validation_workflow() {
             .0,
         StatusCode::FORBIDDEN
     );
-    let (s, run, _) = call(&app, "POST", "/api/pipelines/desk-var/runs", Some("tok-alice"), None).await;
+    let (s, run, _) = call(
+        &app,
+        "POST",
+        "/api/pipelines/desk-var/runs?wait=true",
+        Some("tok-alice"),
+        None,
+    )
+    .await;
     assert_eq!(s, StatusCode::CREATED, "{run}");
     assert_eq!(run["id"], 1);
     assert_eq!(
@@ -260,6 +272,68 @@ async fn full_validation_workflow() {
     }
     assert!(outcomes.iter().any(|o| o.starts_with("bob:run.decide:refused")));
 
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[tokio::test]
+async fn runs_are_queued_and_tracked() {
+    let ws = workspace("jobs");
+    let app = app(&ws);
+    let (s, job, _) = call(&app, "POST", "/api/pipelines/desk-var/runs", Some("tok-alice"), None).await;
+    assert_eq!(s, StatusCode::ACCEPTED, "{job}");
+    let href = job["href"].as_str().unwrap().to_string();
+    let mut last = Value::Null;
+    for _ in 0..200 {
+        last = call(&app, "GET", &href, Some("tok-carol"), None).await.1;
+        if last["status"] == "succeeded" || last["status"] == "failed" {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    assert_eq!(
+        (last["status"].as_str(), last["run_id"].as_i64()),
+        (Some("succeeded"), Some(1)),
+        "{last}"
+    );
+    assert_eq!(
+        call(&app, "GET", "/api/jobs/999", Some("tok-carol"), None).await.0,
+        StatusCode::NOT_FOUND
+    );
+
+    // Échec d'exécution : le travail passe en `failed` avec le message d'erreur.
+    std::fs::write(ws.join("desk/returns.csv"), "day,ret\n0,abc\n").unwrap();
+    let (s, _, body) = call(
+        &app,
+        "POST",
+        "/api/pipelines/desk-var/runs?wait=true",
+        Some("tok-alice"),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert!(body.contains("non numérique"));
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[tokio::test]
+async fn rate_limit_per_user() {
+    let ws = workspace("rate");
+    let app = app_with(&ws, 3);
+    for _ in 0..3 {
+        assert_eq!(
+            call(&app, "GET", "/api/me", Some("tok-bob"), None).await.0,
+            StatusCode::OK
+        );
+    }
+    assert_eq!(
+        call(&app, "GET", "/api/me", Some("tok-bob"), None).await.0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    // La limite est propre à chaque utilisateur.
+    assert_eq!(
+        call(&app, "GET", "/api/me", Some("tok-carol"), None).await.0,
+        StatusCode::OK
+    );
     let _ = std::fs::remove_dir_all(&ws);
 }
 

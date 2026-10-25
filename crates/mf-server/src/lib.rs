@@ -41,6 +41,19 @@ pub struct UserConfig {
 fn default_bind() -> String {
     "127.0.0.1:8080".into()
 }
+fn default_concurrency() -> usize {
+    2
+}
+fn default_rate() -> u32 {
+    120
+}
+
+/// Certificat et clé PEM pour servir directement en HTTPS.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TlsConfig {
+    pub cert: PathBuf,
+    pub key: PathBuf,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ServerConfig {
@@ -50,6 +63,13 @@ pub struct ServerConfig {
     pub bind: String,
     #[serde(rename = "user", default)]
     pub users: Vec<UserConfig>,
+    /// Nombre maximal d'exécutions simultanées (les suivantes attendent en file).
+    #[serde(default = "default_concurrency")]
+    pub max_concurrent_runs: usize,
+    /// Requêtes authentifiées autorisées par utilisateur et par minute.
+    #[serde(default = "default_rate")]
+    pub rate_limit_per_minute: u32,
+    pub tls: Option<TlsConfig>,
 }
 
 impl ServerConfig {
@@ -57,6 +77,16 @@ impl ServerConfig {
         let mut c: ServerConfig = toml::from_str(text).map_err(|e| format!("configuration invalide: {e}"))?;
         if c.workspace.is_relative() {
             c.workspace = base.join(&c.workspace);
+        }
+        if let Some(t) = &mut c.tls {
+            for p in [&mut t.cert, &mut t.key] {
+                if p.is_relative() {
+                    *p = base.join(&*p);
+                }
+            }
+        }
+        if c.max_concurrent_runs == 0 || c.rate_limit_per_minute == 0 {
+            return Err("max_concurrent_runs et rate_limit_per_minute doivent être ≥ 1".into());
         }
         let mut names = std::collections::HashSet::new();
         for u in &c.users {
@@ -99,6 +129,9 @@ struct Inner {
     workspace: PathBuf,
     users: Vec<UserConfig>,
     gov_db: PathBuf,
+    runs: Arc<tokio::sync::Semaphore>,
+    rate: f64,
+    buckets: std::sync::Mutex<std::collections::HashMap<String, (f64, std::time::Instant)>>,
 }
 
 #[derive(Clone)]
@@ -107,12 +140,31 @@ pub struct AppState(Arc<Inner>);
 impl AppState {
     pub fn new(cfg: &ServerConfig) -> Result<Self, String> {
         let gov_db = cfg.workspace.join(".modelflow-server/governance.db");
-        Gov::open(&gov_db)?;
+        // Les travaux interrompus par un arrêt du serveur sont marqués en échec.
+        Gov::open(&gov_db)?.fail_interrupted_jobs()?;
         Ok(Self(Arc::new(Inner {
             workspace: cfg.workspace.clone(),
             users: cfg.users.clone(),
             gov_db,
+            runs: Arc::new(tokio::sync::Semaphore::new(cfg.max_concurrent_runs)),
+            rate: cfg.rate_limit_per_minute as f64,
+            buckets: Default::default(),
         })))
+    }
+
+    /// Seau à jetons par utilisateur : `rate` requêtes par minute, rafale de même taille.
+    fn allow(&self, user: &str) -> bool {
+        let mut b = self.0.buckets.lock().unwrap();
+        let now = std::time::Instant::now();
+        let (tokens, last) = b.entry(user.to_string()).or_insert((self.0.rate, now));
+        *tokens = (*tokens + now.duration_since(*last).as_secs_f64() * self.0.rate / 60.0).min(self.0.rate);
+        *last = now;
+        if *tokens >= 1.0 {
+            *tokens -= 1.0;
+            true
+        } else {
+            false
+        }
     }
 
     fn gov(&self) -> Result<Gov, ApiError> {
@@ -179,6 +231,16 @@ impl FromRequestParts<AppState> for Auth {
                 role: u.role,
             })
             .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "jeton invalide"))
+            .and_then(|a| {
+                if state.allow(&a.name) {
+                    Ok(a)
+                } else {
+                    Err(ApiError::new(
+                        StatusCode::TOO_MANY_REQUESTS,
+                        "limite de requêtes atteinte, réessayer plus tard",
+                    ))
+                }
+            })
     }
 }
 
@@ -287,35 +349,79 @@ async fn list_runs(State(st): State<AppState>, _auth: Auth, Path(name): Path<Str
     .await
 }
 
-async fn create_run(State(st): State<AppState>, auth: Auth, Path(name): Path<String>) -> ApiResult<Response> {
-    authorize(&st, &auth, &[Role::ModelOwner, Role::Admin], "run.create", &name)?;
-    blocking(move || {
-        let toml = locate(&st, &name)?;
-        let gov = st.gov()?;
-        let (sp, base) = spec::load(&toml).map_err(ApiError::internal)?;
-        let result = spec::build(&sp, &base).and_then(|p| p.execute().map_err(|e| e.to_string()));
-        let m = match result {
-            Ok(m) => m,
-            Err(e) => {
-                let _ = gov.audit(&auth.name, auth.role, "run.create", &name, &format!("error: {e}"));
-                return Err(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e));
-            }
-        };
-        let id = store_for(&toml)?
-            .save(&name, &m, &auth.name)
-            .map_err(ApiError::internal)?;
-        gov.audit(&auth.name, auth.role, "run.create", &format!("{name}#{id}"), "ok")
-            .map_err(ApiError::internal)?;
+#[derive(Deserialize)]
+struct RunQuery {
+    /// Attendre la fin de l'exécution plutôt que de rendre la main immédiatement (202).
+    #[serde(default)]
+    wait: bool,
+}
+
+/// Exécute un pipeline pour un travail déjà enregistré (thread bloquant).
+fn execute_job(st: &AppState, job: i64, name: &str, auth: &Auth) -> Result<(i64, Value), String> {
+    let gov = Gov::open(&st.0.gov_db)?;
+    gov.job_started(job)?;
+    let result = (|| -> Result<(i64, Value), String> {
+        let toml = locate(st, name).map_err(|e| e.1)?;
+        let (sp, base) = spec::load(&toml)?;
+        let m = spec::build(&sp, &base)?.execute().map_err(|e| e.to_string())?;
+        let id = store_for(&toml).map_err(|e| e.1)?.save(name, &m, &auth.name)?;
         let steps: Vec<Value> = m
             .steps
             .iter()
             .map(|s| json!({"name": s.name, "version": s.version, "status": s.output.get("status")}))
             .collect();
-        Ok((
-            StatusCode::CREATED,
-            Json(json!({"id": id, "run_hash": m.run_hash, "steps": steps})),
-        )
-            .into_response())
+        Ok((id, json!({"id": id, "run_hash": m.run_hash, "steps": steps})))
+    })();
+    match &result {
+        Ok((id, _)) => {
+            gov.job_finished(job, Some(*id), None)?;
+            gov.audit(&auth.name, auth.role, "run.create", &format!("{name}#{id}"), "ok")?;
+        }
+        Err(e) => {
+            gov.job_finished(job, None, Some(e))?;
+            gov.audit(&auth.name, auth.role, "run.create", name, &format!("error: {e}"))?;
+        }
+    }
+    result
+}
+
+async fn create_run(
+    State(st): State<AppState>,
+    auth: Auth,
+    Path(name): Path<String>,
+    Query(q): Query<RunQuery>,
+) -> ApiResult<Response> {
+    authorize(&st, &auth, &[Role::ModelOwner, Role::Admin], "run.create", &name)?;
+    let (st2, name2, user) = (st.clone(), name.clone(), auth.name.clone());
+    let job = blocking(move || {
+        locate(&st2, &name2)?;
+        st2.gov()?.create_job(&name2, &user).map_err(ApiError::internal)
+    })
+    .await?;
+    let sem = st.0.runs.clone();
+    let task = tokio::spawn(async move {
+        let _permit = sem.acquire_owned().await.expect("sémaphore");
+        tokio::task::spawn_blocking(move || execute_job(&st, job, &name, &auth))
+            .await
+            .unwrap_or_else(|e| Err(e.to_string()))
+    });
+    if !q.wait {
+        let body = json!({"job_id": job, "status": "queued", "href": format!("/api/jobs/{job}")});
+        return Ok((StatusCode::ACCEPTED, Json(body)).into_response());
+    }
+    match task.await.map_err(|e| ApiError::internal(e.to_string()))? {
+        Ok((_, body)) => Ok((StatusCode::CREATED, Json(body)).into_response()),
+        Err(e) => Err(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e)),
+    }
+}
+
+async fn get_job(State(st): State<AppState>, _auth: Auth, Path(id): Path<i64>) -> ApiResult<Json<Value>> {
+    blocking(move || {
+        st.gov()?
+            .job(id)
+            .map_err(ApiError::internal)?
+            .map(Json)
+            .ok_or_else(|| ApiError::not_found(format!("travail #{id} introuvable")))
     })
     .await
 }
@@ -501,6 +607,7 @@ pub fn router(state: AppState) -> Router {
             "/api/pipelines/:name/runs/:id/decisions",
             get(list_decisions).post(decide),
         )
+        .route("/api/jobs/:id", get(get_job))
         .route("/api/audit", get(audit_log))
         .with_state(state)
 }
