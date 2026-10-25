@@ -25,6 +25,11 @@ pub fn hash_value(v: &Value) -> String {
     Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// Empreinte SHA-256 d'octets bruts (fichiers de code, données).
+pub fn hash_bytes(b: &[u8]) -> String {
+    Sha256::digest(b).iter().map(|x| format!("{x:02x}")).collect()
+}
+
 pub type Inputs = BTreeMap<String, Value>;
 
 pub trait Step {
@@ -33,6 +38,8 @@ pub trait Step {
     fn version(&self) -> &str;
     fn deps(&self) -> &[String];
     fn run(&self, inputs: &Inputs) -> Result<Value, Error>;
+    /// Empreinte du code exécuté (scripts, binaires) si connue.
+    fn code_hash(&self) -> Option<String> { None }
 }
 
 type StepFn = Box<dyn Fn(&Inputs) -> Result<Value, String>>;
@@ -76,6 +83,8 @@ pub struct StepRecord {
     pub version: String,
     pub input_hash: String,
     pub output_hash: String,
+    #[serde(default)]
+    pub code_hash: Option<String>,
     pub output: Value,
 }
 
@@ -151,12 +160,13 @@ impl Pipeline {
                 version: s.version().into(),
                 input_hash,
                 output_hash: hash_value(&output),
+                code_hash: s.code_hash(),
                 output: output.clone(),
             });
             outputs.insert(s.name().into(), output);
         }
         let run_hash = hash_value(&serde_json::to_value(
-            records.iter().map(|r| (&r.name, &r.version, &r.input_hash, &r.output_hash)).collect::<Vec<_>>(),
+            records.iter().map(|r| (&r.name, &r.version, &r.input_hash, &r.output_hash, &r.code_hash)).collect::<Vec<_>>(),
         ).unwrap());
         Ok(Manifest { steps: records, run_hash })
     }
@@ -171,6 +181,9 @@ impl Pipeline {
         for (a, b) in fresh.steps.iter().zip(&reference.steps) {
             if a.name != b.name { mm.push(Mismatch { step: b.name.clone(), reason: "étape différente".into() }); continue; }
             if a.version != b.version { mm.push(Mismatch { step: a.name.clone(), reason: format!("version {} -> {}", b.version, a.version) }); }
+            if a.code_hash != b.code_hash && a.version == b.version {
+                mm.push(Mismatch { step: a.name.clone(), reason: "code modifié sans changement de version".into() });
+            }
             if a.input_hash != b.input_hash { mm.push(Mismatch { step: a.name.clone(), reason: "entrées différentes".into() }); }
             if a.output_hash != b.output_hash { mm.push(Mismatch { step: a.name.clone(), reason: "résultat non reproductible".into() }); }
         }

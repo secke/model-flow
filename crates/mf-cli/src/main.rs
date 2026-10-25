@@ -1,61 +1,68 @@
-use mf_core::{FnStep, Manifest, Pipeline};
-use mf_validate::{historical_var, rolling_backtest};
-use serde_json::json;
-use std::{env, fs, process::ExitCode};
+use mf_runtime::{spec, store::Store};
+use std::{env, path::Path, process::ExitCode};
 
-/// Rendements synthétiques déterministes (somme de 12 uniformes ≈ normale).
-fn synthetic_returns(n: usize, seed: u64, vol: f64) -> Vec<f64> {
-    let mut s = seed;
-    let mut u = move || {
-        s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        (s >> 11) as f64 / (1u64 << 53) as f64
-    };
-    (0..n).map(|_| ((0..12).map(|_| u()).sum::<f64>() - 6.0) * vol).collect()
+const USAGE: &str = "usage:
+  mf run    <pipeline.toml>              exécute et enregistre l'exécution
+  mf verify <pipeline.toml> [--run ID]   rejoue et compare (défaut : dernière exécution)
+  mf runs   <pipeline.toml>              liste les exécutions
+  mf show   <pipeline.toml> [--run ID]   affiche le manifeste JSON";
+
+fn short(v: &serde_json::Value) -> String {
+    let s = v.to_string();
+    if s.len() > 140 { format!("{}… ({} octets)", &s[..140], s.len()) } else { s }
 }
 
-fn demo_pipeline() -> Pipeline {
-    Pipeline::new()
-        .add(FnStep::new("returns", "1.0.0", &[], |_| {
-            Ok(json!(synthetic_returns(1500, 42, 0.01)))
-        }))
-        .add(FnStep::new("var_99", "1.0.0", &["returns"], |i| {
-            let r: Vec<f64> = serde_json::from_value(i["returns"].clone()).map_err(|e| e.to_string())?;
-            let v = historical_var(&r, 0.99).ok_or("série vide")?;
-            Ok(json!({ "alpha": 0.99, "var": v }))
-        }))
-        .add(FnStep::new("backtest_kupiec", "1.0.0", &["returns"], |i| {
-            let r: Vec<f64> = serde_json::from_value(i["returns"].clone()).map_err(|e| e.to_string())?;
-            let k = rolling_backtest(&r, 250, 0.99).ok_or("série trop courte")?;
-            serde_json::to_value(k).map_err(|e| e.to_string())
-        }))
+fn run_id(args: &[String]) -> Result<Option<i64>, String> {
+    match args.iter().position(|a| a == "--run") {
+        Some(i) => args.get(i + 1).and_then(|v| v.parse().ok()).map(Some).ok_or("--run attend un entier".into()),
+        None => Ok(None),
+    }
+}
+
+fn real_main(args: &[String]) -> Result<bool, String> {
+    let (cmd, file) = match (args.get(1), args.get(2)) {
+        (Some(c), Some(f)) => (c.as_str(), Path::new(f)),
+        _ => return Err(USAGE.into()),
+    };
+    let (sp, base) = spec::load(file)?;
+    let store = Store::open(&base.join(".modelflow/runs.db"))?;
+    match cmd {
+        "run" => {
+            let m = spec::build(&sp, &base)?.execute().map_err(|e| e.to_string())?;
+            for s in &m.steps { println!("{:<20} v{:<8} {}", s.name, s.version, short(&s.output)); }
+            let id = store.save(&sp.name, &m)?;
+            println!("\nexécution #{id}  run_hash={}", m.run_hash);
+            Ok(true)
+        }
+        "verify" => {
+            let (id, reference) = store.get(&sp.name, run_id(args)?)?;
+            let mm = spec::build(&sp, &base)?.verify(&reference).map_err(|e| e.to_string())?;
+            if mm.is_empty() {
+                println!("OK : exécution #{id} rejouée à l'identique ({} étapes)", reference.steps.len());
+                Ok(true)
+            } else {
+                for x in &mm { println!("ÉCART [{}] {}", x.step, x.reason); }
+                Ok(false)
+            }
+        }
+        "runs" => {
+            for r in store.list(&sp.name)? { println!("#{:<4} {}  {}  {}", r.id, r.created_at, r.pipeline, &r.run_hash[..16]); }
+            Ok(true)
+        }
+        "show" => {
+            let (_, m) = store.get(&sp.name, run_id(args)?)?;
+            println!("{}", serde_json::to_string_pretty(&m).unwrap());
+            Ok(true)
+        }
+        _ => Err(USAGE.into()),
+    }
 }
 
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
-    match args.get(1).map(String::as_str) {
-        Some("demo") => {
-            let out = args.get(2).map(String::as_str).unwrap_or("manifest.json");
-            let m = demo_pipeline().execute().expect("exécution");
-            for s in m.steps.iter().filter(|s| s.name != "returns") {
-                println!("{} v{} -> {}", s.name, s.version, s.output);
-            }
-            println!("run_hash = {}", m.run_hash);
-            fs::write(out, serde_json::to_string_pretty(&m).unwrap()).expect("écriture");
-            println!("manifeste écrit: {out}");
-            ExitCode::SUCCESS
-        }
-        Some("verify") => {
-            let Some(path) = args.get(2) else { eprintln!("usage: mf verify <manifest.json>"); return ExitCode::from(2) };
-            let m: Manifest = serde_json::from_str(&fs::read_to_string(path).expect("lecture")).expect("manifeste invalide");
-            let mm = demo_pipeline().verify(&m).expect("exécution");
-            if mm.is_empty() {
-                println!("OK : rejeu identique ({} étapes)", m.steps.len());
-                ExitCode::SUCCESS
-            } else {
-                for x in &mm { println!("ÉCART [{}] {}", x.step, x.reason); }
-                ExitCode::FAILURE
-            }
-        }
-        _ => { eprintln!("usage: mf demo [out.json] | mf verify <manifest.json>"); ExitCode::from(2) }
+    match real_main(&args) {
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::FAILURE,
+        Err(e) => { eprintln!("{e}"); ExitCode::from(2) }
     }
 }

@@ -9,5 +9,5 @@ path = "src/main.rs"
 
 [dependencies]
 mf-core = { path = "../mf-core" }
-mf-validate = { path = "../mf-validate" }
+mf-runtime = { path = "../mf-runtime" }
 serde_json.workspace = true

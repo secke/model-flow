@@ -1,0 +1,40 @@
+name = "var-equity-desk"
+
+[[step]]
+name = "returns"
+kind = "csv"
+version = "1.0.0"
+path = "data/returns.csv"
+column = "ret"
+
+# Modèle de référence intégré
+[[step]]
+name = "var_hist_99"
+kind = "var_historical"
+version = "1.0.0"
+deps = ["returns"]
+params = { alpha = 0.99 }
+
+[[step]]
+name = "backtest_hist"
+kind = "kupiec_backtest"
+version = "1.0.0"
+deps = ["returns"]
+params = { alpha = 0.99, window = 250 }
+
+# Modèle externe (n'importe quel langage) : VaR EWMA en Python
+[[step]]
+name = "ewma_model"
+kind = "process"
+version = "0.1.0"
+deps = ["returns"]
+command = ["python3", "models/ewma_var.py"]
+code = ["models/ewma_var.py"]
+params = { lambda = 0.94, alpha = 0.99, warmup = 30 }
+
+[[step]]
+name = "backtest_ewma"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "ewma_model"]
+params = { alpha = 0.99, returns = "returns", forecasts = "ewma_model" }
