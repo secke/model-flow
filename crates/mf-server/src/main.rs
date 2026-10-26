@@ -18,8 +18,8 @@ async fn main() {
                 .map(String::as_str)
                 .unwrap_or("server.toml");
             let cfg = ServerConfig::load(Path::new(cfg_path)).unwrap_or_else(|e| fail(&e));
-            if cfg.users.is_empty() {
-                fail("aucun utilisateur configuré");
+            if cfg.users.is_empty() && cfg.oidc.is_none() {
+                fail("aucun utilisateur configuré ([[user]] ou [oidc])");
             }
             let state = AppState::new(&cfg).unwrap_or_else(|e| fail(&e));
             let addr: std::net::SocketAddr = cfg.bind.parse().unwrap_or_else(|e| fail(&format!("bind: {e}")));

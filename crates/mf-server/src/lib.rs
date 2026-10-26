@@ -5,6 +5,7 @@
 //! peut approuver ou rejeter, jamais sur une exécution qu'il a lancée, et uniquement si le rejeu est identique.
 
 pub mod governance;
+pub mod oidc;
 
 use axum::extract::{FromRequestParts, Path, Query, State};
 use axum::http::{header, request::Parts, StatusCode};
@@ -22,7 +23,7 @@ use std::sync::Arc;
 
 // ---------- Configuration ----------
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
     Admin,
@@ -72,6 +73,8 @@ pub struct ServerConfig {
     pub tls: Option<TlsConfig>,
     /// Base PostgreSQL partagée ; sans cette section, SQLite (fichiers locaux, instance unique).
     pub database: Option<DatabaseConfig>,
+    /// Authentification unique OpenID Connect (en plus des jetons de service `[[user]]`).
+    pub oidc: Option<oidc::OidcConfig>,
 }
 
 fn default_pool() -> u32 {
@@ -103,6 +106,13 @@ impl ServerConfig {
         let mut c: ServerConfig = toml::from_str(text).map_err(|e| format!("configuration invalide: {e}"))?;
         if c.workspace.is_relative() {
             c.workspace = base.join(&c.workspace);
+        }
+        if let Some(o) = &mut c.oidc {
+            if let Some(f) = &mut o.jwks_file {
+                if f.is_relative() {
+                    *f = base.join(&*f);
+                }
+            }
         }
         if let Some(t) = &mut c.tls {
             for p in [&mut t.cert, &mut t.key] {
@@ -162,6 +172,7 @@ enum Backend {
 struct Inner {
     workspace: PathBuf,
     users: Vec<UserConfig>,
+    oidc: Option<Arc<oidc::Oidc>>,
     backend: Backend,
     runs: Arc<tokio::sync::Semaphore>,
     rate: f64,
@@ -204,6 +215,7 @@ impl AppState {
         let state = Self(Arc::new(Inner {
             workspace: cfg.workspace.clone(),
             users: cfg.users.clone(),
+            oidc: cfg.oidc.clone().map(oidc::Oidc::new).transpose()?.map(Arc::new),
             backend,
             runs: Arc::new(tokio::sync::Semaphore::new(cfg.max_concurrent_runs)),
             rate: cfg.rate_limit_per_minute as f64,
@@ -304,27 +316,46 @@ impl FromRequestParts<AppState> for Auth {
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.strip_prefix("Bearer "))
             .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "jeton manquant (Authorization: Bearer …)"))?;
-        let h = hash_token(token.trim());
-        state
-            .0
-            .users
-            .iter()
-            .find(|u| u.token_sha256.eq_ignore_ascii_case(&h))
-            .map(|u| Auth {
-                name: u.name.clone(),
-                role: u.role,
-            })
-            .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "jeton invalide"))
-            .and_then(|a| {
-                if state.allow(&a.name) {
-                    Ok(a)
-                } else {
-                    Err(ApiError::new(
-                        StatusCode::TOO_MANY_REQUESTS,
-                        "limite de requêtes atteinte, réessayer plus tard",
-                    ))
+        let token = token.trim().to_string();
+        let auth = match (&state.0.oidc, token.matches('.').count() == 2) {
+            // Jeton JWT : authentification unique OIDC (vérification bloquante possible : rechargement du JWKS).
+            (Some(o), true) => {
+                let o = o.clone();
+                let t = token.clone();
+                match tokio::task::spawn_blocking(move || o.verify(&t))
+                    .await
+                    .map_err(|e| ApiError::internal(e.to_string()))?
+                {
+                    Ok((name, role)) => Auth { name, role },
+                    Err(e) if e.forbidden => {
+                        return Err(ApiError::new(StatusCode::FORBIDDEN, e.message));
+                    }
+                    Err(e) => return Err(ApiError::new(StatusCode::UNAUTHORIZED, e.message)),
                 }
-            })
+            }
+            // Jeton de service : comparaison de l'empreinte SHA-256.
+            _ => {
+                let h = hash_token(&token);
+                state
+                    .0
+                    .users
+                    .iter()
+                    .find(|u| u.token_sha256.eq_ignore_ascii_case(&h))
+                    .map(|u| Auth {
+                        name: u.name.clone(),
+                        role: u.role,
+                    })
+                    .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "jeton invalide"))?
+            }
+        };
+        if state.allow(&auth.name) {
+            Ok(auth)
+        } else {
+            Err(ApiError::new(
+                StatusCode::TOO_MANY_REQUESTS,
+                "limite de requêtes atteinte, réessayer plus tard",
+            ))
+        }
     }
 }
 
