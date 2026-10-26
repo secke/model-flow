@@ -221,6 +221,10 @@ impl BuiltinStep {
         "price_portfolio",
         "pricing_benchmark",
         "curve_bootstrap",
+        "portfolio_var",
+        "sensitivities",
+        "stress_test",
+        "pnl_attribution",
         "pd_discrimination",
         "pd_calibration",
     ];
@@ -244,6 +248,14 @@ impl BuiltinStep {
 
     fn table_col(&self, t: &Value, key: &str, default: &str) -> Result<Vec<f64>, Error> {
         series(t, Some(param_str(&self.params, key, default)), &self.name)
+    }
+
+    /// Document de marché brut (JSON) désigné par `market`, ou `null`.
+    fn market_value(&self, inputs: &Inputs) -> Result<Value, Error> {
+        match self.params.get("market").and_then(Value::as_str) {
+            Some(_) => Ok(self.dep(inputs, "market", usize::MAX)?.clone()),
+            None => Ok(Value::Null),
+        }
     }
 
     /// Courbes de marché : dépendance désignée par le paramètre `market` (facultatif).
@@ -349,6 +361,117 @@ impl Step for BuiltinStep {
                     .map_err(|e| err(&self.name, e))?;
                 let b = compare(&trades, &reference, &candidate, &tol).map_err(|e| err(&self.name, e))?;
                 Ok(serde_json::to_value(b).unwrap())
+            }
+            // Risque de portefeuille : revalorisation complète sur scénarios historiques, VaR/ES, limites.
+            "portfolio_var" => {
+                let trades = trades_from_value(self.dep(inputs, "trades", 0)?).map_err(|e| err(&self.name, e))?;
+                let market = self.market_value(inputs)?;
+                let table = self.dep(inputs, "scenarios", 1)?;
+                let label = self.params.get("label").and_then(Value::as_str);
+                let sc = mf_pricing::risk::scenarios_from_table(table, label).map_err(|e| err(&self.name, e))?;
+                let (base, pnl) = mf_pricing::risk::revalue(&trades, &market, &sc).map_err(|e| err(&self.name, e))?;
+                let totals: Vec<f64> = pnl.iter().map(|p| p.pnl).collect();
+                let cv = param_f64(&self.params, "var_confidence", 0.99);
+                let ce = param_f64(&self.params, "es_confidence", 0.975);
+                let r = mf_pricing::risk::var_es(&totals, cv, ce).ok_or_else(|| err(&self.name, "aucun scénario"))?;
+                let mut order: Vec<usize> = (0..pnl.len()).collect();
+                order.sort_by(|&a, &b| totals[a].partial_cmp(&totals[b]).unwrap());
+                let worst: Vec<Value> = order
+                    .iter()
+                    .take(5)
+                    .map(|&i| json!({"scenario": pnl[i].name, "pnl": totals[i]}))
+                    .collect();
+                // Contributions des positions au scénario qui détermine la VaR.
+                let k = order.iter().position(|&i| -totals[i] <= r.var + 1e-9).unwrap_or(0);
+                let at_var = &pnl[order[k]];
+                let contributions: Vec<Value> = trades
+                    .iter()
+                    .zip(&at_var.by_trade)
+                    .map(|(t, p)| json!({"id": t.id, "pnl": p}))
+                    .collect();
+                let mut out = json!({
+                    "base_value": base.iter().sum::<f64>(), "observations": r.observations,
+                    "var_confidence": cv, "var": r.var, "es_confidence": ce, "es": r.es,
+                    "worst_scenarios": worst, "var_scenario": at_var.name, "contributions": contributions, "pnl": totals,
+                });
+                let mut status = None;
+                for (key, value) in [("var_limit", r.var), ("es_limit", r.es)] {
+                    if let Some(l) = self.params.get(key).and_then(Value::as_f64) {
+                        let u = value / l;
+                        out[format!("{key}_utilisation")] = json!(u);
+                        out[key] = json!(l);
+                        let s = if u > 1.0 {
+                            "fail"
+                        } else if u > 0.8 {
+                            "warn"
+                        } else {
+                            "pass"
+                        };
+                        status = Some(match (status, s) {
+                            (Some("fail"), _) | (_, "fail") => "fail",
+                            (Some("warn"), _) | (_, "warn") => "warn",
+                            _ => "pass",
+                        });
+                    }
+                }
+                if let Some(s) = status {
+                    out["status"] = json!(s);
+                }
+                Ok(out)
+            }
+            "sensitivities" => {
+                let trades = trades_from_value(self.dep(inputs, "trades", 0)?).map_err(|e| err(&self.name, e))?;
+                let market = self.market_value(inputs)?;
+                let s = mf_pricing::risk::sensitivities(&trades, &market).map_err(|e| err(&self.name, e))?;
+                Ok(json!({"factors": s}))
+            }
+            "stress_test" => {
+                let trades = trades_from_value(self.dep(inputs, "trades", 0)?).map_err(|e| err(&self.name, e))?;
+                let market = self.market_value(inputs)?;
+                let doc = self.dep(inputs, "scenarios", 1)?;
+                let sc: Vec<mf_pricing::risk::Scenario> =
+                    serde_json::from_value(doc.get("scenarios").cloned().unwrap_or_else(|| doc.clone()))
+                        .map_err(|e| err(&self.name, format!("scénarios invalides : {e}")))?;
+                let r = mf_pricing::risk::stress(&trades, &market, &sc).map_err(|e| err(&self.name, e))?;
+                let status = r.iter().map(|x| x.status).max().unwrap_or(mf_validate::Status::Pass);
+                Ok(json!({"scenarios": r, "status": status}))
+            }
+            // Test d'attribution du P&L (FRTB) : P&L hypothétique contre P&L théorique.
+            "pnl_attribution" => {
+                let hpl = series(
+                    self.dep(inputs, "hypothetical", 0)?.get("pnl").unwrap_or(&Value::Null),
+                    None,
+                    &self.name,
+                )?;
+                let rtpl = match self.params.get("risk_theoretical").and_then(Value::as_str) {
+                    Some(_) => series(
+                        self.dep(inputs, "risk_theoretical", 1)?
+                            .get("pnl")
+                            .unwrap_or(&Value::Null),
+                        None,
+                        &self.name,
+                    )?,
+                    None => {
+                        let sens: Vec<mf_pricing::risk::Sensitivity> =
+                            serde_json::from_value(self.dep(inputs, "sensitivities", 1)?["factors"].clone())
+                                .map_err(|e| err(&self.name, format!("sensibilités invalides : {e}")))?;
+                        let label = self.params.get("label").and_then(Value::as_str);
+                        let sc = mf_pricing::risk::scenarios_from_table(self.dep(inputs, "scenarios", 2)?, label)
+                            .map_err(|e| err(&self.name, e))?;
+                        mf_pricing::risk::risk_theoretical_pnl(&sens, &sc)
+                    }
+                };
+                if hpl.len() != rtpl.len() {
+                    return Err(err(
+                        &self.name,
+                        format!("séries de longueurs différentes ({} et {})", hpl.len(), rtpl.len()),
+                    ));
+                }
+                let min = param_f64(&self.params, "min_observations", 250.0) as usize;
+                self.json(
+                    mf_pricing::risk::pnl_attribution(&hpl, &rtpl, min),
+                    "séries insuffisantes",
+                )
             }
             // Construction de courbe et contrôle de re-pricing des instruments d'entrée.
             "curve_bootstrap" => {

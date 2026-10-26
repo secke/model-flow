@@ -1,0 +1,33 @@
+"""Historique synthétique de 300 jours de variations de facteurs de risque (déterministe).
+Corrélations : baisse des actions avec hausse des volatilités, courbes €STR et Euribor liées, OAT liée aux taux.
+Une semaine de crise (jours 200 à 206) épaissit la queue de distribution.
+Unités : SPOT relatif (0,01 = +1 %), VOL absolu (0,01 = +1 point), CURVE et YIELD en points de base."""
+import math, random
+
+rng = random.Random(2026)
+cols = ["day", "SPOT:SX5E", "VOL:SX5E", "SPOT:CAC40", "VOL:CAC40", "SPOT:BRENT", "VOL:BRENT",
+        "CURVE:EUR-ESTR", "CURVE:EUR-6M", "YIELD:OAT"]
+rows = []
+for d in range(1, 301):
+    crisis = 200 <= d <= 206
+    k = 3.0 if crisis else 1.0
+    t = rng.gauss(0, 1) / math.sqrt(rng.gammavariate(2.5, 1 / 2.5))  # queues épaisses
+    eq = (-0.012 if crisis else 0.0) + 0.012 * k * t
+    cac = 0.9 * eq + 0.006 * k * rng.gauss(0, 1)
+    rates = 4.5 * k * rng.gauss(0, 1) - (8 if crisis else 0)
+    rows.append([
+        d,
+        eq,
+        -0.6 * eq + 0.004 * k * rng.gauss(0, 1),
+        cac,
+        -0.55 * cac + 0.004 * k * rng.gauss(0, 1),
+        0.02 * k * rng.gauss(0, 1),
+        0.006 * k * rng.gauss(0, 1),
+        rates,
+        0.95 * rates + 1.2 * rng.gauss(0, 1),
+        0.8 * rates + 2.5 * k * rng.gauss(0, 1) + (6 if crisis else 0),
+    ])
+with open("data/factor_history.csv", "w") as f:
+    f.write(",".join(cols) + "\n")
+    for r in rows:
+        f.write(",".join([str(r[0])] + [f"{x:.8f}" for x in r[1:]]) + "\n")

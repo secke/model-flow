@@ -1,0 +1,59 @@
+name = "portfolio-risk-desk"
+model = "VAR-HS-01"
+
+[[step]]
+name = "market"
+kind = "json"
+version = "2026-01-13"
+path = "market.json"
+
+[[step]]
+name = "positions"
+kind = "json"
+version = "1.0.0"
+path = "trades.json"
+
+# Variations quotidiennes des facteurs de risque (300 jours)
+[[step]]
+name = "history"
+kind = "csv"
+version = "1.0.0"
+path = "data/factor_history.csv"
+columns = ["day", "SPOT:SX5E", "VOL:SX5E", "SPOT:CAC40", "VOL:CAC40", "SPOT:BRENT", "VOL:BRENT", "CURVE:EUR-ESTR", "CURVE:EUR-6M", "YIELD:OAT"]
+
+[[step]]
+name = "stress_scenarios"
+kind = "json"
+version = "1.0.0"
+path = "stress.json"
+
+# VaR 99 % et ES 97,5 % historiques par revalorisation complète, avec limites
+[[step]]
+name = "var_es"
+kind = "portfolio_var"
+version = "1.0.0"
+deps = ["positions", "history", "market"]
+params = { trades = "positions", scenarios = "history", market = "market", label = "day", var_confidence = 0.99, es_confidence = 0.975, var_limit = 550000, es_limit = 750000 }
+
+# Sensibilités : delta, vega, DV01 par pilier de courbe, sensibilité au rendement
+[[step]]
+name = "sensitivities"
+kind = "sensitivities"
+version = "1.0.0"
+deps = ["positions", "market"]
+params = { trades = "positions", market = "market" }
+
+[[step]]
+name = "stress"
+kind = "stress_test"
+version = "1.0.0"
+deps = ["positions", "stress_scenarios", "market"]
+params = { trades = "positions", scenarios = "stress_scenarios", market = "market" }
+
+# Test d'attribution du P&L (FRTB) : revalorisation complète contre P&L théorique des sensibilités
+[[step]]
+name = "pnl_attribution"
+kind = "pnl_attribution"
+version = "1.0.0"
+deps = ["var_es", "sensitivities", "history"]
+params = { hypothetical = "var_es", sensitivities = "sensitivities", scenarios = "history", label = "day", min_observations = 250 }

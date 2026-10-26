@@ -60,10 +60,26 @@ fn badge(s: &str) -> String {
 }
 
 fn num(x: f64) -> String {
-    if x == 0.0 || (x.abs() >= 1e-3 && x.abs() < 1e6) {
+    if !x.is_finite() {
+        return x.to_string();
+    }
+    if x.abs() >= 1e4 && x.abs() < 1e15 {
+        // Montants : groupement des milliers, sans décimales.
+        let r = x.round() as i64;
+        let digits = r.unsigned_abs().to_string();
+        let mut g = String::new();
+        for (i, c) in digits.chars().enumerate() {
+            if i > 0 && (digits.len() - i).is_multiple_of(3) {
+                g.push('\u{202f}');
+            }
+            g.push(c);
+        }
+        return if r < 0 { format!("-{g}") } else { g };
+    }
+    if x == 0.0 || x.abs() >= 1e-3 {
         let s = format!("{x:.6}");
         let s = s.trim_end_matches('0').trim_end_matches('.');
-        if s.is_empty() || s == "-" {
+        if s.is_empty() || s == "-" || s == "-0" {
             "0".into()
         } else {
             s.into()
@@ -300,6 +316,15 @@ mod tests {
     fn utc_formatting() {
         assert_eq!(utc(0), "1970-01-01 00:00 UTC");
         assert_eq!(utc(1_709_210_096), "2024-02-29 12:34 UTC");
+    }
+
+    #[test]
+    fn number_formatting() {
+        assert_eq!(num(-2_614_755.4), "-2\u{202f}614\u{202f}755");
+        assert_eq!(num(12_000.0), "12\u{202f}000");
+        assert_eq!(num(0.871585), "0.871585");
+        assert_eq!(num(-0.0000001), "-1.000e-7");
+        assert_eq!(num(-0.0), "0");
     }
 
     #[test]

@@ -10,6 +10,7 @@ pub mod benchmark;
 pub mod curves;
 pub mod dates;
 pub mod rates;
+pub mod risk;
 
 use rates::{swap_npv, Market};
 
@@ -148,8 +149,18 @@ impl Instrument {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Trade {
     pub id: String,
+    /// Nombre d'unités détenues (négatif pour une position vendeuse) ; 1 par défaut.
+    #[serde(default = "one_unit")]
+    pub quantity: f64,
+    /// Sous-jacent ou émetteur, pour l'application des chocs de risque (`SPOT:<x>`, `VOL:<x>`, `YIELD:<x>`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub underlying: Option<String>,
     #[serde(flatten)]
     pub instrument: Instrument,
+}
+
+fn one_unit() -> f64 {
+    1.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -495,6 +506,85 @@ pub fn value_in(trade: &Trade, market: &Market) -> Result<Valuation, String> {
         product: trade.instrument.product().into(),
         price,
         measures,
+    })
+}
+
+/// Prix unitaire seul (sans sensibilités) : chemin rapide pour la revalorisation sous scénarios.
+pub fn price_in(trade: &Trade, market: &Market) -> Result<f64, String> {
+    Ok(match trade.instrument {
+        Instrument::EuropeanOption {
+            option_type,
+            spot,
+            strike,
+            rate,
+            dividend,
+            vol,
+            maturity,
+        } => bsm(option_type, spot, strike, rate, dividend, vol, maturity)?.price,
+        Instrument::AmericanOption {
+            option_type,
+            spot,
+            strike,
+            rate,
+            dividend,
+            vol,
+            maturity,
+            steps,
+        } => crr(option_type, spot, strike, rate, dividend, vol, maturity, steps, true)?,
+        Instrument::Black76 {
+            option_type,
+            forward,
+            strike,
+            rate,
+            vol,
+            maturity,
+        } => black76(option_type, forward, strike, rate, vol, maturity)?.price,
+        Instrument::FixedRateBond {
+            face,
+            coupon_rate,
+            maturity,
+            frequency,
+            yield_rate,
+        } => fixed_rate_bond(face, coupon_rate, maturity, frequency, yield_rate)?.price,
+        Instrument::InterestRateSwap {
+            notional,
+            fixed_rate,
+            maturity,
+            fixed_frequency,
+            pay_fixed,
+            ref curve,
+        } => swap_npv(
+            market.curve(curve)?,
+            notional,
+            fixed_rate,
+            maturity,
+            fixed_frequency,
+            pay_fixed,
+        )?,
+        Instrument::VanillaSwap {
+            notional,
+            fixed_rate,
+            ref tenor,
+            pay_fixed,
+            ref forward_curve,
+            ref discount_curve,
+        } => {
+            let (a, f) = vanilla_swap_legs(market, tenor, forward_curve, discount_curve.as_deref())?;
+            let (fixed, float) = (notional * fixed_rate * a, notional * f);
+            if pay_fixed {
+                float - fixed
+            } else {
+                fixed - float
+            }
+        }
+        Instrument::ZeroCouponBond {
+            face,
+            maturity,
+            ref curve,
+        } => {
+            positive("maturity", maturity)?;
+            face * market.curve(curve)?.discount(maturity)
+        }
     })
 }
 
