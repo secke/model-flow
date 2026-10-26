@@ -87,6 +87,38 @@ curl -H "Authorization: Bearer $JETON" localhost:8080/api/pipelines
 | POST | `/api/pipelines/{p}/runs/{id}/decisions` `{"decision": "approved" \| "rejected", "comment": "…"}` | `validator` |
 | GET | `/api/audit?limit=100` | `auditor`, `admin` |
 
+### Base de données
+Sans section `[database]`, le serveur utilise SQLite : une base par pipeline et une base de gouvernance, pour une instance unique. Pour la production, PostgreSQL :
+```toml
+[database]
+url_env = "MODELFLOW_DATABASE_URL"   # ou url = "postgres://…" ; sslmode=require ou verify-full pour TLS
+max_connections = 10
+```
+- Le schéma est créé au démarrage, sous verrou consultatif, ce qui permet de lancer plusieurs instances simultanément.
+- Le journal d'audit est protégé par trigger : `UPDATE`, `DELETE` et `TRUNCATE` sont refusés par la base elle-même.
+- Chaque travail est rattaché à l'instance qui l'exécute. Au redémarrage, une instance ne marque en échec que ses propres travaux interrompus.
+- La CLI écrit aussi dans PostgreSQL quand `MODELFLOW_DATABASE_URL` est défini.
+
+### Authentification unique (OIDC)
+```toml
+[oidc]
+issuer = "https://login.microsoftonline.com/<tenant>/v2.0"   # Entra ID, ADFS, Okta, Keycloak…
+audience = "api://modelflow"
+roles_claim = "roles"            # ou "groups", ou chemin pointé ("realm_access.roles" pour Keycloak)
+username_claim = "preferred_username"
+# jwks_file = "jwks.json"        # sans accès réseau au fournisseur d'identité
+[oidc.role_mapping]
+"ModelFlow.Owners" = "model_owner"
+"ModelFlow.Validators" = "validator"
+"ModelFlow.Auditors" = "auditor"
+```
+- **Signature** : vérifiée avec les clés du fournisseur, obtenues par découverte, par `jwks_url` ou par `jwks_file`. Un `kid` inconnu déclenche un rechargement (rotation des clés), au plus toutes les `jwks_refresh_secs` (60 s).
+- **Algorithmes** : RS256, PS256 et ES256 uniquement. HMAC et `none` sont refusés, ce qui bloque les attaques par confusion d'algorithme.
+- **Contrôles** : émetteur, audience, expiration et `nbf`, avec une tolérance de `leeway_secs` (60 s).
+- **Rôles** : un utilisateur à la fois validateur et propriétaire de modèle (ou admin) est refusé (`403`, séparation des tâches). Un utilisateur sans groupe correspondant est refusé.
+- **Annuaire LDAP / Active Directory** : il passe par le fournisseur d'identité (fédération Entra ID, ADFS ou Keycloak), qui émet les jetons OIDC.
+- **Comptes de service** : les jetons `[[user]]` (CI, planificateur) restent acceptés en parallèle.
+
 Fonctionnement :
 - `POST …/runs` place l'exécution en file d'attente et répond `202` avec un travail à suivre sur `GET /api/jobs/{id}` (`queued`, `running`, `succeeded`, `failed`). `?wait=true` attend la fin et renvoie le résultat.
 - `max_concurrent_runs` (2) borne les exécutions simultanées. Les travaux interrompus par un arrêt du serveur sont marqués en échec au redémarrage.
@@ -117,8 +149,8 @@ Isolation :
 
 ## Déploiement
 ```bash
-docker build -t modelflow:0.6.0 .
-docker run --rm modelflow:0.6.0 new-token          # renseigner deploy/server.docker.toml
+docker build -t modelflow:0.7.0 .
+docker run --rm modelflow:0.7.0 new-token          # renseigner deploy/server.docker.toml
 docker compose up --build                          # http://127.0.0.1:8080
 kubectl apply -k deploy/k8s                        # après avoir renseigné deploy/k8s/secret.yaml
 ```
@@ -129,9 +161,10 @@ kubectl apply -k deploy/k8s                        # après avoir renseigné dep
   - sondes sur `/api/health`, limites de ressources ;
   - configuration dans un Secret, espace de travail sur un volume persistant ;
   - NetworkPolicy : entrée depuis l'ingress uniquement, aucune sortie ;
-  - une seule réplique, car SQLite n'accepte qu'un écrivain ;
+  - une réplique avec SQLite. Avec PostgreSQL (URL dans le Secret `modelflow-database`), plusieurs répliques sont possibles si l'espace de travail est partagé ;
+  - `networkpolicy-egress.yaml` (à ajouter explicitement) ouvre DNS, PostgreSQL et le fournisseur d'identité ;
   - en production, alimenter `/workspace` depuis Git (git-sync ou CI) plutôt que par l'initContainer de démonstration.
-- **CI** : construction de l'image, essai de bout en bout dans le conteneur (lecture seule, sans capacités) et validation des manifestes avec kubeconform.
+- **CI** : tests sur SQLite et sur PostgreSQL 16 (service), historique de la CLI dans PostgreSQL, construction de l'image, essai de bout en bout dans le conteneur (lecture seule, sans capacités) et validation des manifestes avec kubeconform.
 
 ## Écarts détectés par `verify`
 - `code modifié sans changement de version`

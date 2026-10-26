@@ -2,7 +2,7 @@
 services:
   modelflow:
     build: .
-    image: modelflow:0.6.0
+    image: modelflow:0.7.0
     ports:
       - "127.0.0.1:8080:8080"
     volumes:

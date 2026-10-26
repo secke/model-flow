@@ -1018,7 +1018,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "mf-cli"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "mf-core",
  "mf-runtime",
@@ -1027,7 +1027,7 @@ dependencies = [
 
 [[package]]
 name = "mf-core"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1037,7 +1037,7 @@ dependencies = [
 
 [[package]]
 name = "mf-pricing"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "mf-validate",
  "serde",
@@ -1046,7 +1046,7 @@ dependencies = [
 
 [[package]]
 name = "mf-runtime"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "csv",
  "libc",
@@ -1067,7 +1067,7 @@ dependencies = [
 
 [[package]]
 name = "mf-server"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "axum",
  "axum-server",
@@ -1091,7 +1091,7 @@ dependencies = [
 
 [[package]]
 name = "mf-validate"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "serde",
  "serde_json",

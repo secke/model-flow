@@ -1,0 +1,38 @@
+# Sorties à autoriser lorsque PostgreSQL et le SSO sont activés (non inclus par défaut dans
+# kustomization.yaml : l'ajouter explicitement). Les modèles externes partagent le réseau du pod :
+# restreindre la sortie HTTPS aux adresses du fournisseur d'identité, ou utiliser `jwks_file`
+# (JWKS fourni par configuration) pour ne rien ouvrir vers l'extérieur.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: modelflow-egress
+  namespace: modelflow
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: modelflow
+  policyTypes: [Egress]
+  egress:
+    # Résolution DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # PostgreSQL
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: databases
+      ports:
+        - port: 5432
+    # Fournisseur d'identité (remplacer par ses plages d'adresses)
+    - to:
+        - ipBlock:
+            cidr: 203.0.113.0/24
+      ports:
+        - port: 443
