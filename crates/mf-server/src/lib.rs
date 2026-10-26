@@ -70,6 +70,32 @@ pub struct ServerConfig {
     #[serde(default = "default_rate")]
     pub rate_limit_per_minute: u32,
     pub tls: Option<TlsConfig>,
+    /// Base PostgreSQL partagée ; sans cette section, SQLite (fichiers locaux, instance unique).
+    pub database: Option<DatabaseConfig>,
+}
+
+fn default_pool() -> u32 {
+    10
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DatabaseConfig {
+    /// URL libpq ; préférer `url_env` pour ne pas écrire le mot de passe dans la configuration.
+    pub url: Option<String>,
+    /// Nom de la variable d'environnement contenant l'URL (ex. `MODELFLOW_DATABASE_URL`).
+    pub url_env: Option<String>,
+    #[serde(default = "default_pool")]
+    pub max_connections: u32,
+}
+
+impl DatabaseConfig {
+    pub fn resolve_url(&self) -> Result<String, String> {
+        match (&self.url, &self.url_env) {
+            (Some(u), None) => Ok(u.clone()),
+            (None, Some(v)) => std::env::var(v).map_err(|_| format!("variable d'environnement `{v}` absente")),
+            _ => Err("[database] : indiquer `url` ou `url_env`".into()),
+        }
+    }
 }
 
 impl ServerConfig {
@@ -125,10 +151,18 @@ pub fn new_token() -> String {
 
 // ---------- État et erreurs ----------
 
+enum Backend {
+    /// Une base SQLite par pipeline (historique) et une base de gouvernance dans l'espace de travail.
+    Sqlite {
+        gov_db: PathBuf,
+    },
+    Postgres(mf_runtime::pg::SharedPool),
+}
+
 struct Inner {
     workspace: PathBuf,
     users: Vec<UserConfig>,
-    gov_db: PathBuf,
+    backend: Backend,
     runs: Arc<tokio::sync::Semaphore>,
     rate: f64,
     buckets: std::sync::Mutex<std::collections::HashMap<String, (f64, std::time::Instant)>>,
@@ -138,18 +172,64 @@ struct Inner {
 pub struct AppState(Arc<Inner>);
 
 impl AppState {
+    /// Initialise l'état (connexion et migrations). Les appels de base de données sont synchrones :
+    /// ils s'exécutent dans un thread dédié, ce qui permet l'appel depuis un contexte asynchrone.
     pub fn new(cfg: &ServerConfig) -> Result<Self, String> {
-        let gov_db = cfg.workspace.join(".modelflow-server/governance.db");
-        // Les travaux interrompus par un arrêt du serveur sont marqués en échec.
-        Gov::open(&gov_db)?.fail_interrupted_jobs()?;
-        Ok(Self(Arc::new(Inner {
+        std::thread::scope(|sc| {
+            sc.spawn(|| Self::init(cfg))
+                .join()
+                .map_err(|_| "initialisation interrompue".to_string())?
+        })
+    }
+
+    fn init(cfg: &ServerConfig) -> Result<Self, String> {
+        let backend = match &cfg.database {
+            Some(db) => {
+                let schema = format!(
+                    "{}
+{}",
+                    mf_runtime::store::PG_SCHEMA,
+                    governance::PG_SCHEMA
+                );
+                Backend::Postgres(mf_runtime::pg::SharedPool::new(mf_runtime::pg::connect(
+                    &db.resolve_url()?,
+                    db.max_connections,
+                    &schema,
+                )?))
+            }
+            None => Backend::Sqlite {
+                gov_db: cfg.workspace.join(".modelflow-server/governance.db"),
+            },
+        };
+        let state = Self(Arc::new(Inner {
             workspace: cfg.workspace.clone(),
             users: cfg.users.clone(),
-            gov_db,
+            backend,
             runs: Arc::new(tokio::sync::Semaphore::new(cfg.max_concurrent_runs)),
             rate: cfg.rate_limit_per_minute as f64,
             buckets: Default::default(),
-        })))
+        }));
+        // Les travaux interrompus par un arrêt du serveur sont marqués en échec.
+        state.gov().map_err(|e| e.1)?.fail_interrupted_jobs()?;
+        Ok(state)
+    }
+
+    /// Moteur de stockage utilisé (`sqlite` ou `postgres`).
+    pub fn backend_name(&self) -> &'static str {
+        match self.0.backend {
+            Backend::Sqlite { .. } => "sqlite",
+            Backend::Postgres(_) => "postgres",
+        }
+    }
+
+    fn store_for(&self, toml: &FsPath) -> ApiResult<Store> {
+        match &self.0.backend {
+            Backend::Sqlite { .. } => {
+                let base = toml.parent().unwrap_or(FsPath::new("."));
+                Store::open(&base.join(".modelflow/runs.db")).map_err(ApiError::internal)
+            }
+            Backend::Postgres(pool) => Store::postgres(pool.pool()).map_err(ApiError::internal),
+        }
     }
 
     /// Seau à jetons par utilisateur : `rate` requêtes par minute, rafale de même taille.
@@ -168,7 +248,11 @@ impl AppState {
     }
 
     fn gov(&self) -> Result<Gov, ApiError> {
-        Gov::open(&self.0.gov_db).map_err(ApiError::internal)
+        match &self.0.backend {
+            Backend::Sqlite { gov_db } => Gov::open(gov_db),
+            Backend::Postgres(pool) => Gov::postgres(pool.pool()),
+        }
+        .map_err(ApiError::internal)
     }
 }
 
@@ -245,13 +329,17 @@ impl FromRequestParts<AppState> for Auth {
 }
 
 /// Vérifie le rôle ; un refus est inscrit au journal d'audit.
-fn authorize(state: &AppState, auth: &Auth, roles: &[Role], action: &str, target: &str) -> ApiResult<()> {
+async fn authorize(state: &AppState, auth: &Auth, roles: &[Role], action: &str, target: &str) -> ApiResult<()> {
     if roles.contains(&auth.role) {
         return Ok(());
     }
-    let _ = state
-        .gov()
-        .map(|g| g.audit(&auth.name, auth.role, action, target, "denied"));
+    let (st, a, act, tgt) = (state.clone(), auth.clone(), action.to_string(), target.to_string());
+    let _ = blocking(move || {
+        st.gov()?
+            .audit(&a.name, a.role, &act, &tgt, "denied")
+            .map_err(ApiError::internal)
+    })
+    .await;
     Err(ApiError::new(
         StatusCode::FORBIDDEN,
         format!("le rôle {:?} ne permet pas `{action}`", auth.role),
@@ -280,11 +368,6 @@ fn locate(state: &AppState, name: &str) -> ApiResult<PathBuf> {
         .ok_or_else(|| ApiError::not_found(format!("pipeline `{name}` inconnu")))
 }
 
-fn store_for(toml: &FsPath) -> ApiResult<Store> {
-    let base = toml.parent().unwrap_or(FsPath::new("."));
-    Store::open(&base.join(".modelflow/runs.db")).map_err(ApiError::internal)
-}
-
 fn mismatches_json(mm: &[mf_core::Mismatch]) -> Value {
     json!(mm
         .iter()
@@ -292,9 +375,9 @@ fn mismatches_json(mm: &[mf_core::Mismatch]) -> Value {
         .collect::<Vec<_>>())
 }
 
-fn verify_run(toml: &FsPath, name: &str, id: i64) -> ApiResult<Vec<mf_core::Mismatch>> {
+fn verify_run(st: &AppState, toml: &FsPath, name: &str, id: i64) -> ApiResult<Vec<mf_core::Mismatch>> {
     let (sp, base) = spec::load(toml).map_err(ApiError::internal)?;
-    let (_, m) = store_for(toml)?.get(name, Some(id)).map_err(ApiError::not_found)?;
+    let (_, m) = st.store_for(toml)?.get(name, Some(id)).map_err(ApiError::not_found)?;
     let p = spec::build(&sp, &base).map_err(|e| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e))?;
     p.verify(&m)
         .map_err(|e| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e.to_string()))
@@ -302,8 +385,8 @@ fn verify_run(toml: &FsPath, name: &str, id: i64) -> ApiResult<Vec<mf_core::Mism
 
 // ---------- Handlers ----------
 
-async fn health() -> Json<Value> {
-    Json(json!({ "status": "ok", "version": env!("CARGO_PKG_VERSION") }))
+async fn health(State(st): State<AppState>) -> Json<Value> {
+    Json(json!({ "status": "ok", "version": env!("CARGO_PKG_VERSION"), "storage": st.backend_name() }))
 }
 
 async fn me(auth: Auth) -> Json<Value> {
@@ -332,7 +415,7 @@ async fn list_runs(State(st): State<AppState>, _auth: Auth, Path(name): Path<Str
     blocking(move || {
         let toml = locate(&st, &name)?;
         let gov = st.gov()?;
-        let rows = store_for(&toml)?.list(&name).map_err(ApiError::internal)?;
+        let rows = st.store_for(&toml)?.list(&name).map_err(ApiError::internal)?;
         let out: Vec<Value> = rows
             .into_iter()
             .map(|r| {
@@ -358,13 +441,13 @@ struct RunQuery {
 
 /// Exécute un pipeline pour un travail déjà enregistré (thread bloquant).
 fn execute_job(st: &AppState, job: i64, name: &str, auth: &Auth) -> Result<(i64, Value), String> {
-    let gov = Gov::open(&st.0.gov_db)?;
+    let gov = st.gov().map_err(|e| e.1)?;
     gov.job_started(job)?;
     let result = (|| -> Result<(i64, Value), String> {
         let toml = locate(st, name).map_err(|e| e.1)?;
         let (sp, base) = spec::load(&toml)?;
         let m = spec::build(&sp, &base)?.execute().map_err(|e| e.to_string())?;
-        let id = store_for(&toml).map_err(|e| e.1)?.save(name, &m, &auth.name)?;
+        let id = st.store_for(&toml).map_err(|e| e.1)?.save(name, &m, &auth.name)?;
         let steps: Vec<Value> = m
             .steps
             .iter()
@@ -391,7 +474,7 @@ async fn create_run(
     Path(name): Path<String>,
     Query(q): Query<RunQuery>,
 ) -> ApiResult<Response> {
-    authorize(&st, &auth, &[Role::ModelOwner, Role::Admin], "run.create", &name)?;
+    authorize(&st, &auth, &[Role::ModelOwner, Role::Admin], "run.create", &name).await?;
     let (st2, name2, user) = (st.clone(), name.clone(), auth.name.clone());
     let job = blocking(move || {
         locate(&st2, &name2)?;
@@ -432,7 +515,8 @@ async fn get_run(
     Path((name, id)): Path<(String, i64)>,
 ) -> ApiResult<Json<Value>> {
     blocking(move || {
-        let (_, m) = store_for(&locate(&st, &name)?)?
+        let (_, m) = st
+            .store_for(&locate(&st, &name)?)?
             .get(&name, Some(id))
             .map_err(ApiError::not_found)?;
         Ok(Json(serde_json::to_value(m).unwrap()))
@@ -452,9 +536,10 @@ async fn verify(
         &[Role::Validator, Role::ModelOwner, Role::Admin],
         "run.verify",
         &target,
-    )?;
+    )
+    .await?;
     blocking(move || {
-        let mm = verify_run(&locate(&st, &name)?, &name, id)?;
+        let mm = verify_run(&st, &locate(&st, &name)?, &name, id)?;
         let outcome = if mm.is_empty() { "reproducible" } else { "mismatch" };
         st.gov()?
             .audit(&auth.name, auth.role, "run.verify", &target, outcome)
@@ -480,7 +565,7 @@ async fn get_report(
 ) -> ApiResult<Html<String>> {
     blocking(move || {
         let toml = locate(&st, &name)?;
-        let store = store_for(&toml)?;
+        let store = st.store_for(&toml)?;
         let (_, m) = store.get(&name, Some(id)).map_err(ApiError::not_found)?;
         let info = store
             .info(&name, id)
@@ -489,7 +574,7 @@ async fn get_report(
         let mm = if q.no_verify {
             None
         } else {
-            Some(verify_run(&toml, &name, id)?)
+            Some(verify_run(&st, &toml, &name, id)?)
         };
         let decisions = st.gov()?.decisions(&name, id).map_err(ApiError::internal)?;
         let now = std::time::SystemTime::now()
@@ -523,7 +608,7 @@ async fn decide(
     Json(body): Json<DecisionBody>,
 ) -> ApiResult<Response> {
     let target = format!("{name}#{id}");
-    authorize(&st, &auth, &[Role::Validator], "run.decide", &target)?;
+    authorize(&st, &auth, &[Role::Validator], "run.decide", &target).await?;
     if body.decision != "approved" && body.decision != "rejected" {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -539,7 +624,8 @@ async fn decide(
     blocking(move || {
         let toml = locate(&st, &name)?;
         let gov = st.gov()?;
-        let info = store_for(&toml)?
+        let info = st
+            .store_for(&toml)?
             .info(&name, id)
             .map_err(ApiError::internal)?
             .ok_or_else(|| ApiError::not_found(format!("exécution #{id} introuvable")))?;
@@ -550,7 +636,7 @@ async fn decide(
         if info.triggered_by == auth.name {
             return refuse("séparation des tâches : impossible de valider sa propre exécution");
         }
-        let mm = verify_run(&toml, &name, id)?;
+        let mm = verify_run(&st, &toml, &name, id)?;
         if !mm.is_empty() {
             return refuse("le rejeu n'est pas identique : décision impossible");
         }
@@ -583,7 +669,7 @@ struct AuditQuery {
 }
 
 async fn audit_log(State(st): State<AppState>, auth: Auth, Query(q): Query<AuditQuery>) -> ApiResult<Json<Value>> {
-    authorize(&st, &auth, &[Role::Auditor, Role::Admin], "audit.read", "audit")?;
+    authorize(&st, &auth, &[Role::Auditor, Role::Admin], "audit.read", "audit").await?;
     blocking(move || {
         let rows = st
             .gov()?

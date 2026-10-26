@@ -16,6 +16,7 @@ serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
 rusqlite.workspace = true
+postgres = "0.19"
 sha2.workspace = true
 getrandom = "0.2"
 axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }

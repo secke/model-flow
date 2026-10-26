@@ -13,4 +13,9 @@ toml.workspace = true
 rusqlite.workspace = true
 libc = "0.2"
 csv = "1"
+postgres = "0.19"
+postgres-native-tls = "0.5"
+native-tls = "0.2"
+r2d2 = "0.8"
+r2d2_postgres = "0.18"
 parquet = { version = "53", default-features = false, features = ["snap", "zstd", "flate2"] }

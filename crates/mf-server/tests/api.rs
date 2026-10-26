@@ -36,11 +36,25 @@ params = { alpha = 0.99, window = 250 }
     ws
 }
 
-fn app(ws: &std::path::Path) -> axum::Router {
-    app_with(ws, 120)
+/// URL d'une base PostgreSQL de test neuve (MODELFLOW_TEST_DATABASE_URL), si disponible.
+async fn pg_url(tag: &str) -> Option<String> {
+    let admin = std::env::var("MODELFLOW_TEST_DATABASE_URL").ok()?;
+    let name = format!("mf_api_{}_{}", tag.replace('-', "_"), std::process::id());
+    Some(
+        tokio::task::spawn_blocking(move || mf_runtime::pg::create_test_database(&admin, &name).unwrap())
+            .await
+            .unwrap(),
+    )
 }
 
-fn app_with(ws: &std::path::Path, rate: u32) -> axum::Router {
+fn app(ws: &std::path::Path, db: Option<&str>) -> axum::Router {
+    app_with(ws, 120, db)
+}
+
+fn app_with(ws: &std::path::Path, rate: u32, db: Option<&str>) -> axum::Router {
+    let database = db
+        .map(|u| format!("[database]\nurl = \"{u}\"\nmax_connections = 4\n"))
+        .unwrap_or_default();
     let cfg = format!(
         r#"workspace = "{}"
 rate_limit_per_minute = {rate}
@@ -56,7 +70,7 @@ token_sha256 = "{}"
 name = "carol"
 role = "auditor"
 token_sha256 = "{}"
-"#,
+{database}"#,
         ws.display(),
         hash_token("tok-alice"),
         hash_token("tok-bob"),
@@ -92,9 +106,23 @@ async fn call(
 }
 
 #[tokio::test]
-async fn full_validation_workflow() {
-    let ws = workspace("flow");
-    let app = app(&ws);
+async fn full_validation_workflow_sqlite() {
+    full_validation_workflow(None).await
+}
+
+#[tokio::test]
+async fn full_validation_workflow_postgres() {
+    match pg_url("flow").await {
+        Some(u) => full_validation_workflow(Some(u)).await,
+        None => eprintln!("MODELFLOW_TEST_DATABASE_URL absent : test PostgreSQL ignoré"),
+    }
+}
+
+async fn full_validation_workflow(db: Option<String>) {
+    let ws = workspace(if db.is_some() { "flow-pg" } else { "flow" });
+    let app = app(&ws, db.as_deref());
+    let (_, h, _) = call(&app, "GET", "/api/health", None, None).await;
+    assert_eq!(h["storage"], if db.is_some() { "postgres" } else { "sqlite" });
 
     // Authentification
     assert_eq!(call(&app, "GET", "/api/health", None, None).await.0, StatusCode::OK);
@@ -276,9 +304,21 @@ async fn full_validation_workflow() {
 }
 
 #[tokio::test]
-async fn runs_are_queued_and_tracked() {
-    let ws = workspace("jobs");
-    let app = app(&ws);
+async fn runs_are_queued_and_tracked_sqlite() {
+    runs_are_queued_and_tracked(None).await
+}
+
+#[tokio::test]
+async fn runs_are_queued_and_tracked_postgres() {
+    match pg_url("jobs").await {
+        Some(u) => runs_are_queued_and_tracked(Some(u)).await,
+        None => eprintln!("MODELFLOW_TEST_DATABASE_URL absent : test PostgreSQL ignoré"),
+    }
+}
+
+async fn runs_are_queued_and_tracked(db: Option<String>) {
+    let ws = workspace(if db.is_some() { "jobs-pg" } else { "jobs" });
+    let app = app(&ws, db.as_deref());
     let (s, job, _) = call(&app, "POST", "/api/pipelines/desk-var/runs", Some("tok-alice"), None).await;
     assert_eq!(s, StatusCode::ACCEPTED, "{job}");
     let href = job["href"].as_str().unwrap().to_string();
@@ -318,7 +358,7 @@ async fn runs_are_queued_and_tracked() {
 #[tokio::test]
 async fn rate_limit_per_user() {
     let ws = workspace("rate");
-    let app = app_with(&ws, 3);
+    let app = app_with(&ws, 3, None);
     for _ in 0..3 {
         assert_eq!(
             call(&app, "GET", "/api/me", Some("tok-bob"), None).await.0,
@@ -334,6 +374,34 @@ async fn rate_limit_per_user() {
         call(&app, "GET", "/api/me", Some("tok-carol"), None).await.0,
         StatusCode::OK
     );
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[tokio::test]
+async fn postgres_audit_log_is_append_only() {
+    let Some(url) = pg_url("audit").await else {
+        eprintln!("MODELFLOW_TEST_DATABASE_URL absent : test PostgreSQL ignoré");
+        return;
+    };
+    let ws = workspace("audit-pg");
+    let app = app(&ws, Some(&url));
+    assert_eq!(
+        call(&app, "GET", "/api/audit", Some("tok-alice"), None).await.0,
+        StatusCode::FORBIDDEN
+    );
+    tokio::task::spawn_blocking(move || {
+        let mut c = postgres::Client::connect(&url, postgres::NoTls).unwrap();
+        assert_eq!(
+            c.query_one("SELECT COUNT(*) FROM audit", &[]).unwrap().get::<_, i64>(0),
+            1
+        );
+        for sql in ["UPDATE audit SET outcome = 'ok'", "DELETE FROM audit", "TRUNCATE audit"] {
+            let e = c.batch_execute(sql).unwrap_err();
+            assert!(e.as_db_error().unwrap().message().contains("ajout seul"), "{sql}");
+        }
+    })
+    .await
+    .unwrap();
     let _ = std::fs::remove_dir_all(&ws);
 }
 

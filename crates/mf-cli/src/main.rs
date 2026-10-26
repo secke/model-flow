@@ -7,7 +7,9 @@ const USAGE: &str = "usage:
   mf runs   <pipeline.toml>              liste les exécutions
   mf show   <pipeline.toml> [--run ID]   affiche le manifeste JSON
   mf report <pipeline.toml> [--run ID] [-o rapport.html] [--no-verify]
-                                         rapport de validation HTML";
+                                         rapport de validation HTML
+
+Historique : SQLite dans <dossier du pipeline>/.modelflow, ou PostgreSQL si MODELFLOW_DATABASE_URL est défini.";
 
 fn now() -> i64 {
     std::time::SystemTime::now()
@@ -46,13 +48,21 @@ fn run_id(args: &[String]) -> Result<Option<i64>, String> {
     }
 }
 
+/// Historique : PostgreSQL si `MODELFLOW_DATABASE_URL` est défini, sinon SQLite à côté du pipeline.
+fn open_store(base: &Path) -> Result<Store, String> {
+    match std::env::var("MODELFLOW_DATABASE_URL") {
+        Ok(url) if !url.is_empty() => Store::postgres(&mf_runtime::pg::connect_store(&url, 2)?),
+        _ => Store::open(&base.join(".modelflow/runs.db")),
+    }
+}
+
 fn real_main(args: &[String]) -> Result<bool, String> {
     let (cmd, file) = match (args.get(1), args.get(2)) {
         (Some(c), Some(f)) => (c.as_str(), Path::new(f)),
         _ => return Err(USAGE.into()),
     };
     let (sp, base) = spec::load(file)?;
-    let store = Store::open(&base.join(".modelflow/runs.db"))?;
+    let store = open_store(&base)?;
     match cmd {
         "run" => {
             let m = spec::build(&sp, &base)?.execute().map_err(|e| e.to_string())?;
