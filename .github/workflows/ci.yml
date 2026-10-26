@@ -57,17 +57,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Construction de l'image
-        run: docker build -t modelflow:0.7.0 .
+        run: docker build -t modelflow:0.8.0 .
       - name: Essai de bout en bout dans le conteneur (lecture seule, sans privilèges)
         run: |
           set -euo pipefail
-          TOKEN=$(docker run --rm modelflow:0.7.0 new-token | sed -n 's/.*: //p' | head -1)
-          HASH=$(docker run --rm modelflow:0.7.0 hash-token "$TOKEN")
+          TOKEN=$(docker run --rm modelflow:0.8.0 new-token | sed -n 's/.*: //p' | head -1)
+          HASH=$(docker run --rm modelflow:0.8.0 hash-token "$TOKEN")
           mkdir -p ci-cfg
           printf 'workspace = "/workspace"\nbind = "0.0.0.0:8080"\n[[user]]\nname = "ci"\nrole = "admin"\ntoken_sha256 = "%s"\n' "$HASH" > ci-cfg/server.toml
           docker run -d --name mf -p 8080:8080 --user "$(id -u):$(id -g)" --read-only --tmpfs /tmp \
             --cap-drop ALL --security-opt no-new-privileges \
-            -v "$PWD/examples:/workspace" -v "$PWD/ci-cfg/server.toml:/etc/modelflow/server.toml:ro" modelflow:0.7.0
+            -v "$PWD/examples:/workspace" -v "$PWD/ci-cfg/server.toml:/etc/modelflow/server.toml:ro" modelflow:0.8.0
           for i in $(seq 1 30); do curl -fs localhost:8080/api/health && break; sleep 1; done
           for p in multicurve-swap-benchmark pricing-library-benchmark; do
             curl -fs -X POST -H "Authorization: Bearer $TOKEN" "localhost:8080/api/pipelines/$p/runs?wait=true" | tee run.json
@@ -78,3 +78,25 @@ jobs:
         run: |
           curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
           ./kubeconform -strict -summary -ignore-filename-pattern kustomization.yaml deploy/k8s/
+
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: cargo build --release -p mf-server
+      - name: Playwright
+        run: |
+          npm install --no-save --prefix ui-tests playwright@1.63.0
+          npx --prefix ui-tests playwright install --with-deps chromium
+      - name: Interface de bout en bout (SSO PKCE, propriétaire, validateur, auditeur)
+        run: NODE_PATH=ui-tests/node_modules node ui-tests/e2e.cjs target/release/mf-server
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: captures-interface
+          path: ui-tests/screenshots/

@@ -238,12 +238,17 @@ footer{{margin-top:40px;color:var(--muted);font-size:12px;overflow-wrap:anywhere
             } else {
                 badge("fail")
             };
+            let label = match d.decision.as_str() {
+                "approved" => "approuvée",
+                "rejected" => "rejetée",
+                other => other,
+            };
             let _ = write!(
                 h,
                 "<tr><td>{}</td><td>{}</td><td>{b} {}</td><td>{}</td></tr>",
                 utc(d.created_at),
                 esc(&d.user),
-                esc(&d.decision),
+                esc(label),
                 esc(&d.comment)
             );
         }

@@ -420,22 +420,120 @@ async fn health(State(st): State<AppState>) -> Json<Value> {
     Json(json!({ "status": "ok", "version": env!("CARGO_PKG_VERSION"), "storage": st.backend_name() }))
 }
 
+// ---------- Interface web ----------
+
+const UI_HTML: &str = include_str!("../ui/index.html");
+const UI_JS: &str = include_str!("../ui/app.js");
+const UI_CSS: &str = include_str!("../ui/app.css");
+
+async fn ui_index() -> Response {
+    (
+        [
+            (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-cache"),
+        ],
+        UI_HTML,
+    )
+        .into_response()
+}
+
+async fn ui_js() -> Response {
+    (
+        [
+            (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-cache"),
+        ],
+        UI_JS,
+    )
+        .into_response()
+}
+
+async fn ui_css() -> Response {
+    (
+        [
+            (header::CONTENT_TYPE, "text/css; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-cache"),
+        ],
+        UI_CSS,
+    )
+        .into_response()
+}
+
+/// Configuration publique de l'interface : paramètres SSO (aucun secret, client public PKCE).
+async fn ui_config(State(st): State<AppState>) -> Json<Value> {
+    let sso = match st.0.oidc.clone() {
+        Some(o) if o.config().client_id.is_some() => {
+            let o2 = o.clone();
+            let endpoints = tokio::task::spawn_blocking(move || o2.browser_endpoints())
+                .await
+                .ok()
+                .and_then(Result::ok);
+            let c = o.config();
+            endpoints.map(|(auth, token)| {
+                json!({"issuer": c.issuer, "client_id": c.client_id,
+                       "scopes": c.scopes.clone().unwrap_or_else(|| "openid profile".into()),
+                       "authorization_endpoint": auth, "token_endpoint": token})
+            })
+        }
+        _ => None,
+    };
+    Json(json!({"version": env!("CARGO_PKG_VERSION"), "sso": sso, "service_tokens": !st.0.users.is_empty()}))
+}
+
+/// En-têtes de sécurité appliqués à toutes les réponses.
+async fn security_headers(
+    State(st): State<AppState>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let mut res = next.run(req).await;
+    let idp =
+        st.0.oidc
+            .as_ref()
+            .map(|o| o.browser_origins().join(" "))
+            .unwrap_or_default();
+    let csp = format!(
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; \
+         connect-src 'self' {idp}; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+    );
+    let h = res.headers_mut();
+    let set = |h: &mut axum::http::HeaderMap, k: &'static str, v: &str| {
+        if let Ok(v) = axum::http::HeaderValue::from_str(v) {
+            h.insert(k, v);
+        }
+    };
+    set(h, "content-security-policy", &csp);
+    set(h, "x-content-type-options", "nosniff");
+    set(h, "referrer-policy", "no-referrer");
+    set(h, "x-frame-options", "DENY");
+    set(h, "permissions-policy", "camera=(), microphone=(), geolocation=()");
+    res
+}
+
 async fn me(auth: Auth) -> Json<Value> {
     Json(json!({ "name": auth.name, "role": auth.role }))
 }
 
 async fn list_pipelines(State(st): State<AppState>, _auth: Auth) -> ApiResult<Json<Value>> {
-    let ws = st.0.workspace.clone();
     blocking(move || {
+        let gov = st.gov()?;
         let mut out = vec![];
-        for (name, toml) in discover(&ws)? {
+        for (name, toml) in discover(&st.0.workspace)? {
             let (sp, _) = spec::load(&toml).map_err(ApiError::internal)?;
             let steps: Vec<Value> = sp
                 .steps
                 .iter()
                 .map(|s| json!({"name": s.name, "kind": s.kind, "version": s.version}))
                 .collect();
-            out.push(json!({ "name": name, "steps": steps }));
+            let runs = st.store_for(&toml)?.list(&name).map_err(ApiError::internal)?;
+            let last = runs.last().map(|r| {
+                let decision = gov
+                    .decisions(&name, r.id)
+                    .ok()
+                    .and_then(|d| d.last().map(|x| x.decision.clone()));
+                json!({"id": r.id, "created_at": r.created_at, "status": r.status, "decision": decision})
+            });
+            out.push(json!({ "name": name, "steps": steps, "runs": runs.len(), "last_run": last }));
         }
         Ok(Json(json!(out)))
     })
@@ -455,7 +553,7 @@ async fn list_runs(State(st): State<AppState>, _auth: Auth, Path(name): Path<Str
                     .ok()
                     .and_then(|d| d.last().map(|x| x.decision.clone()));
                 json!({"id": r.id, "run_hash": r.run_hash, "created_at": r.created_at,
-                       "triggered_by": r.triggered_by, "decision": last})
+                       "triggered_by": r.triggered_by, "status": r.status, "decision": last})
             })
             .collect();
         Ok(Json(json!(out)))
@@ -713,6 +811,10 @@ async fn audit_log(State(st): State<AppState>, auth: Auth, Query(q): Query<Audit
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .route("/", get(ui_index))
+        .route("/ui/app.js", get(ui_js))
+        .route("/ui/app.css", get(ui_css))
+        .route("/api/ui-config", get(ui_config))
         .route("/api/health", get(health))
         .route("/api/me", get(me))
         .route("/api/pipelines", get(list_pipelines))
@@ -726,5 +828,6 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/jobs/:id", get(get_job))
         .route("/api/audit", get(audit_log))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), security_headers))
         .with_state(state)
 }

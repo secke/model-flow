@@ -53,6 +53,13 @@ pub struct OidcConfig {
     pub leeway_secs: u64,
     #[serde(default = "default_refresh")]
     pub jwks_refresh_secs: u64,
+    /// Identifiant de l'application web (client public, flux « authorization code » + PKCE).
+    pub client_id: Option<String>,
+    /// Portées demandées par l'interface web (ex. `openid profile api://modelflow/.default`).
+    pub scopes: Option<String>,
+    /// Points de terminaison du navigateur ; par défaut, obtenus par découverte.
+    pub authorization_endpoint: Option<String>,
+    pub token_endpoint: Option<String>,
 }
 
 /// Échec d'authentification : `forbidden` distingue un jeton valide sans droits (403) d'un jeton invalide (401).
@@ -78,6 +85,14 @@ struct KeyCache {
 pub struct Oidc {
     cfg: OidcConfig,
     cache: RwLock<KeyCache>,
+    browser: RwLock<Option<(String, String)>>,
+}
+
+/// Origine (`schéma://hôte[:port]`) d'une URL.
+pub fn origin(url: &str) -> Option<String> {
+    let (scheme, rest) = url.split_once("://")?;
+    let host = rest.split('/').next()?;
+    (!host.is_empty()).then(|| format!("{scheme}://{host}"))
 }
 
 /// Valeur d'une revendication par chemin pointé.
@@ -121,6 +136,7 @@ impl Oidc {
         let o = Self {
             cfg,
             cache: RwLock::new(KeyCache::default()),
+            browser: RwLock::new(None),
         };
         if o.cfg.jwks_file.is_some() {
             o.refresh()?; // un fichier invalide doit empêcher le démarrage
@@ -159,6 +175,66 @@ impl Oidc {
             .map_err(|e| format!("JWKS {url}: {e}"))?
             .into_string()
             .map_err(|e| e.to_string())
+    }
+
+    pub fn config(&self) -> &OidcConfig {
+        &self.cfg
+    }
+
+    /// Origines à autoriser dans la politique de sécurité du navigateur (émetteur, points de terminaison).
+    pub fn browser_origins(&self) -> Vec<String> {
+        let mut v: Vec<String> = [
+            Some(&self.cfg.issuer),
+            self.cfg.authorization_endpoint.as_ref(),
+            self.cfg.token_endpoint.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        .filter_map(|u| origin(u))
+        .collect();
+        v.sort();
+        v.dedup();
+        v
+    }
+
+    /// Points de terminaison d'autorisation et de jeton pour le navigateur (appel bloquant possible).
+    pub fn browser_endpoints(&self) -> Result<(String, String), String> {
+        if let (Some(a), Some(t)) = (&self.cfg.authorization_endpoint, &self.cfg.token_endpoint) {
+            return Ok((a.clone(), t.clone()));
+        }
+        if let Some(e) = self.browser.read().unwrap().clone() {
+            return Ok(e);
+        }
+        let disco = format!(
+            "{}/.well-known/openid-configuration",
+            self.cfg.issuer.trim_end_matches('/')
+        );
+        let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(10)).build();
+        let doc: Value = agent
+            .get(&disco)
+            .call()
+            .map_err(|e| format!("découverte OIDC {disco}: {e}"))?
+            .into_string()
+            .map_err(|e| e.to_string())
+            .and_then(|t| serde_json::from_str(&t).map_err(|e| e.to_string()))?;
+        let get = |k: &str| {
+            doc.get(k)
+                .and_then(Value::as_str)
+                .map(String::from)
+                .ok_or(format!("découverte OIDC : `{k}` absent"))
+        };
+        let e = (
+            self.cfg
+                .authorization_endpoint
+                .clone()
+                .map_or_else(|| get("authorization_endpoint"), Ok)?,
+            self.cfg
+                .token_endpoint
+                .clone()
+                .map_or_else(|| get("token_endpoint"), Ok)?,
+        );
+        *self.browser.write().unwrap() = Some(e.clone());
+        Ok(e)
     }
 
     fn refresh(&self) -> Result<(), String> {

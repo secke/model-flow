@@ -20,6 +20,24 @@ pub struct RunRow {
     pub run_hash: String,
     pub created_at: i64,
     pub triggered_by: String,
+    /// Pire statut des étapes de contrôle (`pass`, `warn`, `fail`), absent s'il n'y en a aucune.
+    pub status: Option<String>,
+}
+
+/// Pire statut (`fail` > `warn` > `pass`) parmi les sorties des étapes.
+pub fn overall_status(m: &Manifest) -> Option<String> {
+    let rank = |s: &str| match s {
+        "fail" => 3,
+        "warn" => 2,
+        "pass" => 1,
+        _ => 0,
+    };
+    m.steps
+        .iter()
+        .filter_map(|s| s.output.get("status").and_then(Value::as_str))
+        .max_by_key(|s| rank(s))
+        .filter(|s| rank(s) > 0)
+        .map(str::to_string)
 }
 
 fn now() -> i64 {
@@ -46,6 +64,7 @@ CREATE TABLE IF NOT EXISTS runs (
     manifest TEXT NOT NULL,
     triggered_by TEXT NOT NULL DEFAULT 'cli');
 CREATE INDEX IF NOT EXISTS runs_pipeline ON runs(pipeline);
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS status TEXT;
 CREATE TABLE IF NOT EXISTS blobs (
     hash TEXT PRIMARY KEY,
     size BIGINT NOT NULL,
@@ -82,6 +101,14 @@ impl Store {
             c.execute_batch("ALTER TABLE runs ADD COLUMN triggered_by TEXT NOT NULL DEFAULT 'cli'")
                 .map_err(|e| e.to_string())?;
         }
+        let has_status: bool = c
+            .prepare("SELECT 1 FROM pragma_table_info('runs') WHERE name = 'status'")
+            .and_then(|mut s| s.exists([]))
+            .map_err(|e| e.to_string())?;
+        if !has_status {
+            c.execute_batch("ALTER TABLE runs ADD COLUMN status TEXT")
+                .map_err(|e| e.to_string())?;
+        }
         Ok(Store::Sqlite(c))
     }
 
@@ -103,6 +130,7 @@ impl Store {
             .collect();
         slim.steps.iter_mut().for_each(|s| s.output = Value::Null);
         let manifest = serde_json::to_string(&slim).unwrap();
+        let status = overall_status(m);
         match self {
             Store::Sqlite(c) => {
                 let tx = c.unchecked_transaction().map_err(|e| e.to_string())?;
@@ -114,8 +142,8 @@ impl Store {
                     .map_err(|e| e.to_string())?;
                 }
                 tx.execute(
-                    "INSERT INTO runs (pipeline, run_hash, created_at, manifest, triggered_by) VALUES (?1, ?2, ?3, ?4, ?5)",
-                    params![pipeline, m.run_hash, now(), manifest, triggered_by],
+                    "INSERT INTO runs (pipeline, run_hash, created_at, manifest, triggered_by, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![pipeline, m.run_hash, now(), manifest, triggered_by, status],
                 )
                 .map_err(|e| e.to_string())?;
                 let id = tx.last_insert_rowid();
@@ -134,9 +162,9 @@ impl Store {
                 }
                 let id: i64 = tx
                     .query_one(
-                        "INSERT INTO runs (pipeline, run_hash, created_at, manifest, triggered_by)
-                         VALUES ($1, $2, $3, $4, $5) RETURNING id",
-                        &[&pipeline, &m.run_hash, &now(), &manifest, &triggered_by],
+                        "INSERT INTO runs (pipeline, run_hash, created_at, manifest, triggered_by, status)
+                         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+                        &[&pipeline, &m.run_hash, &now(), &manifest, &triggered_by, &status],
                     )
                     .map_err(pg_err)?
                     .get(0);
@@ -242,7 +270,8 @@ impl Store {
     }
 
     pub fn info(&self, pipeline: &str, id: i64) -> Result<Option<RunRow>, String> {
-        let q = "SELECT id, pipeline, run_hash, created_at, triggered_by FROM runs WHERE id = %1 AND pipeline = %2";
+        let q =
+            "SELECT id, pipeline, run_hash, created_at, triggered_by, status FROM runs WHERE id = %1 AND pipeline = %2";
         match self {
             Store::Sqlite(c) => c
                 .query_row(&q.replace("%1", "?1").replace("%2", "?2"), params![id, pipeline], row)
@@ -257,7 +286,8 @@ impl Store {
     }
 
     pub fn list(&self, pipeline: &str) -> Result<Vec<RunRow>, String> {
-        let q = "SELECT id, pipeline, run_hash, created_at, triggered_by FROM runs WHERE pipeline = %1 ORDER BY id";
+        let q =
+            "SELECT id, pipeline, run_hash, created_at, triggered_by, status FROM runs WHERE pipeline = %1 ORDER BY id";
         match self {
             Store::Sqlite(c) => {
                 let mut st = c.prepare(&q.replace("%1", "?1")).map_err(|e| e.to_string())?;
@@ -282,6 +312,7 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<RunRow> {
         run_hash: r.get(2)?,
         created_at: r.get(3)?,
         triggered_by: r.get(4)?,
+        status: r.get(5)?,
     })
 }
 
@@ -292,6 +323,7 @@ fn pg_row(r: &postgres::Row) -> RunRow {
         run_hash: r.get(2),
         created_at: r.get(3),
         triggered_by: r.get(4),
+        status: r.get(5),
     }
 }
 
