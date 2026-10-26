@@ -1,6 +1,6 @@
 # ModelFlow
 
-> Positionnement et feuille de route : [docs/VISION.md](docs/VISION.md).
+> Positionnement et feuille de route : [docs/VISION.md](docs/VISION.md). Prise en main en local : [docs/PRISE-EN-MAIN.md](docs/PRISE-EN-MAIN.md).
 
 Orchestration déterministe et validation de modèles quantitatifs pour les banques : pipelines versionnés, empreintes SHA-256 des données, du code et des résultats, rejeu vérifié et rapport de validation. Écrit en Rust, sans IA générative.
 
@@ -23,6 +23,7 @@ $mf show $p --run 1        # manifeste JSON complet
 | `examples/pd-scorecard` | Modèle de PD à 7 classes : Gini/KS, calibration par classe, stabilité de la population |
 | `examples/pricing-benchmark` | Validation de QuantLib 1.44 sur 12 transactions (options européennes et américaines, Black-76, obligations) |
 | `examples/rates-benchmark` | Courbe simple EUR 6M (dépôts + swaps), re-pricing, validation de QuantLib sur 7 swaps et 3 zéro-coupons |
+| `examples/portfolio-risk` | Portefeuille multi-actifs : VaR/ES historiques par revalorisation complète, sensibilités, stress tests avec limites, test d'attribution du P&L |
 | `examples/multicurve-benchmark` | Multi-courbes €STR / Euribor 6M aux conventions de marché, validation de QuantLib sur 8 swaps (2 à 30 ans) |
 
 ## Types d'étapes
@@ -40,6 +41,10 @@ $mf show $p --run 1        # manifeste JSON complet
 | `json` | lit un document JSON (transactions, prix…) | `path` |
 | `price_portfolio` | valorisation de référence et sensibilités | `trades` |
 | `pricing_benchmark` | pricer candidat vs. référence, tolérances par produit | `trades`, `candidate`, `reference` (optionnel), `market` (optionnel), `tolerances` |
+| `portfolio_var` | VaR et ES historiques par revalorisation complète, contributions, limites | `trades`, `scenarios`, `market`, `label`, `var_confidence`, `es_confidence`, `var_limit`, `es_limit` |
+| `sensitivities` | delta, vega, DV01 par pilier, sensibilité au rendement | `trades`, `market` |
+| `stress_test` | scénarios de stress avec limites de perte | `trades`, `scenarios`, `market` |
+| `pnl_attribution` | test d'attribution du P&L du FRTB (Spearman, KS, zones) | `hypothetical`, `risk_theoretical` ou `sensitivities` + `scenarios` |
 | `curve_bootstrap` | construction de courbe, re-pricing des instruments, structure par terme | `curve`, `tolerance`, `grid_step` |
 
 `price_portfolio` et `pricing_benchmark` acceptent aussi `market` (nom de l'étape qui fournit les courbes), requis pour les swaps et les zéro-coupons.
@@ -190,6 +195,36 @@ Règles de gouvernance :
 - Chaque action, y compris chaque refus, est inscrite dans un journal d'audit en ajout seul : la base refuse modifications et suppressions.
 - Le rapport HTML inclut les décisions de validation.
 
+## Risque de portefeuille (`mf_pricing::risk`)
+**Positions.** Chaque transaction porte une `quantity` (négative pour une vente, 1 par défaut) et, pour les options et les obligations, un `underlying` qui la relie aux facteurs de risque.
+
+**Facteurs de risque** et unités des chocs :
+
+| Facteur | Effet | Unité |
+|---|---|---|
+| `SPOT:<sous-jacent>` | spot ou forward des options | relatif (0,01 = +1 %) |
+| `VOL:<sous-jacent>` | volatilité | absolu (0,01 = +1 point) |
+| `CURVE:<courbe>` | toutes les cotations de la courbe | points de base |
+| `CURVE:<courbe>:<pilier>` | une cotation (`10Y`, `6M`…) | points de base |
+| `YIELD:<émetteur>` | rendement des obligations | points de base |
+
+Les fonctions disponibles :
+- **VaR et ES historiques** : revalorisation complète de chaque position sous chaque scénario (une ligne de l'historique des facteurs = un jour), calculée en parallèle. VaR = k-ième pire P&L, avec k = ⌈n(1−α)⌉ ; ES = moyenne des k pires P&L. Le résultat inclut les scénarios les plus défavorables et la contribution de chaque position au scénario de la VaR.
+- **Limites** : au-delà de 80 % de la limite, statut `warn` ; au-delà de 100 %, `fail`.
+- **Sensibilités** : différence centrée sur chaque facteur auquel le portefeuille est exposé (détection automatique, piliers de courbes compris).
+- **Stress tests** : scénarios nommés avec une limite de perte (`stress.json`).
+- **Attribution du P&L (FRTB)** :
+  - P&L hypothétique : revalorisation complète ;
+  - P&L théorique du modèle de risque : sensibilités × chocs, ou série fournie ;
+  - zones vert / orange / rouge selon la corrélation de Spearman (0,80 / 0,70) et la statistique de Kolmogorov-Smirnov (0,09 / 0,12) ;
+  - au moins 250 observations exigées, sinon réserve.
+
+Résultat de l'exemple, sur 300 jours :
+- VaR 99 % de 483 k€, soit 88 % de la limite (réserve) ;
+- ES 97,5 % de 537 k€ ;
+- scénario « Crise souveraine » à 128 % de sa limite (dépassement) ;
+- attribution du P&L en zone verte (ρ = 0,99997, KS = 0,013).
+
 ## Protocole des modèles externes
 Le processus reçoit sur stdin `{"inputs": {<dep>: <sortie>}, "params": {...}}` et écrit un document JSON sur stdout. Un code de sortie non nul signale un échec, et stderr est remonté. Les fichiers listés dans `code` sont hachés : une modification du code sans changement de `version` est signalée au rejeu.
 
@@ -207,8 +242,8 @@ Isolation :
 
 ## Déploiement
 ```bash
-docker build -t modelflow:0.9.0 .
-docker run --rm modelflow:0.9.0 new-token          # renseigner deploy/server.docker.toml
+docker build -t modelflow:0.10.0 .
+docker run --rm modelflow:0.10.0 new-token          # renseigner deploy/server.docker.toml
 docker compose up --build                          # http://127.0.0.1:8080
 kubectl apply -k deploy/k8s                        # après avoir renseigné deploy/k8s/secret.yaml
 ```

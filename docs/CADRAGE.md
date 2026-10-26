@@ -12,7 +12,7 @@ Une couche d'orchestration **déterministe**, sans IA générative, qui se branc
 
 > Positionnement et feuille de route : [VISION.md](VISION.md).
 
-## État (v0.9)
+## État (v0.10)
 - `mf-core` : DAG, empreintes des entrées, des sorties et du code, manifeste, vérification du rejeu.
 - `mf-validate` : VaR historique ; Kupiec, Christoffersen, feux tricolores de Bâle ; PSI ; AUC, Gini, KS ; calibration binomiale par classe et Hosmer-Lemeshow.
 - `mf-runtime` : pipelines TOML, étapes CSV (série ou table), étapes intégrées, processus externes avec délai maximal, stockage SQLite, rapport de validation HTML.
@@ -22,6 +22,7 @@ Une couche d'orchestration **déterministe**, sans IA générative, qui se branc
 - Taux multi-courbes : calendrier TARGET, conventions de marché, courbe €STR et projection Euribor 6M actualisée OIS, swaps datés.
 - Stockage des sorties adressé par contenu, avec contrôle d'intégrité ; isolation des processus externes ; CSV RFC 4180 et Parquet.
 - API : file d'attente des exécutions, limitation de débit, TLS natif, authentification unique OIDC (groupes vers rôles, séparation des tâches).
+- Risque de portefeuille : VaR/ES historiques par revalorisation complète, sensibilités, stress tests avec limites, attribution du P&L (FRTB).
 - Inventaire des modèles (statuts, niveaux de risque, revues), exécutions planifiées et alertes par webhook.
 - Interface web des validateurs (SSO PKCE, lancement, rapport, rejeu, décisions, audit), testée de bout en bout.
 - Stockage PostgreSQL pour l'historique et la gouvernance (journal d'audit protégé par trigger), SQLite conservé pour l'usage local.

@@ -34,6 +34,10 @@ Les durées sont des ordres de grandeur, à recaler après le premier pilote.
 - **Vérification indépendante des prix (IPV)** : prix de production contre prix de référence ou de marché, seuils, réserves de valorisation.
 - **Rapport de validation PDF**, signé et horodaté.
 
+### Risque de portefeuille (fait en v0.10)
+- VaR et ES historiques par revalorisation complète, sensibilités par facteur et par pilier, stress tests avec limites, test d'attribution du P&L du FRTB.
+- Prochaines extensions : VaR Monte-Carlo, backtesting de l'ES, FRTB approche standard, risque de change, gamma et termes croisés dans le P&L théorique.
+
 ### 2. Profondeur de validation (4 à 12 mois)
 - **Pricing** : swaptions et caps/floors (Black, Bachelier, SABR), change, CDS ; chaque ajout étalonné contre QuantLib.
 - **Crédit** : LGD, EAD, IFRS 9 (pertes attendues, staging), backtesting des notations.
