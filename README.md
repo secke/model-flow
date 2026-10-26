@@ -73,9 +73,45 @@ Format du marché : voir `examples/rates-benchmark/market.json`.
 
 Résultat de l'exemple : la courbe €STR et la courbe Euribor 6M re-pricent leurs instruments à 1e-16 près. Sur 8 swaps de 8 à 50 millions de notionnel et de 2 à 30 ans, QuantLib (OISRateHelper, SwapRateHelper actualisé €STR, MakeVanillaSwap) et la référence coïncident à moins de 4e-6 en devise.
 
+## Inventaire des modèles
+Chaque modèle a une fiche : identifiant, nom, propriétaire, usage, niveau de risque (1 élevé à 3 faible), statut, date de prochaine revue. Un pipeline s'y rattache par `model = "<identifiant>"` dans `pipeline.toml`.
+
+| Statut | Qui peut l'attribuer |
+|---|---|
+| `development`, `in_validation`, `retired` | propriétaire du modèle (ses modèles uniquement) ou admin |
+| `approved` | validateur uniquement, si la dernière exécution de chaque pipeline rattaché est approuvée |
+| `in_use` | propriétaire ou admin, une fois le modèle approuvé |
+
+- Un propriétaire n'enregistre et ne modifie que ses propres modèles.
+- Les revues en retard sont signalées.
+- Un pipeline rattaché à un modèle absent de l'inventaire est signalé.
+- Chaque création, modification et changement de statut est inscrit au journal d'audit, refus compris.
+
+API : `GET /api/models`, `POST /api/models`, `PUT /api/models/{id}` (fiche) et `POST /api/models/{id}/status` (`{"status": "…"}`).
+
+## Planification et alertes
+```toml
+# pipeline.toml
+schedule = "0 6 * * 1-5"     # cron à 5 champs, UTC : 6 h les jours ouvrés
+```
+- **Exécution** : le serveur lance les exécutions planifiées sous l'identité `planificateur`. Chaque créneau est réservé en base, si bien qu'avec plusieurs instances sur PostgreSQL une seule l'exécute.
+- **Rattrapage** : après une interruption, seul le dernier créneau manqué est rattrapé. Un pipeline nouvellement découvert ne s'exécute qu'au créneau suivant.
+- **Configuration du serveur** :
+  ```toml
+  public_url = "https://modelflow.banque.local"      # liens dans les alertes
+  [scheduler]
+  enabled = true
+  interval_secs = 30
+  [alerts]
+  webhook_url_env = "MODELFLOW_ALERT_WEBHOOK"        # ou webhook_url = "…"
+  on = ["fail", "error"]                             # contrôles non conformes, exécution en échec ; "warn" pour les réserves
+  ```
+- **Alertes** : le message JSON (`text`, `pipeline`, `run_id`, `status`, `link`) est accepté par Slack, Mattermost et Teams (Workflows). Chaque envoi est tracé dans le journal d'audit. Le webhook demande une sortie réseau, à ouvrir dans `networkpolicy-egress.yaml`.
+
 ## Interface web
 `mf-server` sert la console de validation à la racine (`http://hôte:8080/`). Elle n'a aucune dépendance externe : pas de CDN ni de police distante, compatible avec un réseau bancaire fermé.
-- **Pipelines** : dernière exécution, résultat et décision.
+- **Pipelines** : dernière exécution, résultat, décision, modèle rattaché et prochaine exécution planifiée.
+- **Inventaire des modèles** : liste, fiche, enregistrement et modification, circuit des statuts selon le rôle.
 - **Exécutions** : lancement avec suivi de la file d'attente (propriétaire, admin), historique.
 - **Page d'exécution** : sceau du verdict et de l'empreinte, rapport de validation, rejeu, décisions horodatées et formulaire pour statuer (validateur). Le validateur qui a lancé l'exécution ne peut pas statuer, et un rejet doit être motivé.
 - **Journal d'audit** filtrable (auditeur, admin).
@@ -91,7 +127,7 @@ Résultat de l'exemple : la courbe €STR et la courbe Euribor 6M re-pricent leu
   - contenu inséré uniquement comme texte ;
   - jeton conservé en `sessionStorage` (effacé à la fermeture de l'onglet) ;
   - rapport affiché dans un cadre isolé (`sandbox`).
-- **Tests** : `node ui-tests/e2e.cjs` lance un fournisseur d'identité simulé et le serveur, puis déroule avec Playwright le parcours propriétaire → validateur → auditeur, avec 16 contrôles et des captures.
+- **Tests** : `node ui-tests/e2e.cjs` lance un fournisseur d'identité simulé et le serveur, puis déroule avec Playwright le parcours propriétaire → validateur → auditeur, avec 25 contrôles (inventaire compris) et des captures.
 
 ## API REST (`mf-server`)
 ```bash
@@ -171,8 +207,8 @@ Isolation :
 
 ## Déploiement
 ```bash
-docker build -t modelflow:0.8.0 .
-docker run --rm modelflow:0.8.0 new-token          # renseigner deploy/server.docker.toml
+docker build -t modelflow:0.9.0 .
+docker run --rm modelflow:0.9.0 new-token          # renseigner deploy/server.docker.toml
 docker compose up --build                          # http://127.0.0.1:8080
 kubectl apply -k deploy/k8s                        # après avoir renseigné deploy/k8s/secret.yaml
 ```

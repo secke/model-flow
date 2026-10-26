@@ -28,8 +28,8 @@ Le produit ne vise pas le front-to-back. L'ambition est de devenir **la référe
 Les durées sont des ordres de grandeur, à recaler après le premier pilote.
 
 ### 1. Prêt pour un pilote (0 à 4 mois)
-- **Inventaire des modèles** : fiche par modèle (propriétaire, usage, niveau de risque, date de prochaine revue), liée à ses pipelines et à ses décisions.
-- **Planification** des exécutions (quotidienne, mensuelle), avec alerte en cas d'échec ou de dégradation d'un test.
+- ~~**Inventaire des modèles**~~ (fait en v0.9) : fiche par modèle, liée à ses pipelines et à ses décisions, circuit des statuts.
+- ~~**Planification** des exécutions et alertes~~ (fait en v0.9).
 - **Instantanés de données de marché** versionnés et adressés par contenu.
 - **Vérification indépendante des prix (IPV)** : prix de production contre prix de référence ou de marché, seuils, réserves de valorisation.
 - **Rapport de validation PDF**, signé et horodaté.

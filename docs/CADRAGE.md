@@ -12,7 +12,7 @@ Une couche d'orchestration **déterministe**, sans IA générative, qui se branc
 
 > Positionnement et feuille de route : [VISION.md](VISION.md).
 
-## État (v0.8)
+## État (v0.9)
 - `mf-core` : DAG, empreintes des entrées, des sorties et du code, manifeste, vérification du rejeu.
 - `mf-validate` : VaR historique ; Kupiec, Christoffersen, feux tricolores de Bâle ; PSI ; AUC, Gini, KS ; calibration binomiale par classe et Hosmer-Lemeshow.
 - `mf-runtime` : pipelines TOML, étapes CSV (série ou table), étapes intégrées, processus externes avec délai maximal, stockage SQLite, rapport de validation HTML.
@@ -22,6 +22,7 @@ Une couche d'orchestration **déterministe**, sans IA générative, qui se branc
 - Taux multi-courbes : calendrier TARGET, conventions de marché, courbe €STR et projection Euribor 6M actualisée OIS, swaps datés.
 - Stockage des sorties adressé par contenu, avec contrôle d'intégrité ; isolation des processus externes ; CSV RFC 4180 et Parquet.
 - API : file d'attente des exécutions, limitation de débit, TLS natif, authentification unique OIDC (groupes vers rôles, séparation des tâches).
+- Inventaire des modèles (statuts, niveaux de risque, revues), exécutions planifiées et alertes par webhook.
 - Interface web des validateurs (SSO PKCE, lancement, rapport, rejeu, décisions, audit), testée de bout en bout.
 - Stockage PostgreSQL pour l'historique et la gouvernance (journal d'audit protégé par trigger), SQLite conservé pour l'usage local.
 - Déploiement : image Docker non root, docker-compose durci, manifestes Kubernetes (Pod Security restricted, NetworkPolicy).
@@ -34,7 +35,6 @@ Décision 1 tranchée : les modèles existants sont intégrés comme **processus
 - Plusieurs répliques avec PostgreSQL : l'espace de travail (pipelines, données) doit être partagé entre pods.
 - L'isolation réseau des modèles externes dépend du déploiement (NetworkPolicy) ; en exécution locale, ils ont accès au réseau.
 - Taux : pas encore de swaptions, caps/floors, produits de change, jours de fixing historiques (fixings passés) ni d'autres calendriers que TARGET.
-- Exécutions lancées à la demande uniquement : pas encore de planification intégrée (passer par la CI ou un CronJob avec un compte de service).
 
 ## Feuille de route (8 semaines)
 | Sem. | Livrable |
@@ -43,7 +43,7 @@ Décision 1 tranchée : les modèles existants sont intégrés comme **processus
 | 3-4 | ~~Christoffersen, feux tricolores, PSI, Gini/KS, calibration PD~~ (fait) ; reste : modèle challenger, LGD/EAD, tests de sensibilité |
 | 5 | ~~Pricers de référence, validation de QuantLib, courbes, swaps, multi-courbes OIS, conventions de marché~~ (fait) ; reste : fixings historiques, swaptions, caps/floors, change |
 | 6 | ~~Rapport de validation HTML~~ (fait) ; reste : export PDF, inventaire des modèles, piste d'audit signée |
-| 7 | ~~API REST, rôles, décisions, audit, file d'attente, limitation, TLS, SSO OIDC, interface web~~ (fait) ; reste : planification, inventaire des modèles |
+| 7 | ~~API REST, rôles, décisions, audit, file d'attente, limitation, TLS, SSO OIDC, interface web, inventaire, planification, alertes~~ (fait) |
 | 8 | ~~Image Docker, docker-compose, manifestes Kubernetes, CI de l'image~~ (fait) ; reste : chart Helm, pilote |
 
 ## Décisions ouvertes
