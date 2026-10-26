@@ -1,6 +1,6 @@
 # ModelFlow
 
-> Vision produit et trajectoire vers une plateforme front-to-back : [docs/VISION.md](docs/VISION.md).
+> Positionnement et feuille de route : [docs/VISION.md](docs/VISION.md).
 
 Orchestration déterministe et validation de modèles quantitatifs pour les banques : pipelines versionnés, empreintes SHA-256 des données, du code et des résultats, rejeu vérifié et rapport de validation. Écrit en Rust, sans IA générative.
 

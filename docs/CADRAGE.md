@@ -10,7 +10,7 @@ Une couche d'orchestration **déterministe**, sans IA générative, qui se branc
 - le manifeste d'exécution permet un **rejeu à l'identique** et prouve l'absence de dérive ;
 - batterie de tests de validation exécutée automatiquement, avec rapport horodaté.
 
-> Vision à long terme et trajectoire front-to-back : [VISION.md](VISION.md).
+> Positionnement et feuille de route : [VISION.md](VISION.md).
 
 ## État (v0.8)
 - `mf-core` : DAG, empreintes des entrées, des sorties et du code, manifeste, vérification du rejeu.
