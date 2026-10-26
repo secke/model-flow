@@ -1,5 +1,7 @@
 # ModelFlow
 
+> Vision produit et trajectoire vers une plateforme front-to-back : [docs/VISION.md](docs/VISION.md).
+
 Orchestration déterministe et validation de modèles quantitatifs pour les banques : pipelines versionnés, empreintes SHA-256 des données, du code et des résultats, rejeu vérifié et rapport de validation. Écrit en Rust, sans IA générative.
 
 ## Démarrage
@@ -71,6 +73,26 @@ Format du marché : voir `examples/rates-benchmark/market.json`.
 
 Résultat de l'exemple : la courbe €STR et la courbe Euribor 6M re-pricent leurs instruments à 1e-16 près. Sur 8 swaps de 8 à 50 millions de notionnel et de 2 à 30 ans, QuantLib (OISRateHelper, SwapRateHelper actualisé €STR, MakeVanillaSwap) et la référence coïncident à moins de 4e-6 en devise.
 
+## Interface web
+`mf-server` sert la console de validation à la racine (`http://hôte:8080/`). Elle n'a aucune dépendance externe : pas de CDN ni de police distante, compatible avec un réseau bancaire fermé.
+- **Pipelines** : dernière exécution, résultat et décision.
+- **Exécutions** : lancement avec suivi de la file d'attente (propriétaire, admin), historique.
+- **Page d'exécution** : sceau du verdict et de l'empreinte, rapport de validation, rejeu, décisions horodatées et formulaire pour statuer (validateur). Le validateur qui a lancé l'exécution ne peut pas statuer, et un rejet doit être motivé.
+- **Journal d'audit** filtrable (auditeur, admin).
+- **Connexion** : SSO de l'entreprise (flux *authorization code* + PKCE, client public, sans secret) ou jeton de service. Pour activer le SSO, ajouter à `[oidc]` :
+  ```toml
+  client_id = "modelflow-web"                                # application web enregistrée chez le fournisseur
+  scopes = "openid profile api://modelflow/.default"
+  # authorization_endpoint / token_endpoint : facultatifs (découverte par défaut)
+  ```
+  L'URI de redirection à déclarer est l'origine du serveur suivie de `/`.
+- **Sécurité** :
+  - politique de contenu stricte (`script-src 'self'`, aucun cadre externe) ;
+  - contenu inséré uniquement comme texte ;
+  - jeton conservé en `sessionStorage` (effacé à la fermeture de l'onglet) ;
+  - rapport affiché dans un cadre isolé (`sandbox`).
+- **Tests** : `node ui-tests/e2e.cjs` lance un fournisseur d'identité simulé et le serveur, puis déroule avec Playwright le parcours propriétaire → validateur → auditeur, avec 16 contrôles et des captures.
+
 ## API REST (`mf-server`)
 ```bash
 target/release/mf-server new-token                 # jeton + empreinte SHA-256
@@ -80,7 +102,7 @@ curl -H "Authorization: Bearer $JETON" localhost:8080/api/pipelines
 ```
 | Méthode | Chemin | Rôles |
 |---|---|---|
-| GET | `/api/health` | public |
+| GET | `/api/health`, `/api/ui-config` | public |
 | GET | `/api/me`, `/api/pipelines`, `/api/pipelines/{p}/runs`, `…/runs/{id}`, `…/runs/{id}/report`, `…/runs/{id}/decisions` | tous |
 | POST | `/api/pipelines/{p}/runs` | `model_owner`, `admin` |
 | POST | `/api/pipelines/{p}/runs/{id}/verify` | `validator`, `model_owner`, `admin` |
@@ -149,8 +171,8 @@ Isolation :
 
 ## Déploiement
 ```bash
-docker build -t modelflow:0.7.0 .
-docker run --rm modelflow:0.7.0 new-token          # renseigner deploy/server.docker.toml
+docker build -t modelflow:0.8.0 .
+docker run --rm modelflow:0.8.0 new-token          # renseigner deploy/server.docker.toml
 docker compose up --build                          # http://127.0.0.1:8080
 kubectl apply -k deploy/k8s                        # après avoir renseigné deploy/k8s/secret.yaml
 ```
@@ -164,7 +186,7 @@ kubectl apply -k deploy/k8s                        # après avoir renseigné dep
   - une réplique avec SQLite. Avec PostgreSQL (URL dans le Secret `modelflow-database`), plusieurs répliques sont possibles si l'espace de travail est partagé ;
   - `networkpolicy-egress.yaml` (à ajouter explicitement) ouvre DNS, PostgreSQL et le fournisseur d'identité ;
   - en production, alimenter `/workspace` depuis Git (git-sync ou CI) plutôt que par l'initContainer de démonstration.
-- **CI** : tests sur SQLite et sur PostgreSQL 16 (service), historique de la CLI dans PostgreSQL, construction de l'image, essai de bout en bout dans le conteneur (lecture seule, sans capacités) et validation des manifestes avec kubeconform.
+- **CI** : tests sur SQLite et sur PostgreSQL 16 (service), test de bout en bout de l'interface (Playwright, SSO simulé), historique de la CLI dans PostgreSQL, construction de l'image, essai de bout en bout dans le conteneur (lecture seule, sans capacités) et validation des manifestes avec kubeconform.
 
 ## Écarts détectés par `verify`
 - `code modifié sans changement de version`
