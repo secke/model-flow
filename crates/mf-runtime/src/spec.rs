@@ -7,6 +7,12 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Deserialize)]
 pub struct PipelineSpec {
     pub name: String,
+    /// Identifiant du modèle dans l'inventaire (facultatif).
+    #[serde(default)]
+    pub model: Option<String>,
+    /// Planification au format cron à 5 champs, en UTC (ex. `"0 6 * * 1-5"`), exécutée par le serveur.
+    #[serde(default)]
+    pub schedule: Option<String>,
     #[serde(rename = "step")]
     pub steps: Vec<StepSpec>,
 }

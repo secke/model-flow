@@ -9,6 +9,27 @@ use serde_json::{json, Value};
 use std::cell::RefCell;
 use std::path::Path;
 
+/// Fiche d'inventaire d'un modèle.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct ModelRecord {
+    pub id: String,
+    pub name: String,
+    pub owner: String,
+    pub purpose: String,
+    /// Niveau de risque : 1 (élevé) à 3 (faible).
+    pub tier: i64,
+    /// `development`, `in_validation`, `approved`, `in_use`, `retired`.
+    pub status: String,
+    /// Date de prochaine revue (AAAA-MM-JJ).
+    pub next_review: Option<String>,
+    #[serde(default)]
+    pub updated_at: i64,
+    #[serde(default)]
+    pub updated_by: String,
+}
+
+pub const MODEL_STATUSES: &[&str] = &["development", "in_validation", "approved", "in_use", "retired"];
+
 pub enum Gov {
     Sqlite(Connection),
     Postgres(Box<RefCell<PgConn>>),
@@ -46,6 +67,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     id BIGSERIAL PRIMARY KEY, pipeline TEXT NOT NULL, username TEXT NOT NULL, status TEXT NOT NULL,
     run_id BIGINT, error TEXT, created_at BIGINT NOT NULL, started_at BIGINT, finished_at BIGINT,
     instance TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS models (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, owner TEXT NOT NULL, purpose TEXT NOT NULL,
+    tier BIGINT NOT NULL, status TEXT NOT NULL, next_review TEXT,
+    created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL, updated_by TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS schedules (pipeline TEXT PRIMARY KEY, last_slot BIGINT NOT NULL);
 CREATE OR REPLACE FUNCTION mf_audit_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN RAISE EXCEPTION 'journal d''audit en ajout seul'; END $$;
 CREATE OR REPLACE TRIGGER audit_no_change BEFORE UPDATE OR DELETE ON audit
@@ -99,6 +125,11 @@ impl Gov {
                 pipeline TEXT NOT NULL, user TEXT NOT NULL,
                 status TEXT NOT NULL, run_id INTEGER, error TEXT,
                 created_at INTEGER NOT NULL, started_at INTEGER, finished_at INTEGER);
+             CREATE TABLE IF NOT EXISTS models (
+                id TEXT PRIMARY KEY, name TEXT NOT NULL, owner TEXT NOT NULL, purpose TEXT NOT NULL,
+                tier INTEGER NOT NULL, status TEXT NOT NULL, next_review TEXT,
+                created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, updated_by TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS schedules (pipeline TEXT PRIMARY KEY, last_slot INTEGER NOT NULL);
              CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit
                 BEGIN SELECT RAISE(ABORT, 'journal d''audit en ajout seul'); END;
              CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit
@@ -274,6 +305,92 @@ impl Gov {
             .into_iter()
             .next()
             .map(|r| Value::Object(keys.iter().map(|k| k.to_string()).zip(r).collect())))
+    }
+
+    pub fn create_model(&self, m: &ModelRecord, user: &str) -> Result<bool, String> {
+        let t = now();
+        let n = self.exec(
+            "INSERT INTO models (id, name, owner, purpose, tier, status, next_review, created_at, updated_at, updated_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9) ON CONFLICT (id) DO NOTHING",
+            &[
+                P::S(&m.id),
+                P::S(&m.name),
+                P::S(&m.owner),
+                P::S(&m.purpose),
+                P::I(m.tier),
+                P::S(&m.status),
+                P::OS(m.next_review.as_deref()),
+                P::I(t),
+                P::S(user),
+            ],
+        )?;
+        Ok(n == 1)
+    }
+
+    pub fn update_model(&self, m: &ModelRecord, user: &str) -> Result<bool, String> {
+        let n = self.exec(
+            "UPDATE models SET name = $2, owner = $3, purpose = $4, tier = $5, status = $6, next_review = $7,
+             updated_at = $8, updated_by = $9 WHERE id = $1",
+            &[
+                P::S(&m.id),
+                P::S(&m.name),
+                P::S(&m.owner),
+                P::S(&m.purpose),
+                P::I(m.tier),
+                P::S(&m.status),
+                P::OS(m.next_review.as_deref()),
+                P::I(now()),
+                P::S(user),
+            ],
+        )?;
+        Ok(n == 1)
+    }
+
+    pub fn models(&self) -> Result<Vec<ModelRecord>, String> {
+        let rows = self.query(
+            "SELECT id, name, owner, purpose, tier, status, next_review, updated_at, updated_by FROM models ORDER BY id",
+            &[],
+            &[C::S, C::S, C::S, C::S, C::I, C::S, C::OS, C::I, C::S],
+        )?;
+        Ok(rows
+            .into_iter()
+            .map(|r| ModelRecord {
+                id: r[0].as_str().unwrap_or_default().into(),
+                name: r[1].as_str().unwrap_or_default().into(),
+                owner: r[2].as_str().unwrap_or_default().into(),
+                purpose: r[3].as_str().unwrap_or_default().into(),
+                tier: r[4].as_i64().unwrap_or(3),
+                status: r[5].as_str().unwrap_or_default().into(),
+                next_review: r[6].as_str().map(String::from),
+                updated_at: r[7].as_i64().unwrap_or_default(),
+                updated_by: r[8].as_str().unwrap_or_default().into(),
+            })
+            .collect())
+    }
+
+    /// Dernier créneau planifié traité pour un pipeline.
+    pub fn schedule_last(&self, pipeline: &str) -> Result<Option<i64>, String> {
+        let rows = self.query(
+            "SELECT last_slot FROM schedules WHERE pipeline = $1",
+            &[P::S(pipeline)],
+            &[C::I],
+        )?;
+        Ok(rows.first().and_then(|r| r[0].as_i64()))
+    }
+
+    /// Réserve un créneau (comparer-et-échanger) : une seule instance l'obtient.
+    pub fn schedule_claim(&self, pipeline: &str, previous: Option<i64>, slot: i64) -> Result<bool, String> {
+        let n = match previous {
+            None => self.exec(
+                "INSERT INTO schedules (pipeline, last_slot) VALUES ($1, $2) ON CONFLICT (pipeline) DO NOTHING",
+                &[P::S(pipeline), P::I(slot)],
+            )?,
+            Some(old) => self.exec(
+                "UPDATE schedules SET last_slot = $3 WHERE pipeline = $1 AND last_slot = $2",
+                &[P::S(pipeline), P::I(old), P::I(slot)],
+            )?,
+        };
+        Ok(n == 1)
     }
 
     pub fn audit(&self, user: &str, role: Role, action: &str, target: &str, outcome: &str) -> Result<(), String> {

@@ -4,8 +4,10 @@
 //! Rôles : `admin`, `model_owner`, `validator`, `auditor`. Séparation des tâches : seul un validateur
 //! peut approuver ou rejeter, jamais sur une exécution qu'il a lancée, et uniquement si le rejeu est identique.
 
+pub mod alerts;
 pub mod governance;
 pub mod oidc;
+pub mod scheduler;
 
 use axum::extract::{FromRequestParts, Path, Query, State};
 use axum::http::{header, request::Parts, StatusCode};
@@ -75,6 +77,35 @@ pub struct ServerConfig {
     pub database: Option<DatabaseConfig>,
     /// Authentification unique OpenID Connect (en plus des jetons de service `[[user]]`).
     pub oidc: Option<oidc::OidcConfig>,
+    /// Adresse publique de l'interface, utilisée pour les liens des alertes.
+    pub public_url: Option<String>,
+    #[serde(default)]
+    pub scheduler: SchedulerConfig,
+    pub alerts: Option<alerts::AlertsConfig>,
+}
+
+fn yes() -> bool {
+    true
+}
+fn default_tick() -> u64 {
+    30
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SchedulerConfig {
+    #[serde(default = "yes")]
+    pub enabled: bool,
+    #[serde(default = "default_tick")]
+    pub interval_secs: u64,
+}
+
+impl Default for SchedulerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            interval_secs: 30,
+        }
+    }
 }
 
 fn default_pool() -> u32 {
@@ -172,6 +203,9 @@ enum Backend {
 struct Inner {
     workspace: PathBuf,
     users: Vec<UserConfig>,
+    public_url: Option<String>,
+    scheduler: SchedulerConfig,
+    alerts: Option<alerts::AlertsConfig>,
     oidc: Option<Arc<oidc::Oidc>>,
     backend: Backend,
     runs: Arc<tokio::sync::Semaphore>,
@@ -215,6 +249,9 @@ impl AppState {
         let state = Self(Arc::new(Inner {
             workspace: cfg.workspace.clone(),
             users: cfg.users.clone(),
+            public_url: cfg.public_url.clone(),
+            scheduler: cfg.scheduler.clone(),
+            alerts: cfg.alerts.clone(),
             oidc: cfg.oidc.clone().map(oidc::Oidc::new).transpose()?.map(Arc::new),
             backend,
             runs: Arc::new(tokio::sync::Semaphore::new(cfg.max_concurrent_runs)),
@@ -533,7 +570,15 @@ async fn list_pipelines(State(st): State<AppState>, _auth: Auth) -> ApiResult<Js
                     .and_then(|d| d.last().map(|x| x.decision.clone()));
                 json!({"id": r.id, "created_at": r.created_at, "status": r.status, "decision": decision})
             });
-            out.push(json!({ "name": name, "steps": steps, "runs": runs.len(), "last_run": last }));
+            let next_run = sp
+                .schedule
+                .as_deref()
+                .and_then(|e| scheduler::parse(e).ok())
+                .and_then(|c| scheduler::next_after(&c, chrono::Utc::now().timestamp()));
+            out.push(
+                json!({ "name": name, "steps": steps, "runs": runs.len(), "last_run": last,
+                             "model": sp.model, "schedule": sp.schedule, "next_run": next_run }),
+            );
         }
         Ok(Json(json!(out)))
     })
@@ -568,11 +613,11 @@ struct RunQuery {
     wait: bool,
 }
 
-/// Exécute un pipeline pour un travail déjà enregistré (thread bloquant).
+/// Exécute un pipeline pour un travail déjà enregistré (thread bloquant), puis alerte si nécessaire.
 fn execute_job(st: &AppState, job: i64, name: &str, auth: &Auth) -> Result<(i64, Value), String> {
     let gov = st.gov().map_err(|e| e.1)?;
     gov.job_started(job)?;
-    let result = (|| -> Result<(i64, Value), String> {
+    let result = (|| -> Result<(i64, Value, Option<String>), String> {
         let toml = locate(st, name).map_err(|e| e.1)?;
         let (sp, base) = spec::load(&toml)?;
         let m = spec::build(&sp, &base)?.execute().map_err(|e| e.to_string())?;
@@ -582,19 +627,143 @@ fn execute_job(st: &AppState, job: i64, name: &str, auth: &Auth) -> Result<(i64,
             .iter()
             .map(|s| json!({"name": s.name, "version": s.version, "status": s.output.get("status")}))
             .collect();
-        Ok((id, json!({"id": id, "run_hash": m.run_hash, "steps": steps})))
+        let status = mf_runtime::store::overall_status(&m);
+        Ok((
+            id,
+            json!({"id": id, "run_hash": m.run_hash, "status": status, "steps": steps}),
+            status,
+        ))
     })();
-    match &result {
-        Ok((id, _)) => {
+    let link = |id: Option<i64>| {
+        st.0.public_url.as_ref().map(|u| {
+            let base = format!("{}/#/p/{}", u.trim_end_matches('/'), name);
+            id.map(|i| format!("{base}/r/{i}")).unwrap_or(base)
+        })
+    };
+    let (event_kind, run_id, detail) = match &result {
+        Ok((id, _, status)) => {
             gov.job_finished(job, Some(*id), None)?;
             gov.audit(&auth.name, auth.role, "run.create", &format!("{name}#{id}"), "ok")?;
+            (
+                status.clone().unwrap_or_else(|| "pass".into()),
+                Some(*id),
+                String::new(),
+            )
         }
         Err(e) => {
             gov.job_finished(job, None, Some(e))?;
             gov.audit(&auth.name, auth.role, "run.create", name, &format!("error: {e}"))?;
+            ("error".to_string(), None, e.clone())
+        }
+    };
+    if let Some(cfg) = &st.0.alerts {
+        let ev = alerts::Event {
+            pipeline: name,
+            run_id,
+            kind: &event_kind,
+            detail: &detail,
+            triggered_by: &auth.name,
+            link: link(run_id),
+        };
+        match alerts::notify(cfg, &ev) {
+            Ok(true) => gov.audit("system", Role::Admin, "alert.send", name, &event_kind)?,
+            Ok(false) => {}
+            Err(e) => gov.audit("system", Role::Admin, "alert.send", name, &format!("error: {e}"))?,
         }
     }
-    result
+    result.map(|(id, v, _)| (id, v))
+}
+
+/// Enregistre un travail et le place dans la file (exécution bornée par le sémaphore).
+async fn enqueue(
+    st: &AppState,
+    name: &str,
+    auth: &Auth,
+) -> ApiResult<(i64, tokio::task::JoinHandle<Result<(i64, Value), String>>)> {
+    let (st2, name2, user) = (st.clone(), name.to_string(), auth.name.clone());
+    let job = blocking(move || {
+        locate(&st2, &name2)?;
+        st2.gov()?.create_job(&name2, &user).map_err(ApiError::internal)
+    })
+    .await?;
+    let (st3, name3, auth3) = (st.clone(), name.to_string(), auth.clone());
+    let sem = st.0.runs.clone();
+    let task = tokio::spawn(async move {
+        let _permit = sem.acquire_owned().await.expect("sémaphore");
+        tokio::task::spawn_blocking(move || execute_job(&st3, job, &name3, &auth3))
+            .await
+            .unwrap_or_else(|e| Err(e.to_string()))
+    });
+    Ok((job, task))
+}
+
+/// Un passage du planificateur à l'instant `now` : réserve les créneaux dus et lance les exécutions.
+/// Renvoie les travaux créés.
+pub async fn scheduler_tick(st: &AppState, now: i64) -> Result<Vec<i64>, String> {
+    let st2 = st.clone();
+    let due = tokio::task::spawn_blocking(move || -> Result<Vec<String>, String> {
+        let gov = st2.gov().map_err(|e| e.1)?;
+        let mut due = vec![];
+        for (name, toml) in discover(&st2.0.workspace).map_err(|e| e.1)? {
+            let Ok((sp, _)) = spec::load(&toml) else { continue };
+            let Some(expr) = sp.schedule else { continue };
+            let cron = match scheduler::parse(&expr) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("{name} : {e}");
+                    continue;
+                }
+            };
+            match gov.schedule_last(&name)? {
+                None => {
+                    gov.schedule_claim(&name, None, now)?;
+                }
+                Some(last) => {
+                    if let Some(slot) = scheduler::latest_due(&cron, last, now) {
+                        if gov.schedule_claim(&name, Some(last), slot)? {
+                            gov.audit(
+                                "planificateur",
+                                Role::ModelOwner,
+                                "schedule.trigger",
+                                &name,
+                                &format!("slot {slot}"),
+                            )?;
+                            due.push(name.clone());
+                        }
+                    }
+                }
+            }
+        }
+        Ok(due)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    let system = Auth {
+        name: "planificateur".into(),
+        role: Role::ModelOwner,
+    };
+    let mut jobs = vec![];
+    for name in due {
+        jobs.push(enqueue(st, &name, &system).await.map_err(|e| e.1)?.0);
+    }
+    Ok(jobs)
+}
+
+/// Lance la boucle du planificateur (si activée).
+pub fn start_scheduler(st: AppState) {
+    if !st.0.scheduler.enabled {
+        return;
+    }
+    let every = std::time::Duration::from_secs(st.0.scheduler.interval_secs.max(1));
+    tokio::spawn(async move {
+        loop {
+            let now = chrono::Utc::now().timestamp();
+            if let Err(e) = scheduler_tick(&st, now).await {
+                eprintln!("planificateur : {e}");
+            }
+            tokio::time::sleep(every).await;
+        }
+    });
 }
 
 async fn create_run(
@@ -604,19 +773,7 @@ async fn create_run(
     Query(q): Query<RunQuery>,
 ) -> ApiResult<Response> {
     authorize(&st, &auth, &[Role::ModelOwner, Role::Admin], "run.create", &name).await?;
-    let (st2, name2, user) = (st.clone(), name.clone(), auth.name.clone());
-    let job = blocking(move || {
-        locate(&st2, &name2)?;
-        st2.gov()?.create_job(&name2, &user).map_err(ApiError::internal)
-    })
-    .await?;
-    let sem = st.0.runs.clone();
-    let task = tokio::spawn(async move {
-        let _permit = sem.acquire_owned().await.expect("sémaphore");
-        tokio::task::spawn_blocking(move || execute_job(&st, job, &name, &auth))
-            .await
-            .unwrap_or_else(|e| Err(e.to_string()))
-    });
+    let (job, task) = enqueue(&st, &name, &auth).await?;
     if !q.wait {
         let body = json!({"job_id": job, "status": "queued", "href": format!("/api/jobs/{job}")});
         return Ok((StatusCode::ACCEPTED, Json(body)).into_response());
@@ -809,6 +966,273 @@ async fn audit_log(State(st): State<AppState>, auth: Auth, Query(q): Query<Audit
     .await
 }
 
+// ---------- Inventaire des modèles ----------
+
+#[derive(Deserialize)]
+struct ModelBody {
+    id: String,
+    name: String,
+    owner: String,
+    #[serde(default)]
+    purpose: String,
+    tier: i64,
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default)]
+    next_review: Option<String>,
+}
+
+fn bad_request(m: impl Into<String>) -> ApiError {
+    ApiError::new(StatusCode::BAD_REQUEST, m)
+}
+
+fn validate_model(b: &ModelBody) -> ApiResult<()> {
+    if b.id.is_empty() || b.id.len() > 64 || !b.id.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c)) {
+        return Err(bad_request(
+            "`id` : 1 à 64 caractères parmi lettres, chiffres, `.`, `_`, `-`",
+        ));
+    }
+    if b.name.trim().is_empty() || b.owner.trim().is_empty() {
+        return Err(bad_request("`name` et `owner` sont obligatoires"));
+    }
+    if !(1..=3).contains(&b.tier) {
+        return Err(bad_request("`tier` : 1 (risque élevé), 2 ou 3 (faible)"));
+    }
+    if let Some(d) = &b.next_review {
+        chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| bad_request("`next_review` : date AAAA-MM-JJ"))?;
+    }
+    Ok(())
+}
+
+async fn list_models(State(st): State<AppState>, _auth: Auth) -> ApiResult<Json<Value>> {
+    blocking(move || {
+        let gov = st.gov()?;
+        let today = chrono::Utc::now().date_naive().format("%Y-%m-%d").to_string();
+        let mut linked: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+        for (name, toml) in discover(&st.0.workspace)? {
+            let Ok((sp, _)) = spec::load(&toml) else { continue };
+            let Some(model) = sp.model else { continue };
+            let runs = st.store_for(&toml)?.list(&name).map_err(ApiError::internal)?;
+            let last = runs.last().map(|r| {
+                let decision = gov
+                    .decisions(&name, r.id)
+                    .ok()
+                    .and_then(|d| d.last().map(|x| x.decision.clone()));
+                json!({"id": r.id, "status": r.status, "decision": decision, "created_at": r.created_at})
+            });
+            linked
+                .entry(model)
+                .or_default()
+                .push(json!({"pipeline": name, "schedule": sp.schedule, "last_run": last}));
+        }
+        let out: Vec<Value> = gov
+            .models()
+            .map_err(ApiError::internal)?
+            .into_iter()
+            .map(|m| {
+                let overdue = m.next_review.as_deref().is_some_and(|d| d < today.as_str()) && m.status != "retired";
+                let mut v = serde_json::to_value(&m).unwrap();
+                v["pipelines"] = json!(linked.remove(&m.id).unwrap_or_default());
+                v["review_overdue"] = json!(overdue);
+                v
+            })
+            .collect();
+        Ok(Json(
+            json!({"models": out, "unregistered": linked.keys().collect::<Vec<_>>()}),
+        ))
+    })
+    .await
+}
+
+async fn create_model(State(st): State<AppState>, auth: Auth, Json(b): Json<ModelBody>) -> ApiResult<Response> {
+    authorize(&st, &auth, &[Role::ModelOwner, Role::Admin], "model.create", &b.id).await?;
+    validate_model(&b)?;
+    if auth.role == Role::ModelOwner && b.owner != auth.name {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "un propriétaire ne peut enregistrer que ses propres modèles",
+        ));
+    }
+    let status = b.status.clone().unwrap_or_else(|| "development".into());
+    if !["development", "in_validation"].contains(&status.as_str()) {
+        return Err(bad_request("statut initial : `development` ou `in_validation`"));
+    }
+    blocking(move || {
+        let gov = st.gov()?;
+        let m = governance::ModelRecord {
+            id: b.id.clone(),
+            name: b.name,
+            owner: b.owner,
+            purpose: b.purpose,
+            tier: b.tier,
+            status,
+            next_review: b.next_review,
+            updated_at: 0,
+            updated_by: auth.name.clone(),
+        };
+        if !gov.create_model(&m, &auth.name).map_err(ApiError::internal)? {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                format!("le modèle `{}` existe déjà", m.id),
+            ));
+        }
+        gov.audit(&auth.name, auth.role, "model.create", &m.id, "ok")
+            .map_err(ApiError::internal)?;
+        Ok((StatusCode::CREATED, Json(serde_json::to_value(&m).unwrap())).into_response())
+    })
+    .await
+}
+
+fn find_model(gov: &Gov, id: &str) -> ApiResult<governance::ModelRecord> {
+    gov.models()
+        .map_err(ApiError::internal)?
+        .into_iter()
+        .find(|m| m.id == id)
+        .ok_or_else(|| ApiError::not_found(format!("modèle `{id}` introuvable")))
+}
+
+/// Modification de la fiche (hors statut, qui suit son propre circuit).
+async fn update_model(
+    State(st): State<AppState>,
+    auth: Auth,
+    Path(id): Path<String>,
+    Json(mut b): Json<ModelBody>,
+) -> ApiResult<Json<Value>> {
+    authorize(&st, &auth, &[Role::ModelOwner, Role::Admin], "model.update", &id).await?;
+    b.id = id.clone();
+    validate_model(&b)?;
+    blocking(move || {
+        let gov = st.gov()?;
+        let cur = find_model(&gov, &id)?;
+        if auth.role == Role::ModelOwner && cur.owner != auth.name {
+            let _ = gov.audit(&auth.name, auth.role, "model.update", &id, "denied");
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "seul le propriétaire du modèle (ou un admin) peut le modifier",
+            ));
+        }
+        let m = governance::ModelRecord {
+            id: id.clone(),
+            name: b.name,
+            owner: b.owner,
+            purpose: b.purpose,
+            tier: b.tier,
+            status: cur.status,
+            next_review: b.next_review,
+            updated_at: 0,
+            updated_by: auth.name.clone(),
+        };
+        gov.update_model(&m, &auth.name).map_err(ApiError::internal)?;
+        gov.audit(&auth.name, auth.role, "model.update", &id, "ok")
+            .map_err(ApiError::internal)?;
+        Ok(Json(serde_json::to_value(find_model(&gov, &id)?).unwrap()))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+struct StatusBody {
+    status: String,
+}
+
+/// Circuit des statuts : le validateur approuve (ou renvoie en validation) ; le propriétaire ou
+/// l'admin gère le développement, la mise en usage (après approbation) et le retrait.
+async fn set_model_status(
+    State(st): State<AppState>,
+    auth: Auth,
+    Path(id): Path<String>,
+    Json(b): Json<StatusBody>,
+) -> ApiResult<Json<Value>> {
+    authorize(
+        &st,
+        &auth,
+        &[Role::ModelOwner, Role::Admin, Role::Validator],
+        "model.status",
+        &id,
+    )
+    .await?;
+    if !governance::MODEL_STATUSES.contains(&b.status.as_str()) {
+        return Err(bad_request(format!(
+            "statut inconnu ; valeurs : {}",
+            governance::MODEL_STATUSES.join(", ")
+        )));
+    }
+    blocking(move || {
+        let gov = st.gov()?;
+        let mut m = find_model(&gov, &id)?;
+        let to = b.status.as_str();
+        let allowed = match auth.role {
+            Role::Validator => ["approved", "in_validation"].contains(&to) && m.status != "retired",
+            Role::ModelOwner | Role::Admin => {
+                let own = auth.role == Role::Admin || m.owner == auth.name;
+                own && match to {
+                    "development" | "in_validation" | "retired" => true,
+                    "in_use" => ["approved", "in_use"].contains(&m.status.as_str()),
+                    _ => false, // « approved » est réservé au validateur
+                }
+            }
+            Role::Auditor => false,
+        };
+        let change = format!("{} -> {to}", m.status);
+        if allowed && to == "approved" {
+            // L'approbation du modèle s'appuie sur des exécutions validées : la dernière exécution de
+            // chaque pipeline rattaché doit avoir été approuvée.
+            let mut blockers = vec![];
+            let mut linked = 0;
+            for (name, toml) in discover(&st.0.workspace)? {
+                let Ok((sp, _)) = spec::load(&toml) else { continue };
+                if sp.model.as_deref() != Some(id.as_str()) {
+                    continue;
+                }
+                linked += 1;
+                let last = st.store_for(&toml)?.list(&name).map_err(ApiError::internal)?.pop();
+                let decision = last
+                    .as_ref()
+                    .and_then(|r| gov.decisions(&name, r.id).ok())
+                    .and_then(|d| d.last().map(|x| x.decision.clone()));
+                match (last, decision.as_deref()) {
+                    (None, _) => blockers.push(format!("{name} : aucune exécution")),
+                    (Some(r), Some("approved")) => drop(r),
+                    (Some(r), Some(d)) => {
+                        let d = if d == "rejected" { "rejetée" } else { d };
+                        blockers.push(format!("{name} #{} : dernière exécution {d}", r.id))
+                    }
+                    (Some(r), None) => blockers.push(format!("{name} #{} : en attente de décision", r.id)),
+                }
+            }
+            if linked == 0 {
+                blockers.push("aucun pipeline de validation ne déclare ce modèle".into());
+            }
+            if !blockers.is_empty() {
+                let _ = gov.audit(
+                    &auth.name,
+                    auth.role,
+                    "model.status",
+                    &id,
+                    &format!("refused: {change}"),
+                );
+                return Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    format!("approbation impossible : {}", blockers.join(" ; ")),
+                ));
+            }
+        }
+        if !allowed {
+            let _ = gov.audit(&auth.name, auth.role, "model.status", &id, &format!("denied: {change}"));
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                format!("changement de statut non autorisé ({change})"),
+            ));
+        }
+        m.status = to.to_string();
+        gov.update_model(&m, &auth.name).map_err(ApiError::internal)?;
+        gov.audit(&auth.name, auth.role, "model.status", &id, &change)
+            .map_err(ApiError::internal)?;
+        Ok(Json(serde_json::to_value(find_model(&gov, &id)?).unwrap()))
+    })
+    .await
+}
+
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(ui_index))
@@ -827,6 +1251,9 @@ pub fn router(state: AppState) -> Router {
             get(list_decisions).post(decide),
         )
         .route("/api/jobs/:id", get(get_job))
+        .route("/api/models", get(list_models).post(create_model))
+        .route("/api/models/:id", axum::routing::put(update_model))
+        .route("/api/models/:id/status", post(set_model_status))
         .route("/api/audit", get(audit_log))
         .layer(axum::middleware::from_fn_with_state(state.clone(), security_headers))
         .with_state(state)

@@ -22,6 +22,7 @@ async fn main() {
                 fail("aucun utilisateur configuré ([[user]] ou [oidc])");
             }
             let state = AppState::new(&cfg).unwrap_or_else(|e| fail(&e));
+            mf_server::start_scheduler(state.clone());
             let addr: std::net::SocketAddr = cfg.bind.parse().unwrap_or_else(|e| fail(&format!("bind: {e}")));
             let app = router(state).into_make_service();
             let handle = axum_server::Handle::new();

@@ -35,6 +35,8 @@ fn fixtures() -> PathBuf {
                     "-out",
                 ])
                 .arg(&p)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
                 .status()
                 .expect("openssl requis pour les tests OIDC")
                 .success();

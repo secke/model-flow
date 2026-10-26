@@ -199,3 +199,8 @@ iframe.report { width: 100%; height: min(900px, 75vh); border: 1px solid var(--l
 
 .toolbar { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
 .toolbar input { max-width: 320px; }
+
+select { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
+input[readonly] { background: var(--soft); color: var(--slate); }
+.model-form { max-width: 620px; margin-bottom: 20px; }
+#model-actions { margin: 8px 0 4px; }

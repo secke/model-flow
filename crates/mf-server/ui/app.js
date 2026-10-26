@@ -4,6 +4,14 @@
 const app = document.getElementById("app");
 const TOKEN_KEY = "mf.token";
 const LABELS = { pass: "Conforme", warn: "Réserves", fail: "Non conforme", approved: "Approuvée", rejected: "Rejetée" };
+const MODEL_STATES = {
+  development: ["En développement", "none"],
+  in_validation: ["En validation", "warn"],
+  approved: ["Approuvé", "pass"],
+  in_use: ["En usage", "pass"],
+  retired: ["Retiré", "none"],
+};
+const TIERS = { 1: "1 — risque élevé", 2: "2 — risque modéré", 3: "3 — risque faible" };
 const ROLES = { admin: "Administrateur", model_owner: "Propriétaire de modèle", validator: "Validateur", auditor: "Auditeur" };
 
 let session = { token: null, me: null, config: null };
@@ -172,6 +180,7 @@ function layout(current, ...content) {
       el("div", { class: "brand" }, "ModelFlow", el("small", {}, "Validation des modèles")),
       el("ul", {},
         link("#/", "Pipelines", "pipelines"),
+        link("#/models", "Inventaire des modèles", "models"),
         can("auditor", "admin") && link("#/audit", "Journal d'audit", "audit"),
       ),
       el("div", { class: "who" },
@@ -247,6 +256,11 @@ async function viewPipeline(name) {
   show("pipelines",
     el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Pipelines")),
     el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, name), el("p", { class: "lead" }, p ? `${p.steps.length} étapes : ${p.steps.map((s) => s.name).join(", ")}.` : "")), launch),
+    p && (p.model || p.schedule) && el("dl", { class: "facts" },
+      p.model && el("div", {}, el("dt", {}, "Modèle"), el("dd", {}, el("a", { href: `#/models/${enc(p.model)}` }, p.model))),
+      p.schedule && el("div", {}, el("dt", {}, "Planification (UTC)"), el("dd", { class: "hash" }, p.schedule)),
+      p.next_run && el("div", {}, el("dt", {}, "Prochaine exécution"), el("dd", {}, when(p.next_run))),
+    ),
     status,
     el("h2", {}, "Exécutions"),
     el("div", { class: "table-wrap" }, runs.length
@@ -352,6 +366,137 @@ async function viewRun(name, id) {
   );
 }
 
+// ---------- Inventaire des modèles ----------
+function modelState(s) {
+  const [label, cls] = MODEL_STATES[s] || [s, "none"];
+  return el("span", { class: `state ${cls}` }, label);
+}
+
+function modelForm(initial, onSave, submitLabel) {
+  const m = initial || {};
+  const f = {
+    id: el("input", { type: "text", id: "m-id", value: m.id || "", required: true, readonly: initial ? true : null, pattern: "[A-Za-z0-9._-]{1,64}" }),
+    name: el("input", { type: "text", id: "m-name", value: m.name || "", required: true }),
+    owner: el("input", { type: "text", id: "m-owner", value: m.owner || session.me.name, required: true, readonly: session.me.role === "model_owner" ? true : null }),
+    purpose: el("textarea", { id: "m-purpose" }, m.purpose || ""),
+    tier: el("select", { id: "m-tier" }, Object.entries(TIERS).map(([v, l]) => el("option", { value: v, selected: String(m.tier || 2) === v ? true : null }, l))),
+    review: el("input", { type: "date", id: "m-review", value: m.next_review || "" }),
+  };
+  const msg = el("div");
+  const field = (key, label, hint) => el("div", { class: "field" }, el("label", { for: f[key].id }, label), f[key], hint && el("span", { class: "muted" }, hint));
+  return el("form", {
+    class: "panel model-form",
+    onsubmit: async (e) => {
+      e.preventDefault();
+      try {
+        await onSave({ id: f.id.value.trim(), name: f.name.value.trim(), owner: f.owner.value.trim(), purpose: f.purpose.value.trim(), tier: Number(f.tier.value), next_review: f.review.value || null });
+      } catch (err) {
+        msg.replaceChildren(el("div", { class: "notice fail", role: "alert" }, err.message));
+      }
+    },
+  },
+    field("id", "Identifiant", initial ? null : "Lettres, chiffres, points, tirets. Le même identifiant se déclare dans pipeline.toml (model = …)."),
+    field("name", "Nom"),
+    field("owner", "Propriétaire"),
+    field("purpose", "Usage"),
+    field("tier", "Niveau de risque"),
+    field("review", "Prochaine revue"),
+    el("div", { class: "actions" }, el("button", { class: "btn primary", type: "submit", id: "m-save" }, submitLabel)),
+    msg,
+  );
+}
+
+async function viewModels() {
+  const data = await api("/api/models");
+  const createBox = el("div");
+  const add = can("model_owner", "admin") && el("button", {
+    class: "btn primary", id: "new-model",
+    onclick: () => createBox.replaceChildren(modelForm(null, async (m) => {
+      await api("/api/models", { method: "POST", json: m });
+      location.hash = `#/models/${enc(m.id)}`;
+    }, "Enregistrer le modèle")),
+  }, "Enregistrer un modèle");
+  const rows = data.models.map((m) => {
+    const last = m.pipelines.map((p) => p.last_run).filter(Boolean).sort((a, b) => b.created_at - a.created_at)[0];
+    return el("tr", { class: "link", tabindex: 0, onclick: () => (location.hash = `#/models/${enc(m.id)}`), onkeydown: (e) => e.key === "Enter" && (location.hash = `#/models/${enc(m.id)}`) },
+      el("td", {}, el("a", { href: `#/models/${enc(m.id)}` }, m.id)),
+      el("td", {}, m.name),
+      el("td", {}, m.owner),
+      el("td", { class: "num" }, m.tier),
+      el("td", {}, modelState(m.status)),
+      el("td", {}, m.next_review ? (m.review_overdue ? el("span", { class: "state fail" }, `En retard (${m.next_review})`) : m.next_review) : el("span", { class: "muted" }, "Non fixée")),
+      el("td", {}, m.pipelines.length ? m.pipelines.map((p) => p.pipeline).join(", ") : el("span", { class: "muted" }, "Aucun")),
+      el("td", {}, last ? state(last.status) : el("span", { class: "muted" }, "Jamais exécuté")),
+    );
+  });
+  show("models",
+    el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, "Inventaire des modèles"), el("p", { class: "lead" }, "Chaque modèle, son propriétaire, son niveau de risque, son statut et sa prochaine revue. Seul un validateur peut approuver un modèle.")), add),
+    createBox,
+    el("div", { class: "table-wrap" }, data.models.length
+      ? el("table", {}, el("thead", {}, el("tr", {}, ["Identifiant", "Nom", "Propriétaire", "Niveau", "Statut", "Prochaine revue", "Pipelines", "Dernier résultat"].map((h) => el("th", { scope: "col" }, h)))), el("tbody", {}, rows))
+      : el("p", { class: "empty" }, "Aucun modèle enregistré.")),
+    data.unregistered.length > 0 && el("div", { class: "notice" }, `Pipelines rattachés à un modèle absent de l'inventaire : ${data.unregistered.join(", ")}.`),
+  );
+}
+
+async function viewModel(id) {
+  const data = await api("/api/models");
+  const m = data.models.find((x) => x.id === id);
+  if (!m) throw new Error(`Le modèle ${id} n'est pas dans l'inventaire.`);
+  const msg = el("div");
+  const setStatus = async (status) => {
+    try {
+      await api(`/api/models/${enc(id)}/status`, { method: "POST", json: { status } });
+      route();
+    } catch (err) {
+      msg.replaceChildren(el("div", { class: "notice fail", role: "alert" }, err.message));
+    }
+  };
+  const own = session.me.role === "admin" || (session.me.role === "model_owner" && m.owner === session.me.name);
+  const btn = (to, label, cls = "btn") => el("button", { class: cls, id: `status-${to}`, onclick: () => setStatus(to) }, label);
+  const actions = [];
+  if (can("validator") && m.status !== "retired") {
+    if (m.status !== "approved") actions.push(btn("approved", "Approuver le modèle", "btn approve"));
+    if (m.status !== "in_validation") actions.push(btn("in_validation", "Renvoyer en validation"));
+  }
+  if (own) {
+    if (m.status === "development") actions.push(btn("in_validation", "Soumettre à la validation", "btn primary"));
+    if (m.status === "approved") actions.push(btn("in_use", "Mettre en usage", "btn primary"));
+    if (m.status !== "development" && m.status !== "retired") actions.push(btn("development", "Repasser en développement"));
+    if (m.status !== "retired") actions.push(btn("retired", "Retirer le modèle", "btn reject"));
+  }
+  const editBox = el("div");
+  show("models",
+    el("div", { class: "crumbs" }, el("a", { href: "#/models" }, "Inventaire des modèles")),
+    el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, `${m.id} · ${m.name}`), el("p", { class: "lead" }, m.purpose || "")),
+      own && el("button", { class: "btn", id: "edit-model", onclick: () => editBox.replaceChildren(modelForm(m, async (u) => {
+        await api(`/api/models/${enc(id)}`, { method: "PUT", json: u });
+        route();
+      }, "Enregistrer les modifications")) }, "Modifier la fiche")),
+    el("dl", { class: "facts" },
+      el("div", {}, el("dt", {}, "Statut"), el("dd", {}, modelState(m.status))),
+      el("div", {}, el("dt", {}, "Propriétaire"), el("dd", {}, m.owner)),
+      el("div", {}, el("dt", {}, "Niveau de risque"), el("dd", {}, TIERS[m.tier] || m.tier)),
+      el("div", {}, el("dt", {}, "Prochaine revue"), el("dd", {}, m.next_review ? (m.review_overdue ? el("span", { class: "state fail" }, `En retard (${m.next_review})`) : m.next_review) : "Non fixée")),
+      el("div", {}, el("dt", {}, "Dernière modification"), el("dd", {}, `${when(m.updated_at)} par ${m.updated_by}`)),
+    ),
+    actions.length > 0 && el("div", { class: "actions", id: "model-actions" }, actions),
+    msg,
+    editBox,
+    el("h2", {}, "Pipelines rattachés"),
+    el("div", { class: "table-wrap" }, m.pipelines.length
+      ? el("table", {}, el("thead", {}, el("tr", {}, ["Pipeline", "Planification (UTC)", "Dernière exécution", "Résultat", "Décision"].map((h) => el("th", { scope: "col" }, h)))),
+          el("tbody", {}, m.pipelines.map((p) => el("tr", {},
+            el("td", {}, el("a", { href: `#/p/${enc(p.pipeline)}` }, p.pipeline)),
+            el("td", { class: "hash" }, p.schedule || "—"),
+            el("td", {}, p.last_run ? el("a", { href: `#/p/${enc(p.pipeline)}/r/${p.last_run.id}` }, `#${p.last_run.id} · ${when(p.last_run.created_at)}`) : el("span", { class: "muted" }, "Jamais exécuté")),
+            el("td", {}, p.last_run ? state(p.last_run.status) : ""),
+            el("td", {}, p.last_run && p.last_run.decision ? state(p.last_run.decision) : el("span", { class: "muted" }, p.last_run ? "En attente" : "")),
+          ))))
+      : el("p", { class: "empty" }, `Aucun pipeline ne déclare ce modèle. Ajoutez model = "${m.id}" dans le pipeline.toml concerné.`)),
+  );
+}
+
 // ---------- Audit ----------
 const OUTCOMES = { ok: "Réussi", denied: "Refusé (droits)", approved: "Approuvée", rejected: "Rejetée", reproducible: "Reproductible", mismatch: "Écart au rejeu" };
 
@@ -393,6 +538,8 @@ async function route() {
     if (parts[0] === "p" && parts[2] === "r") await viewRun(parts[1], parts[3]);
     else if (parts[0] === "p" && parts[1]) await viewPipeline(parts[1]);
     else if (parts[0] === "audit") await viewAudit();
+    else if (parts[0] === "models" && parts[1]) await viewModel(parts[1]);
+    else if (parts[0] === "models") await viewModels();
     else await viewPipelines();
     document.getElementById("main")?.focus?.();
   } catch (err) {

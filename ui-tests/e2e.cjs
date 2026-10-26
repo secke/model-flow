@@ -36,10 +36,14 @@ async function main() {
   const ws = fs.mkdtempSync(path.join(os.tmpdir(), "mf-ui-"));
   fs.cpSync(path.join(ROOT, "examples/pd-scorecard"), path.join(ws, "pd-scorecard"), { recursive: true });
   fs.rmSync(path.join(ws, "pd-scorecard/.modelflow"), { recursive: true, force: true });
+  const toml = path.join(ws, "pd-scorecard/pipeline.toml");
+  fs.writeFileSync(toml, fs.readFileSync(toml, "utf8").replace(/^(name = .*)$/m, '$1\nmodel = "PD-RETAIL-01"\nschedule = "0 6 * * 1-5"'));
   const port = await freePort();
   const cfg = path.join(ws, "server.toml");
   fs.writeFileSync(cfg, `workspace = "${ws}"
 bind = "127.0.0.1:${port}"
+[scheduler]
+enabled = false
 [oidc]
 issuer = "${provider.base}"
 audience = "${AUD}"
@@ -86,6 +90,29 @@ roles_claim = "groups"
     await login("dana");
     check((await page.textContent(".who")).includes("Propriétaire de modèle"), "rôle issu du groupe SSO");
     await page.screenshot({ path: path.join(SHOTS, "1-pipelines.png"), fullPage: true });
+
+    await page.click("text=Inventaire des modèles");
+    await page.waitForSelector("text=Pipelines rattachés à un modèle absent");
+    check(true, "un pipeline rattaché à un modèle non inventorié est signalé");
+    await page.click("#new-model");
+    await page.fill("#m-id", "PD-RETAIL-01");
+    await page.fill("#m-name", "Scorecard PD particuliers");
+    await page.fill("#m-purpose", "Probabilité de défaut à un an, portefeuille de détail (IRB).");
+    await page.selectOption("#m-tier", "1");
+    await page.fill("#m-review", "2027-03-31");
+    await page.click("#m-save");
+    await page.waitForSelector("text=Scorecard PD particuliers");
+    check((await page.textContent(".facts")).includes("En développement"), "modèle enregistré en développement");
+    check((await page.$("#status-approved")) === null, "un propriétaire ne peut pas approuver son modèle");
+    await page.click("#status-in_validation");
+    await page.waitForSelector("text=En validation");
+    check(true, "modèle soumis à la validation");
+
+    await page.goto(origin + "/#/p/pd-retail-scorecard");
+    await page.waitForSelector("text=Prochaine exécution");
+    check((await page.textContent(".facts")).includes("0 6 * * 1-5"), "planification affichée sur le pipeline");
+    await page.goto(origin + "/#/");
+    await page.waitForSelector("text=pd-retail-scorecard");
     await page.click("text=pd-retail-scorecard");
     await page.waitForSelector("#launch");
     await page.click("#launch");
@@ -118,6 +145,18 @@ roles_claim = "groups"
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     check(overflow <= 0, `pas de défilement horizontal sur mobile (${overflow}px)`);
     await page.setViewportSize({ width: 1280, height: 900 });
+
+    await page.goto(origin + "/#/models/PD-RETAIL-01");
+    await page.waitForSelector("#status-approved");
+    check((await page.$("#edit-model")) === null, "un validateur ne modifie pas la fiche");
+    await page.click("#status-approved");
+    await page.waitForSelector(".notice.fail");
+    check((await page.textContent(".notice.fail")).includes("dernière exécution rejetée"), "modèle non approuvable tant que sa dernière exécution est rejetée");
+    await page.goto(origin + "/#/models");
+    await page.waitForSelector("text=Scorecard PD particuliers");
+    await page.screenshot({ path: path.join(SHOTS, "5-inventaire.png"), fullPage: true });
+    const stray = await page.evaluate(() => [...document.querySelector("main").childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() !== ""));
+    check(!stray, "aucun texte parasite dans la page");
     await logout();
 
     console.log("Auditeur");
@@ -131,6 +170,8 @@ roles_claim = "groups"
     await page.fill("#filter", "run.decide");
     const text = await page.textContent("tbody");
     check(text.includes("eli") && text.includes("Rejetée"), "le journal trace la décision du validateur");
+    await page.fill("#filter", "model.status");
+    check((await page.textContent("tbody")).includes("refused: in_validation -> approved"), "le journal trace le refus d'approbation du modèle");
     await page.fill("#filter", "valeur-introuvable");
     check((await page.textContent("tbody")).includes("Aucune entrée"), "le filtre du journal signale l'absence de résultat");
     await page.fill("#filter", "");
