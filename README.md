@@ -1,278 +1,340 @@
 # ModelFlow
 
-> Positionnement et feuille de route : [docs/VISION.md](docs/VISION.md). Prise en main en local : [docs/PRISE-EN-MAIN.md](docs/PRISE-EN-MAIN.md).
+**Reproducible model validation for banks.** ModelFlow runs quantitative models (pricing, VaR, PD) as versioned pipelines, fingerprints every input, output and line of code with SHA-256, and replays any past run to prove that it gives exactly the same result. Validators decide in the tool, under segregation of duties, and every action lands in an append-only audit log.
 
-Orchestration déterministe et validation de modèles quantitatifs pour les banques : pipelines versionnés, empreintes SHA-256 des données, du code et des résultats, rejeu vérifié et rapport de validation. Écrit en Rust, sans IA générative.
+Written in Rust, no generative AI. The pricing and statistics engine is [quantparity](https://github.com/secke/quantparity), an independent library cross-checked against QuantLib in CI.
 
-## Démarrage
+[![CI](https://github.com/secke/model-flow/actions/workflows/ci.yml/badge.svg)](https://github.com/secke/model-flow/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
+## The problem
+
+In most banks, a model's validation evidence is a folder of spreadsheets and screenshots. Nobody can say for sure which data, which code version and which parameters produced the number in the committee pack, and re-running it a year later rarely gives the same answer. Supervisors ask for exactly that traceability: SR 26-2 in the US, SS1/23 in the UK, BCBS 239 for risk data.
+
+ModelFlow makes the evidence mechanical:
+
+- **Every run is sealed.** Inputs, outputs and code are hashed; the run manifest ties them together with a single `run_hash`.
+- **Every result can be replayed.** `mf verify` re-runs the pipeline and points to the exact step whose data, code or result changed.
+- **Every decision is governed.** Only a validator can approve, never their own run, and only if the replay is identical. Denials are logged too.
+- **Models stay where they are.** Any executable that reads JSON on stdin and writes JSON on stdout is a model: Python, R, C++, a wrapper around a vendor library.
+
+## 5-minute demo
+
+Requires Rust 1.88+ and `git`. No Python or database needed.
+
 ```bash
-cargo build --release
-mf=target/release/mf
-p=examples/pd-scorecard/pipeline.toml
-$mf run $p                 # exécute et enregistre (SQLite : <dossier du pipeline>/.modelflow/runs.db)
-$mf verify $p              # rejoue la dernière exécution et signale tout écart
-$mf report $p -o r.html    # rapport de validation HTML (inclut le rejeu)
-$mf runs $p                # historique
-$mf show $p --run 1        # manifeste JSON complet
+git clone https://github.com/secke/model-flow.git && cd model-flow
+cargo build --release && export PATH="$PWD/target/release:$PATH"
+
+# 1. Run a multi-asset portfolio risk pipeline: full-revaluation VaR/ES, sensitivities, stress tests, FRTB PLA
+mf run examples/portfolio-risk/pipeline.toml
+#   var_es               v1.0.0    [WARN]     99% VaR = €483k, 88% of its €550k limit
+#   stress               v1.0.0    [FAIL]     "Sovereign crisis" loses €1.92m, limit €1.5m
+#   pnl_attribution      v1.0.0    [PASS]     Spearman 0.99997, KS 0.013: green zone
+#   run #1  run_hash=52aa1be30914…
+
+# 2. Replay it: same data, same code, same result, bit for bit
+mf verify examples/portfolio-risk/pipeline.toml
+#   OK: run #1 replayed identically (8 steps)
+
+# 3. Tamper with one number in the market data history, then replay
+sed -i.bak '201s/^200,[^,]*/200,-0.25/' examples/portfolio-risk/data/factor_history.csv
+mf verify examples/portfolio-risk/pipeline.toml; echo "exit code: $?"
+#   MISMATCH [history] non-reproducible result
+#   MISMATCH [var_es] different inputs
+#   MISMATCH [var_es] non-reproducible result
+#   MISMATCH [pnl_attribution] different inputs
+#   MISMATCH [pnl_attribution] non-reproducible result
+#   exit code: 1
+mv examples/portfolio-risk/data/factor_history.csv.bak examples/portfolio-risk/data/factor_history.csv
+
+# 4. Committee-ready HTML report (verdict, replay status, every test in detail)
+mf report examples/portfolio-risk/pipeline.toml -o report.html
 ```
 
-## Exemples
-| Dossier | Contenu |
-|---|---|
-| `examples/var-equity` | VaR historique et modèle EWMA externe (Python), backtests complets |
-| `examples/pd-scorecard` | Modèle de PD à 7 classes : Gini/KS, calibration par classe, stabilité de la population |
-| `examples/pricing-benchmark` | Validation de QuantLib 1.44 sur 12 transactions (options européennes et américaines, Black-76, obligations) |
-| `examples/rates-benchmark` | Courbe simple EUR 6M (dépôts + swaps), re-pricing, validation de QuantLib sur 7 swaps et 3 zéro-coupons |
-| `examples/portfolio-risk` | Portefeuille multi-actifs : VaR/ES historiques par revalorisation complète, sensibilités, stress tests avec limites, test d'attribution du P&L |
-| `examples/multicurve-benchmark` | Multi-courbes €STR / Euribor 6M aux conventions de marché, validation de QuantLib sur 8 swaps (2 à 30 ans) |
+The full walkthrough, with the web UI, three roles (model owner, validator, auditor), the model inventory, scheduling and alerts, is in [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md). It is checked end to end on a fresh clone.
 
-## Types d'étapes
-| kind | rôle | paramètres |
+## Architecture
+
+```
+            pipeline.toml (versioned steps, DAG)
+                         │
+   ┌─────────────────────▼──────────────────────┐
+   │ mf-runtime   CSV / Parquet / JSON readers   │
+   │              built-in validation steps ─────┼──► quantparity (pricing, risk, statistics)
+   │              external processes (any lang.) │
+   └─────────────────────┬──────────────────────┘
+                         │ outputs
+   ┌─────────────────────▼──────────────────────┐
+   │ mf-core      SHA-256 fingerprints, manifest,│
+   │              topological run, replay        │
+   └─────────────────────┬──────────────────────┘
+                         │
+   content-addressed store (SQLite or PostgreSQL) ◄── integrity check on every read
+                         │
+         ┌───────────────┴───────────────┐
+      mf (CLI)                   mf-server (REST API, web UI, OIDC,
+                                 roles, decisions, audit, scheduler, alerts)
+```
+
+| Crate | Role |
+|---|---|
+| `mf-core` | DAG of versioned steps, fingerprints of inputs, outputs and code, run manifest, verified replay |
+| `mf-runtime` | TOML pipelines, step kinds, external process isolation, run store (SQLite, PostgreSQL), HTML report |
+| `mf-server` | REST API, bearer tokens and OIDC SSO, roles and segregation of duties, validation decisions, append-only audit log, model inventory, scheduler, webhook alerts, web UI |
+| `mf-cli` | the `mf` binary: `run`, `verify`, `runs`, `show`, `report` |
+| [`quantparity`](https://github.com/secke/quantparity) | external dependency, pinned by git revision: BSM, Black-76, CRR, bonds, single and multi-curve (€STR / Euribor), VaR/ES, stress, FRTB PLA, Kupiec, Christoffersen, Basel traffic light, PSI, AUC/Gini/KS, PD calibration |
+
+## Results
+
+### Reference engine: parity with QuantLib 1.44
+
+Reported by quantparity's own CI, which reconciles every function with QuantLib:
+
+| Area | Cases | Max abs diff vs QuantLib |
+|---|---:|---:|
+| European options: price and Greeks | 432 × 6 | 3.0e-13 |
+| Black-76 | 324 | 1.4e-12 |
+| Implied volatility | 208 | 3.4e-12 |
+| Fixed-rate bonds: price, durations, convexity | 108 × 4 | 2.6e-12 |
+| €STR OIS curve, discount factors 1Y–30Y | 30 | 1.8e-13 |
+| Euribor 6M swaps with €STR discounting, NPV on 10M EUR | 54 | 2.0e-6 EUR |
+| American options, CRR 500 steps | 96 | 1.1e-3 ([explained](https://github.com/secke/quantparity#finding-quantlibs-crr-tree-does-not-use-the-martingale-probability)) |
+
+### ModelFlow examples: QuantLib as the candidate pricer under validation
+
+Each benchmark example runs QuantLib as an external process and compares it, trade by trade, with the reference engine (`pricing_benchmark` step):
+
+| Example | Trades | Max abs diff | Verdict |
+|---|---:|---:|---|
+| `pricing-benchmark`: European options, Black-76, bonds | 9 | 4.5e-13 | pass |
+| `pricing-benchmark`: American options (CRR, 800 steps) | 3 | 5.2e-5 | pass, gap explained by QuantLib's log-linearized tree probability |
+| `rates-benchmark`: single-curve swaps, notionals 8–50m | 7 | 2.5e-6 EUR | pass |
+| `rates-benchmark`: zero-coupons | 3 | 2.0e-7 | pass |
+| `multicurve-benchmark`: €STR-discounted Euribor 6M swaps, 2–30Y | 8 | 3.6e-6 EUR | pass |
+
+Moving the engine from ModelFlow's former in-house crates to quantparity changed no number: 55,731 values across the six examples are identical bit for bit.
+
+## Governance
+
+### Roles and segregation of duties
+
+| Role | Can |
+|---|---|
+| `model_owner` | register and edit their own models, trigger runs, replay |
+| `validator` | replay, approve or reject runs (never their own), approve models |
+| `auditor` | read everything, including the audit log; no action buttons |
+| `admin` | administration; cannot hold the validator role at the same time |
+
+- A decision is accepted only if the replay is identical; a rejection must be justified.
+- A model can be approved only if the latest run of every linked pipeline is approved.
+- A user who is both validator and owner/admin in the identity provider is rejected at sign-in.
+- The configuration stores only SHA-256 fingerprints of service tokens.
+
+### Audit trail
+
+Every action, denials included, is appended to the audit log. On PostgreSQL a trigger rejects `UPDATE`, `DELETE` and `TRUNCATE`, so the log is append-only at the database level. Stored outputs are content-addressed and re-hashed on every read: tampering with the database is detected.
+
+### Regulatory mapping
+
+| Expectation | How ModelFlow supports it |
+|---|---|
+| **SR 26-2** (US model risk management): independent validation, effective challenge, model inventory | Model inventory with risk tiers and review dates; validator-only approval; challenger and benchmark pricers as pipeline steps; replayable evidence |
+| **SS1/23** (UK PRA model risk management): model identification, governance, independent validation, use of model risk mitigants | Inventory with status workflow (development → in validation → approved → in use → retired); segregation of duties enforced by the server and at SSO level; overdue reviews flagged |
+| **BCBS 239** (risk data aggregation and reporting): accuracy, integrity, traceability | Every input, output and piece of code fingerprinted; lineage through the DAG; integrity checks on stored results; append-only audit log |
+
+ModelFlow is a tool that produces evidence; it does not make an institution compliant on its own.
+
+## Pipelines
+
+A pipeline is a TOML file of versioned steps. Bump a step's `version` when its code changes: replay flags code that changed without a version bump.
+
+```toml
+# Adapted from examples/var-equity/pipeline.toml
+name = "equity-var"
+model = "VAR-EQ-01"                 # links the pipeline to the model inventory
+schedule = "0 6 * * 1-5"            # optional, 5-field cron, UTC
+
+[[step]]
+name = "returns"
+kind = "csv"
+version = "1.0.0"
+path = "data/returns.csv"
+column = "ret"
+
+[[step]]
+name = "ewma_model"                 # any executable: JSON on stdin, JSON on stdout
+kind = "process"
+version = "0.1.0"
+deps = ["returns"]
+command = ["python3", "models/ewma_var.py"]
+code = ["models/ewma_var.py"]       # hashed into the code fingerprint
+params = { lambda = 0.94, alpha = 0.99, warmup = 30 }
+
+[[step]]
+name = "backtest_ewma"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "ewma_model"]
+params = { returns = "returns", forecasts = "ewma_model", alpha = 0.99 }
+```
+
+### Step kinds
+
+| kind | Purpose | Parameters |
 |---|---|---|
-| `csv` | lit une colonne (`column`) ou une table (`columns`) numérique ; guillemets RFC 4180 | `path`, `delimiter` (`,`) |
-| `parquet` | idem pour un fichier Parquet (colonnes numériques) | `path` |
-| `process` | **modèle externe, tout langage** | `command`, `code`, `timeout_secs` (300), `env`, `pass_env`, `memory_mb`, `cpu_secs`, `file_size_mb`, `max_output_mb` (256) |
-| `var_historical` | VaR historique | `alpha` |
-| `kupiec_backtest` | backtest glissant de la VaR historique | `alpha`, `window` |
-| `backtest_forecasts` | backtest de prévisions de VaR d'un modèle | `returns`, `forecasts`, `alpha` |
+| `csv` | one numeric column (`column`) or a table (`columns`); RFC 4180 quoting | `path`, `delimiter` (`,`) |
+| `parquet` | same for a Parquet file (numeric columns) | `path` |
+| `json` | a JSON document (trades, prices, market data) | `path` |
+| `process` | **external model, any language** | `command`, `code`, `timeout_secs` (300), `env`, `pass_env`, `memory_mb`, `cpu_secs`, `file_size_mb`, `max_output_mb` (256) |
+| `var_historical` | historical VaR | `alpha` |
+| `kupiec_backtest` | rolling backtest of historical VaR | `alpha`, `window` |
+| `backtest_forecasts` | backtest of a model's VaR forecasts | `returns`, `forecasts`, `alpha` |
 | `psi` | Population Stability Index | `baseline`, `current`, `column`, `bins` |
 | `pd_discrimination` | AUC, Gini, KS | `score`, `default`, `min_gini_pass`, `min_gini_warn` |
-| `pd_calibration` | test binomial par classe, Hosmer-Lemeshow | `grade`, `pd`, `default` |
-| `json` | lit un document JSON (transactions, prix…) | `path` |
-| `price_portfolio` | valorisation de référence et sensibilités | `trades` |
-| `pricing_benchmark` | pricer candidat vs. référence, tolérances par produit | `trades`, `candidate`, `reference` (optionnel), `market` (optionnel), `tolerances` |
-| `portfolio_var` | VaR et ES historiques par revalorisation complète, contributions, limites | `trades`, `scenarios`, `market`, `label`, `var_confidence`, `es_confidence`, `var_limit`, `es_limit` |
-| `sensitivities` | delta, vega, DV01 par pilier, sensibilité au rendement | `trades`, `market` |
-| `stress_test` | scénarios de stress avec limites de perte | `trades`, `scenarios`, `market` |
-| `pnl_attribution` | test d'attribution du P&L du FRTB (Spearman, KS, zones) | `hypothetical`, `risk_theoretical` ou `sensitivities` + `scenarios` |
-| `curve_bootstrap` | construction de courbe, re-pricing des instruments, structure par terme | `curve`, `tolerance`, `grid_step` |
+| `pd_calibration` | per-grade binomial test, Hosmer-Lemeshow | `grade`, `pd`, `default` |
+| `price_portfolio` | reference valuation and Greeks | `trades`, `market` |
+| `pricing_benchmark` | candidate pricer vs. reference, per-product tolerances | `trades`, `candidate`, `reference` (optional), `market` (optional), `tolerances` |
+| `curve_bootstrap` | curve construction, re-pricing of the input instruments, term structure | `curve`, `tolerance`, `grid_step` |
+| `portfolio_var` | historical VaR and ES by full revaluation, contributions, limits | `trades`, `scenarios`, `market`, `label`, `var_confidence`, `es_confidence`, `var_limit`, `es_limit` |
+| `sensitivities` | delta, vega, DV01 per pillar, yield sensitivity | `trades`, `market` |
+| `stress_test` | named stress scenarios with loss limits | `trades`, `scenarios`, `market` |
+| `pnl_attribution` | FRTB P&L attribution test (Spearman, KS, zones) | `hypothetical`, `risk_theoretical` or `sensitivities` + `scenarios` |
 
-`price_portfolio` et `pricing_benchmark` acceptent aussi `market` (nom de l'étape qui fournit les courbes), requis pour les swaps et les zéro-coupons.
+VaR backtests combine **Kupiec** (POF), **Christoffersen** (independence, conditional coverage) and the **Basel traffic light** (with the multiplier add-on over 250 days at 99%). Every test returns `pass`, `warn` or `fail`. A pricing gap up to `abs + rel × |reference|` passes, up to 10 times that warns, beyond fails; a missing candidate price fails.
 
-Les backtests de VaR combinent **Kupiec** (POF), **Christoffersen** (indépendance, couverture conditionnelle) et les **feux tricolores de Bâle** (avec majoration du multiplicateur sur 250 jours à 99 %). Chaque test renvoie un statut `pass`, `warn` ou `fail`.
+### External model protocol and isolation
 
-## Pricing de référence (`mf-pricing`)
-Black-Scholes-Merton avec dividende continu et sensibilités, Black-76, arbre CRR (exercice européen ou américain), obligations à taux fixe (prix, durations, convexité) et volatilité implicite. Les formules sont testées sur des valeurs publiées (Hull ; Haug, *The Complete Guide to Option Pricing Formulas*), sur la parité call-put et sur des différences finies.
+The process receives `{"inputs": {<dep>: <output>}, "params": {...}}` on stdin and writes one JSON document on stdout. A non-zero exit code is a failure and stderr is reported.
 
-`pricing_benchmark` compare un pricer candidat (QuantLib, bibliothèque interne, modèle challenger) soit à la référence intégrée, soit à un autre pricer. L'écart admis vaut `abs + rel × |référence|` par produit. Un écart jusqu'à 10 fois cette valeur donne `warn`, au-delà `fail`. Une transaction sans prix candidat donne `fail`.
+- The environment is cleared: only `PATH`, `LANG`, `HOME`, `TMPDIR` and `PYTHONHASHSEED=0`, plus `env` (part of the fingerprint) and the variables named in `pass_env`.
+- On Unix, resource limits apply: memory (`memory_mb`), CPU time (`cpu_secs`, default: the timeout), file size (`file_size_mb`), no core file.
+- Output is capped (`max_output_mb`).
+- The process runs in its own process group, killed when the step ends: no orphan survives.
+- Network isolation comes from the deployment (egress-free NetworkPolicy).
 
-Résultat de l'exemple : QuantLib et la référence coïncident à 1e-13 près sur les options européennes, Black-76 et les obligations. Sur les options américaines, l'écart est d'environ 5e-5 : le CRR de QuantLib utilise une probabilité linéarisée en log, ½ + ½·(r − q − σ²/2)·√Δt / σ, alors que la référence utilise la probabilité martingale exacte. La tolérance des arbres est donc fixée en conséquence.
+### Mismatches reported by `verify`
 
-Format des transactions : voir `examples/pricing-benchmark/trades.json`.
-
-### Taux (`mf_pricing::rates`)
-- **Courbes** : bootstrap séquentiel sur dépôts (taux simple) et swaps par, interpolation log-linéaire des facteurs d'actualisation (forwards constants par morceaux), extrapolation au dernier forward.
-- **Produits** : swap de taux vanille payeur ou receveur (NPV, taux par, annuité, jambes, DV01 par déplacement de 1 pb de toutes les cotations) et zéro-coupon (taux zéro, DV01).
-- **Contrôle** : `curve_bootstrap` re-price chaque instrument d'entrée (écart observé de l'ordre de 1e-16) et publie facteurs d'actualisation, taux zéro et forwards.
-- **Simplifications de ce mode** : une seule courbe pour projeter et actualiser, fractions d'année égales à 1/fréquence, pas de calendrier. Pour la production, utiliser les courbes datées ci-dessous.
-
-Résultat de l'exemple : avec les mêmes conventions (calendrier nul, SimpleDayCounter, PiecewiseLogLinearDiscount), QuantLib et la référence coïncident à environ 1e-8 en devise sur des notionnels de 8 à 50 millions, et à 2e-7 en extrapolation à 40 ans.
-
-Format du marché : voir `examples/rates-benchmark/market.json`.
-
-### Multi-courbes et conventions de marché (`mf_pricing::curves`, `mf_pricing::dates`)
-- **Conventions** : calendrier TARGET (Pâques calculée), décalage spot en jours ouvrés, Following / Modified Following / Preceding, bases Act/360, Act/365F et 30/360, règle de fin de mois des indices, échéanciers générés à rebours.
-- **Courbe OIS** (`"kind": "ois"`) : swaps €STR au pair, jambe fixe annuelle (paiement unique jusqu'à 1 an), jambe variable capitalisée.
-- **Courbe de projection** (`"kind": "ibor"`) : dépôt et swaps Euribor actualisés sur la courbe OIS désignée par `discount_curve`. Les courbes sont construites dans l'ordre de leurs dépendances.
-- **Swap daté** (`"product": "vanilla_swap"`) : départ spot, conventions de la courbe de projection, actualisation OIS ; NPV, taux par, annuité, jambes et DV01 (toutes les cotations déplacées de 1 pb, courbes reconstruites).
-
-Résultat de l'exemple : la courbe €STR et la courbe Euribor 6M re-pricent leurs instruments à 1e-16 près. Sur 8 swaps de 8 à 50 millions de notionnel et de 2 à 30 ans, QuantLib (OISRateHelper, SwapRateHelper actualisé €STR, MakeVanillaSwap) et la référence coïncident à moins de 4e-6 en devise.
-
-## Inventaire des modèles
-Chaque modèle a une fiche : identifiant, nom, propriétaire, usage, niveau de risque (1 élevé à 3 faible), statut, date de prochaine revue. Un pipeline s'y rattache par `model = "<identifiant>"` dans `pipeline.toml`.
-
-| Statut | Qui peut l'attribuer |
+| Message | Meaning |
 |---|---|
-| `development`, `in_validation`, `retired` | propriétaire du modèle (ses modèles uniquement) ou admin |
-| `approved` | validateur uniquement, si la dernière exécution de chaque pipeline rattaché est approuvée |
-| `in_use` | propriétaire ou admin, une fois le modèle approuvé |
+| `non-reproducible result` | same inputs and code, different output |
+| `different inputs` | data or an upstream step changed |
+| `code changed without a version bump` | a file listed in `code` changed but `version` did not |
+| `version a -> b` | the step version changed |
 
-- Un propriétaire n'enregistre et ne modifie que ses propres modèles.
-- Les revues en retard sont signalées.
-- Un pipeline rattaché à un modèle absent de l'inventaire est signalé.
-- Chaque création, modification et changement de statut est inscrit au journal d'audit, refus compris.
+### Examples
 
-API : `GET /api/models`, `POST /api/models`, `PUT /api/models/{id}` (fiche) et `POST /api/models/{id}/status` (`{"status": "…"}`).
+| Directory | Content |
+|---|---|
+| `examples/var-equity` | historical VaR and an external EWMA model (Python), full backtests |
+| `examples/pd-scorecard` | 7-grade PD model: Gini/KS, per-grade calibration, population stability |
+| `examples/pricing-benchmark` | QuantLib 1.44 validated on 12 trades (European and American options, Black-76, bonds) |
+| `examples/rates-benchmark` | EUR 6M single curve (deposits + swaps), re-pricing, QuantLib validated on 7 swaps and 3 zero-coupons |
+| `examples/multicurve-benchmark` | €STR / Euribor 6M multi-curve with market conventions, QuantLib validated on 8 swaps (2 to 30 years) |
+| `examples/portfolio-risk` | multi-asset portfolio: historical VaR/ES by full revaluation, sensitivities, stress tests with limits, PLA test |
 
-## Planification et alertes
-```toml
-# pipeline.toml
-schedule = "0 6 * * 1-5"     # cron à 5 champs, UTC : 6 h les jours ouvrés
-```
-- **Exécution** : le serveur lance les exécutions planifiées sous l'identité `planificateur`. Chaque créneau est réservé en base, si bien qu'avec plusieurs instances sur PostgreSQL une seule l'exécute.
-- **Rattrapage** : après une interruption, seul le dernier créneau manqué est rattrapé. Un pipeline nouvellement découvert ne s'exécute qu'au créneau suivant.
-- **Configuration du serveur** :
-  ```toml
-  public_url = "https://modelflow.banque.local"      # liens dans les alertes
-  [scheduler]
-  enabled = true
-  interval_secs = 30
-  [alerts]
-  webhook_url_env = "MODELFLOW_ALERT_WEBHOOK"        # ou webhook_url = "…"
-  on = ["fail", "error"]                             # contrôles non conformes, exécution en échec ; "warn" pour les réserves
-  ```
-- **Alertes** : le message JSON (`text`, `pipeline`, `run_id`, `status`, `link`) est accepté par Slack, Mattermost et Teams (Workflows). Chaque envoi est tracé dans le journal d'audit. Le webhook demande une sortie réseau, à ouvrir dans `networkpolicy-egress.yaml`.
+The three benchmark examples need `pip install QuantLib==1.44`.
 
-## Interface web
-`mf-server` sert la console de validation à la racine (`http://hôte:8080/`). Elle n'a aucune dépendance externe : pas de CDN ni de police distante, compatible avec un réseau bancaire fermé.
-- **Pipelines** : dernière exécution, résultat, décision, modèle rattaché et prochaine exécution planifiée.
-- **Inventaire des modèles** : liste, fiche, enregistrement et modification, circuit des statuts selon le rôle.
-- **Exécutions** : lancement avec suivi de la file d'attente (propriétaire, admin), historique.
-- **Page d'exécution** : sceau du verdict et de l'empreinte, rapport de validation, rejeu, décisions horodatées et formulaire pour statuer (validateur). Le validateur qui a lancé l'exécution ne peut pas statuer, et un rejet doit être motivé.
-- **Journal d'audit** filtrable (auditeur, admin).
-- **Connexion** : SSO de l'entreprise (flux *authorization code* + PKCE, client public, sans secret) ou jeton de service. Pour activer le SSO, ajouter à `[oidc]` :
-  ```toml
-  client_id = "modelflow-web"                                # application web enregistrée chez le fournisseur
-  scopes = "openid profile api://modelflow/.default"
-  # authorization_endpoint / token_endpoint : facultatifs (découverte par défaut)
-  ```
-  L'URI de redirection à déclarer est l'origine du serveur suivie de `/`.
-- **Sécurité** :
-  - politique de contenu stricte (`script-src 'self'`, aucun cadre externe) ;
-  - contenu inséré uniquement comme texte ;
-  - jeton conservé en `sessionStorage` (effacé à la fermeture de l'onglet) ;
-  - rapport affiché dans un cadre isolé (`sandbox`).
-- **Tests** : `node ui-tests/e2e.cjs` lance un fournisseur d'identité simulé et le serveur, puis déroule avec Playwright le parcours propriétaire → validateur → auditeur, avec 25 contrôles (inventaire compris) et des captures.
+## Server, web UI and API
 
-## API REST (`mf-server`)
 ```bash
-target/release/mf-server new-token                 # jeton + empreinte SHA-256
-cp deploy/server.example.toml server.toml          # renseigner les empreintes
-target/release/mf-server serve --config server.toml
-curl -H "Authorization: Bearer $JETON" localhost:8080/api/pipelines
+mf-server new-token                               # token + SHA-256 fingerprint
+cp deploy/server.example.toml server.toml         # paste the fingerprints
+mf-server serve --config server.toml              # web UI on http://127.0.0.1:8080/
+curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/pipelines
 ```
-| Méthode | Chemin | Rôles |
+
+The web UI has no external dependency (no CDN, no remote font) and works on a closed bank network. It covers pipelines, runs with queue tracking, the run page (verdict seal, report, replay, decisions), the model inventory and the filterable audit log. Content is inserted as text only, under a strict CSP (`script-src 'self'`), and the report is shown in a sandboxed frame.
+
+| Method | Path | Roles |
 |---|---|---|
 | GET | `/api/health`, `/api/ui-config` | public |
-| GET | `/api/me`, `/api/pipelines`, `/api/pipelines/{p}/runs`, `…/runs/{id}`, `…/runs/{id}/report`, `…/runs/{id}/decisions` | tous |
-| POST | `/api/pipelines/{p}/runs` | `model_owner`, `admin` |
+| GET | `/api/me`, `/api/pipelines`, `/api/pipelines/{p}/runs`, `…/runs/{id}`, `…/runs/{id}/report`, `…/runs/{id}/decisions`, `/api/jobs/{id}` | all |
+| POST | `/api/pipelines/{p}/runs` (`?wait=true` to block) | `model_owner`, `admin` |
 | POST | `/api/pipelines/{p}/runs/{id}/verify` | `validator`, `model_owner`, `admin` |
 | POST | `/api/pipelines/{p}/runs/{id}/decisions` `{"decision": "approved" \| "rejected", "comment": "…"}` | `validator` |
+| GET, POST | `/api/models`; PUT `/api/models/{id}`; POST `/api/models/{id}/status` | read: all; write: owner, admin; `approved`: validator |
 | GET | `/api/audit?limit=100` | `auditor`, `admin` |
 
-### Base de données
-Sans section `[database]`, le serveur utilise SQLite : une base par pipeline et une base de gouvernance, pour une instance unique. Pour la production, PostgreSQL :
-```toml
-[database]
-url_env = "MODELFLOW_DATABASE_URL"   # ou url = "postgres://…" ; sslmode=require ou verify-full pour TLS
-max_connections = 10
-```
-- Le schéma est créé au démarrage, sous verrou consultatif, ce qui permet de lancer plusieurs instances simultanément.
-- Le journal d'audit est protégé par trigger : `UPDATE`, `DELETE` et `TRUNCATE` sont refusés par la base elle-même.
-- Chaque travail est rattaché à l'instance qui l'exécute. Au redémarrage, une instance ne marque en échec que ses propres travaux interrompus.
-- La CLI écrit aussi dans PostgreSQL quand `MODELFLOW_DATABASE_URL` est défini.
+Runs are queued (`max_concurrent_runs`, default 2) and rate-limited per user (`rate_limit_per_minute`, default 120, `429` beyond). Jobs interrupted by a shutdown are marked failed at restart.
 
-### Authentification unique (OIDC)
+### Single sign-on (OIDC)
+
 ```toml
 [oidc]
 issuer = "https://login.microsoftonline.com/<tenant>/v2.0"   # Entra ID, ADFS, Okta, Keycloak…
 audience = "api://modelflow"
-roles_claim = "roles"            # ou "groups", ou chemin pointé ("realm_access.roles" pour Keycloak)
+roles_claim = "roles"            # or "groups", or a dotted path ("realm_access.roles" for Keycloak)
 username_claim = "preferred_username"
-# jwks_file = "jwks.json"        # sans accès réseau au fournisseur d'identité
+client_id = "modelflow-web"      # web UI: authorization code + PKCE, public client, no secret
+scopes = "openid profile api://modelflow/.default"
+# jwks_file = "jwks.json"        # without network access to the identity provider
 [oidc.role_mapping]
 "ModelFlow.Owners" = "model_owner"
 "ModelFlow.Validators" = "validator"
 "ModelFlow.Auditors" = "auditor"
 ```
-- **Signature** : vérifiée avec les clés du fournisseur, obtenues par découverte, par `jwks_url` ou par `jwks_file`. Un `kid` inconnu déclenche un rechargement (rotation des clés), au plus toutes les `jwks_refresh_secs` (60 s).
-- **Algorithmes** : RS256, PS256 et ES256 uniquement. HMAC et `none` sont refusés, ce qui bloque les attaques par confusion d'algorithme.
-- **Contrôles** : émetteur, audience, expiration et `nbf`, avec une tolérance de `leeway_secs` (60 s).
-- **Rôles** : un utilisateur à la fois validateur et propriétaire de modèle (ou admin) est refusé (`403`, séparation des tâches). Un utilisateur sans groupe correspondant est refusé.
-- **Annuaire LDAP / Active Directory** : il passe par le fournisseur d'identité (fédération Entra ID, ADFS ou Keycloak), qui émet les jetons OIDC.
-- **Comptes de service** : les jetons `[[user]]` (CI, planificateur) restent acceptés en parallèle.
 
-Fonctionnement :
-- `POST …/runs` place l'exécution en file d'attente et répond `202` avec un travail à suivre sur `GET /api/jobs/{id}` (`queued`, `running`, `succeeded`, `failed`). `?wait=true` attend la fin et renvoie le résultat.
-- `max_concurrent_runs` (2) borne les exécutions simultanées. Les travaux interrompus par un arrêt du serveur sont marqués en échec au redémarrage.
-- `rate_limit_per_minute` (120) limite les requêtes par utilisateur (réponse `429` au-delà).
-- Section `[tls]` (`cert`, `key`, fichiers PEM) pour servir directement en HTTPS ; sinon, placer le serveur derrière un proxy HTTPS.
+- Signatures are verified with the provider's keys (discovery, `jwks_url` or `jwks_file`); an unknown `kid` triggers a reload, at most every `jwks_refresh_secs` (60 s).
+- RS256, PS256 and ES256 only; HMAC and `none` are rejected, which blocks algorithm-confusion attacks.
+- Issuer, audience, expiry and `nbf` are checked, with a `leeway_secs` tolerance (60 s).
+- LDAP / Active Directory goes through the identity provider's federation. Service tokens (`[[user]]`) keep working alongside SSO.
 
-Règles de gouvernance :
-- La configuration ne contient que l'empreinte SHA-256 des jetons.
-- Un validateur ne peut pas statuer sur une exécution qu'il a lancée (séparation des tâches).
-- Une décision n'est acceptée que si le rejeu est identique ; un rejet doit être motivé.
-- Chaque action, y compris chaque refus, est inscrite dans un journal d'audit en ajout seul : la base refuse modifications et suppressions.
-- Le rapport HTML inclut les décisions de validation.
+### Scheduling and alerts
 
-## Risque de portefeuille (`mf_pricing::risk`)
-**Positions.** Chaque transaction porte une `quantity` (négative pour une vente, 1 par défaut) et, pour les options et les obligations, un `underlying` qui la relie aux facteurs de risque.
+```toml
+# pipeline.toml
+schedule = "0 6 * * 1-5"         # 06:00 UTC on weekdays
 
-**Facteurs de risque** et unités des chocs :
-
-| Facteur | Effet | Unité |
-|---|---|---|
-| `SPOT:<sous-jacent>` | spot ou forward des options | relatif (0,01 = +1 %) |
-| `VOL:<sous-jacent>` | volatilité | absolu (0,01 = +1 point) |
-| `CURVE:<courbe>` | toutes les cotations de la courbe | points de base |
-| `CURVE:<courbe>:<pilier>` | une cotation (`10Y`, `6M`…) | points de base |
-| `YIELD:<émetteur>` | rendement des obligations | points de base |
-
-Les fonctions disponibles :
-- **VaR et ES historiques** : revalorisation complète de chaque position sous chaque scénario (une ligne de l'historique des facteurs = un jour), calculée en parallèle. VaR = k-ième pire P&L, avec k = ⌈n(1−α)⌉ ; ES = moyenne des k pires P&L. Le résultat inclut les scénarios les plus défavorables et la contribution de chaque position au scénario de la VaR.
-- **Limites** : au-delà de 80 % de la limite, statut `warn` ; au-delà de 100 %, `fail`.
-- **Sensibilités** : différence centrée sur chaque facteur auquel le portefeuille est exposé (détection automatique, piliers de courbes compris).
-- **Stress tests** : scénarios nommés avec une limite de perte (`stress.json`).
-- **Attribution du P&L (FRTB)** :
-  - P&L hypothétique : revalorisation complète ;
-  - P&L théorique du modèle de risque : sensibilités × chocs, ou série fournie ;
-  - zones vert / orange / rouge selon la corrélation de Spearman (0,80 / 0,70) et la statistique de Kolmogorov-Smirnov (0,09 / 0,12) ;
-  - au moins 250 observations exigées, sinon réserve.
-
-Résultat de l'exemple, sur 300 jours :
-- VaR 99 % de 483 k€, soit 88 % de la limite (réserve) ;
-- ES 97,5 % de 537 k€ ;
-- scénario « Crise souveraine » à 128 % de sa limite (dépassement) ;
-- attribution du P&L en zone verte (ρ = 0,99997, KS = 0,013).
-
-## Protocole des modèles externes
-Le processus reçoit sur stdin `{"inputs": {<dep>: <sortie>}, "params": {...}}` et écrit un document JSON sur stdout. Un code de sortie non nul signale un échec, et stderr est remonté. Les fichiers listés dans `code` sont hachés : une modification du code sans changement de `version` est signalée au rejeu.
-
-Isolation :
-- L'environnement est vidé. Seuls `PATH`, `LANG`, `HOME`, `TMPDIR` et `PYTHONHASHSEED=0` sont fournis, plus les variables `env` (prises en compte dans l'empreinte) et celles nommées dans `pass_env`.
-- Sous Unix, des limites de ressources s'appliquent : mémoire (`memory_mb`), temps CPU (`cpu_secs`, par défaut le délai), taille des fichiers (`file_size_mb`), pas de fichier core.
-- La sortie est plafonnée (`max_output_mb`).
-- Le processus tourne dans son propre groupe, tué à la fin de l'étape : aucun processus orphelin ne survit.
-- L'isolation réseau est assurée par le déploiement (NetworkPolicy sans sortie, voir plus bas).
-
-## Stockage et intégrité
-- Les sorties des étapes sont stockées une seule fois, adressées par leur empreinte SHA-256 : deux exécutions identiques ne dupliquent pas les données.
-- Le manifeste ne garde que les empreintes. À la relecture, chaque sortie est re-hachée et toute altération de la base est détectée.
-- Les étapes intégrées portent une empreinte de l'implémentation (version du moteur). Une montée de version du moteur est donc signalée au rejeu des anciennes exécutions.
-
-## Déploiement
-```bash
-docker build -t modelflow:0.10.0 .
-docker run --rm modelflow:0.10.0 new-token          # renseigner deploy/server.docker.toml
-docker compose up --build                          # http://127.0.0.1:8080
-kubectl apply -k deploy/k8s                        # après avoir renseigné deploy/k8s/secret.yaml
+# server.toml
+public_url = "https://modelflow.bank.example"   # links in alerts
+[scheduler]
+enabled = true
+interval_secs = 30
+[alerts]
+webhook_url_env = "MODELFLOW_ALERT_WEBHOOK"    # or webhook_url = "…"
+on = ["fail", "error"]                         # add "warn" for warnings
 ```
-- **Image** : binaires `mf` et `mf-server`, Python 3.12 et QuantLib, utilisateur non root (10001). Les exemples sont livrés dans `/opt/modelflow/examples`.
-- **docker-compose** : système de fichiers en lecture seule, aucune capacité, `no-new-privileges`, port lié à 127.0.0.1.
-- **Kubernetes** (`deploy/k8s`) :
-  - espace de noms en Pod Security `restricted`, conteneur non root en lecture seule, seccomp `RuntimeDefault` ;
-  - sondes sur `/api/health`, limites de ressources ;
-  - configuration dans un Secret, espace de travail sur un volume persistant ;
-  - NetworkPolicy : entrée depuis l'ingress uniquement, aucune sortie ;
-  - une réplique avec SQLite. Avec PostgreSQL (URL dans le Secret `modelflow-database`), plusieurs répliques sont possibles si l'espace de travail est partagé ;
-  - `networkpolicy-egress.yaml` (à ajouter explicitement) ouvre DNS, PostgreSQL et le fournisseur d'identité ;
-  - en production, alimenter `/workspace` depuis Git (git-sync ou CI) plutôt que par l'initContainer de démonstration.
-- **CI** : tests sur SQLite et sur PostgreSQL 16 (service), test de bout en bout de l'interface (Playwright, SSO simulé), historique de la CLI dans PostgreSQL, construction de l'image, essai de bout en bout dans le conteneur (lecture seule, sans capacités) et validation des manifestes avec kubeconform.
 
-## Écarts détectés par `verify`
-- `code modifié sans changement de version`
-- `version a -> b`
-- `entrées différentes` (données ou étape amont modifiées)
-- `résultat non reproductible`
+Scheduled runs are triggered as user `scheduler`. Each slot is claimed in the database, so with several instances on PostgreSQL exactly one runs it; after an outage only the latest missed slot is caught up. Alerts are JSON (`text`, `pipeline`, `run_id`, `status`, `link`) accepted by Slack, Mattermost and Teams Workflows, and every send is audited.
 
-## Architecture
-| Crate | Rôle |
-|---|---|
-| `mf-core` | DAG d'étapes, empreintes, manifeste, rejeu |
-| `mf-validate` | tests statistiques (sans dépendance externe) |
-| `mf-pricing` | pricers de référence, benchmark de pricers |
-| `mf-runtime` | spécification TOML, étapes, stockage SQLite, rapport HTML |
-| `mf-server` | API REST, authentification, rôles, décisions, audit |
-| `mf-cli` | binaire `mf` |
+### Database
 
-Voir `docs/CADRAGE.md` pour la feuille de route.
+Without a `[database]` section the server uses SQLite (one database per pipeline plus a governance database, single instance). For production, PostgreSQL:
+
+```toml
+[database]
+url_env = "MODELFLOW_DATABASE_URL"   # or url = "postgres://…"; sslmode=require or verify-full for TLS
+max_connections = 10
+```
+
+The schema is created at startup under an advisory lock, so several instances can start together. The CLI also writes to PostgreSQL when `MODELFLOW_DATABASE_URL` is set.
+
+## Deployment
+
+```bash
+docker build -t modelflow:0.11.0 .
+docker run --rm modelflow:0.11.0 new-token          # fill in deploy/server.docker.toml
+docker compose up --build                          # http://127.0.0.1:8080
+kubectl apply -k deploy/k8s                        # after filling in deploy/k8s/secret.yaml
+```
+
+- **Image**: `mf` and `mf-server`, Python 3.12 and QuantLib, non-root user (10001); examples in `/opt/modelflow/examples`.
+- **docker-compose**: read-only file system, no capabilities, `no-new-privileges`, port bound to 127.0.0.1.
+- **Kubernetes** (`deploy/k8s`): Pod Security `restricted`, read-only non-root container, seccomp `RuntimeDefault`, probes on `/api/health`, configuration in a Secret, workspace on a persistent volume, NetworkPolicy with ingress from the ingress controller only and no egress. `networkpolicy-egress.yaml` (opt-in) opens DNS, PostgreSQL and the identity provider. Serve HTTPS directly with a `[tls]` section (`cert`, `key`) or put the server behind an HTTPS proxy.
+
+## Development
+
+```bash
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+MODELFLOW_TEST_DATABASE_URL=postgres://postgres:pw@127.0.0.1:5432/postgres cargo test --workspace
+```
+
+CI runs formatting, clippy, the tests on SQLite and PostgreSQL 16, the six examples end to end, the CLI against PostgreSQL, the Docker image (read-only, no capabilities), Kubernetes manifest validation and the Playwright UI test (simulated SSO, owner → validator → auditor). See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Further reading: [product vision](docs/VISION.md), [scope and roadmap](docs/SCOPE.md).
+
+## License
+
+[Apache-2.0](LICENSE).

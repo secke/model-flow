@@ -1,84 +1,84 @@
-# Prise en main en local
+# Getting started locally
 
-Durée : environ 30 minutes. Vous jouez les trois rôles d'une banque autour du modèle de VaR d'un desk de marché (`VAR-HS-01`) et de son portefeuille (`examples/portfolio-risk`) :
-- **alice**, propriétaire du modèle ;
-- **bob**, validateur ;
-- **carol**, auditrice.
+Duration: about 30 minutes. You play the three roles of a bank around the VaR model of a trading desk (`VAR-HS-01`) and its portfolio (`examples/portfolio-risk`):
+- **alice**, model owner;
+- **bob**, validator;
+- **carol**, auditor.
 
-## 0. Prérequis
+## 0. Prerequisites
 
-- Linux ou macOS (sous Windows : WSL2).
-- `git` et Rust (`curl https://sh.rustup.rs -sSf | sh`, version 1.88 ou plus récente).
-- Python 3, uniquement pour le récepteur d'alertes de la partie B. L'exemple de risque n'en a pas besoin.
+- Linux or macOS (on Windows: WSL2).
+- `git` and Rust (`curl https://sh.rustup.rs -sSf | sh`, version 1.88 or newer).
+- Python 3, only for the alert receiver in part B. The risk example does not need it.
 
-## 1. Récupérer et compiler
+## 1. Clone and build
 
 ```bash
 git clone https://github.com/secke/model-flow.git
 cd model-flow
-cargo build --release            # 3 à 6 minutes la première fois
+cargo build --release            # 3 to 6 minutes the first time
 export PATH="$PWD/target/release:$PATH"
-mf                               # affiche l'aide
+mf                               # prints the help
 ```
 
-## Partie A : en ligne de commande
+## Part A: command line
 
-### A1. Calculer le risque du portefeuille
+### A1. Compute the portfolio risk
 ```bash
 mf run examples/portfolio-risk/pipeline.toml
 ```
-Résultat attendu (les autres étapes sont des données) :
+Expected result (the other steps are data):
 ```
 var_es               v1.0.0    [WARN]
 stress               v1.0.0    [FAIL]
 pnl_attribution      v1.0.0    [PASS]
 ```
-- **VaR** : la VaR 99 % (483 k€) atteint 88 % de sa limite de 550 k€, d'où la réserve (`WARN`).
-- **Stress** : le scénario « Crise souveraine » perd 1,92 M€ pour une limite de 1,5 M€, d'où l'échec (`FAIL`).
-- **Attribution du P&L** : le P&L calculé à partir des sensibilités explique le P&L de revalorisation complète (zone verte).
+- **VaR**: the 99% VaR (€483k) reaches 88% of its €550k limit, hence the warning (`WARN`).
+- **Stress**: the "Sovereign crisis" scenario loses €1.92m against a €1.5m limit, hence the failure (`FAIL`).
+- **P&L attribution**: the P&L computed from sensitivities explains the full-revaluation P&L (green zone).
 
-### A2. Lire le rapport
+### A2. Read the report
 ```bash
-mf report examples/portfolio-risk/pipeline.toml -o rapport-risque.html
-xdg-open rapport-risque.html     # macOS : open rapport-risque.html
+mf report examples/portfolio-risk/pipeline.toml -o risk-report.html
+xdg-open risk-report.html        # macOS: open risk-report.html
 ```
-À regarder :
-- dans `var_es`, la contribution de chaque position au jour qui fixe la VaR : le swap payeur 10 ans pèse le plus ;
-- dans `sensitivities`, les DV01 par pilier de courbe ;
-- dans `stress`, l'utilisation de chaque limite.
+Things to look at:
+- in `var_es`, the contribution of each position on the day that sets the VaR: the 10-year payer swap weighs the most;
+- in `sensitivities`, the DV01 per curve pillar;
+- in `stress`, the usage of each limit.
 
-### A3. Vérifier la reproductibilité
+### A3. Check reproducibility
 ```bash
 mf verify examples/portfolio-risk/pipeline.toml
-# OK : exécution #1 rejouée à l'identique (8 étapes)
+# OK: run #1 replayed identically (8 steps)
 ```
 
-### A4. Provoquer un écart
-Modifiez une seule valeur de l'historique (ligne 201, premier choc SX5E), puis rejouez :
+### A4. Tamper with the data
+Change a single value of the history (line 201, first SX5E shock), then replay:
 ```bash
-sed -i.bak '201s/^200,[^,]*/200,-0.25/' examples/portfolio-risk/data/factor_history.csv   # macOS : identique
+sed -i.bak '201s/^200,[^,]*/200,-0.25/' examples/portfolio-risk/data/factor_history.csv   # macOS: same command
 mf verify examples/portfolio-risk/pipeline.toml
 ```
-Le rejeu signale `ÉCART [history] résultat non reproductible`, puis les étapes en aval (`entrées différentes`). Restaurez le fichier :
+The replay reports `MISMATCH [history] non-reproducible result`, then the downstream steps (`different inputs`). Restore the file:
 ```bash
 mv examples/portfolio-risk/data/factor_history.csv.bak examples/portfolio-risk/data/factor_history.csv
-mf verify examples/portfolio-risk/pipeline.toml   # de nouveau OK
+mf verify examples/portfolio-risk/pipeline.toml   # OK again
 ```
 
-### A5. Expérimenter
-- Ajoutez votre propre scénario dans `examples/portfolio-risk/stress.json`, par exemple `"SPOT:SX5E": -0.5`, puis relancez `mf run`.
-- Changez une quantité dans `trades.json` et observez la VaR, les sensibilités et les stress.
-- Relancez `mf runs examples/portfolio-risk/pipeline.toml` pour voir l'historique des exécutions et leurs empreintes.
+### A5. Experiment
+- Add your own scenario to `examples/portfolio-risk/stress.json`, for example `"SPOT:SX5E": -0.5`, then run `mf run` again.
+- Change a quantity in `trades.json` and watch the VaR, the sensitivities and the stress tests.
+- Run `mf runs examples/portfolio-risk/pipeline.toml` to see the run history and fingerprints.
 
-## Partie B : serveur, interface et gouvernance
+## Part B: server, web UI and governance
 
-### B1. Créer trois utilisateurs et la configuration
-Depuis la racine du dépôt :
+### B1. Create three users and the configuration
+From the repository root:
 ```bash
 mkdir -p local
 for u in alice bob carol; do mf-server new-token > local/$u.txt; done
-jeton() { sed -n 's/^jeton[^:]*: //p' local/$1.txt; }
-empreinte() { sed -n 's/^token_sha256[^:]*: //p' local/$1.txt; }
+token() { sed -n 's/^token (.*): //p' local/$1.txt; }
+fingerprint() { sed -n 's/^token_sha256[^:]*: //p' local/$1.txt; }
 
 cat > local/server.toml <<EOF
 workspace = "../examples"
@@ -95,84 +95,84 @@ on = ["fail", "warn", "error"]
 [[user]]
 name = "alice"
 role = "model_owner"
-token_sha256 = "$(empreinte alice)"
+token_sha256 = "$(fingerprint alice)"
 
 [[user]]
 name = "bob"
 role = "validator"
-token_sha256 = "$(empreinte bob)"
+token_sha256 = "$(fingerprint bob)"
 
 [[user]]
 name = "carol"
 role = "auditor"
-token_sha256 = "$(empreinte carol)"
+token_sha256 = "$(fingerprint carol)"
 EOF
 ```
-Seules les empreintes des jetons figurent dans la configuration. Les jetons eux-mêmes restent dans `local/*.txt`.
+Only the token fingerprints are in the configuration. The tokens themselves stay in `local/*.txt`.
 
-### B2. Démarrer
-Deux terminaux, à la racine du dépôt :
+### B2. Start
+Two terminals, at the repository root:
 ```bash
-# Terminal 1 : affiche les alertes envoyées par ModelFlow
+# Terminal 1: prints the alerts sent by ModelFlow
 python3 tools/webhook-echo.py
 
-# Terminal 2 : le serveur (PATH comme à l'étape 1)
+# Terminal 2: the server (PATH as in step 1)
 mf-server serve --config local/server.toml
 ```
-Ouvrez <http://127.0.0.1:8080>. Pour afficher un jeton : `jeton alice` (dans le shell où la fonction est définie) ou `cat local/alice.txt`.
+Open <http://127.0.0.1:8080>. To print a token: `token alice` (in the shell where the function is defined) or `cat local/alice.txt`.
 
-### B3. Alice, propriétaire du modèle
-Connectez-vous avec le jeton d'alice, puis :
-1. **Inventaire des modèles** → **Enregistrer un modèle** :
-   - identifiant `VAR-HS-01` (celui que déclare `examples/portfolio-risk/pipeline.toml`) ;
-   - nom « VaR historique du desk » ;
-   - niveau 1 ;
-   - prochaine revue dans un an.
-2. Sur la fiche du modèle : **Soumettre à la validation**.
-3. **Pipelines** → `portfolio-risk-desk` → **Lancer une exécution**. Elle porte le numéro 2, car la partie A a créé l'exécution n° 1. Le sceau affiche « Non conforme », à cause du stress en échec, et le terminal 1 affiche l'alerte.
-4. **Se déconnecter**.
+### B3. Alice, model owner
+Sign in with alice's token, then:
+1. **Model inventory** → **Register a model**:
+   - identifier `VAR-HS-01` (the one declared by `examples/portfolio-risk/pipeline.toml`);
+   - name "Desk historical VaR";
+   - tier 1;
+   - next review in one year.
+2. On the model record: **Submit for validation**.
+3. **Pipelines** → `portfolio-risk-desk` → **Trigger a run**. It is run #2, because part A created run #1. The seal shows "Fail", because of the failed stress test, and terminal 1 prints the alert.
+4. **Sign out**.
 
-### B4. Bob, validateur
-1. Ouvrez l'exécution : **Rejouer l'exécution**. Le rejeu doit être identique.
-2. **Rejeter** avec un commentaire, par exemple : « Dépassement de la limite Crise souveraine (128 %) : réduire l'exposition OAT. »
-3. **Inventaire** → `VAR-HS-01` → **Approuver le modèle** : refusé (« dernière exécution rejetée »).
-4. **Se déconnecter**.
+### B4. Bob, validator
+1. Open the run: **Replay the run**. The replay must be identical.
+2. **Reject** with a comment, for example: "Sovereign crisis limit breached (128%): reduce the OAT exposure."
+3. **Model inventory** → `VAR-HS-01` → **Approve the model**: refused ("latest run rejected").
+4. **Sign out**.
 
-### B5. Alice corrige, Bob approuve
-1. Dans `examples/portfolio-risk/trades.json`, passez la quantité de `BD-OAT-10Y` de `100000` à `50000`.
-2. En alice, relancez une exécution. Le stress repasse sous la limite. Le sceau affiche « Conforme avec réserves » : la VaR monte à 92 % de sa limite, car l'OAT couvrait une partie du risque de taux des swaps.
-3. En bob :
-   - **Rejouer**, puis **Approuver** avec un commentaire sur la réserve de VaR ;
-   - dans l'inventaire, **Approuver le modèle**, accepté cette fois.
-4. En alice : **Mettre en usage**.
+### B5. Alice fixes, Bob approves
+1. In `examples/portfolio-risk/trades.json`, change the quantity of `BD-OAT-10Y` from `100000` to `50000`.
+2. As alice, trigger a new run. The stress test is back under its limit. The seal shows "Warning": the VaR rises to 92% of its limit, because the OAT was hedging part of the swaps' rate risk.
+3. As bob:
+   - **Replay the run**, then **Approve** with a comment on the VaR warning;
+   - in the inventory, **Approve the model**, accepted this time.
+4. As alice: **Put into use**.
 
-L'exécution n° 2 ne peut plus être rejouée à l'identique, puisque `trades.json` a changé : le rejeu l'indique (`positions : résultat non reproductible`). C'est le comportement attendu. Une exécution n'est reproductible qu'avec les données qui l'ont produite. Pour conserver les deux versions, versionnez le dossier du pipeline avec Git.
+Run #2 can no longer be replayed identically, since `trades.json` has changed: the replay says so (`positions: non-reproducible result`). This is the expected behavior. A run is only reproducible with the data that produced it. To keep both versions, version the pipeline directory with Git.
 
-### B6. Carol, auditrice
-**Journal d'audit** : chaque action y figure, refus compris. Filtrez par `model.status` ou `run.decide`. Carol ne voit aucun bouton d'action.
+### B6. Carol, auditor
+**Audit log**: every action is there, denials included. Filter by `model.status` or `run.decide`. Carol sees no action buttons.
 
-### B7. Planification
-Ajoutez sous la ligne `model = …` de `examples/portfolio-risk/pipeline.toml` :
+### B7. Scheduling
+Add below the `model = …` line of `examples/portfolio-risk/pipeline.toml`:
 ```toml
 schedule = "*/2 * * * *"
 ```
-Le serveur relit les pipelines à chaque passage : une exécution lancée par `planificateur` apparaît dans les deux à quatre minutes, et son alerte arrive dans le terminal 1. Retirez ensuite la ligne.
+The server rereads the pipelines on every pass: a run triggered by `scheduler` appears within four minutes (on the next even minute after the pipeline is first seen), and its alert shows up in terminal 1. Then remove the line.
 
-### B8. L'API en direct
+### B8. The live API
 ```bash
-curl -s -H "Authorization: Bearer $(jeton carol)" http://127.0.0.1:8080/api/models | python3 -m json.tool
-curl -s -H "Authorization: Bearer $(jeton carol)" "http://127.0.0.1:8080/api/audit?limit=5" | python3 -m json.tool
+curl -s -H "Authorization: Bearer $(token carol)" http://127.0.0.1:8080/api/models | python3 -m json.tool
+curl -s -H "Authorization: Bearer $(token carol)" "http://127.0.0.1:8080/api/audit?limit=5" | python3 -m json.tool
 ```
 
-## Nettoyage
+## Cleanup
 ```bash
-# Ctrl+C dans les deux terminaux, puis :
-rm -rf local rapport-risque.html examples/*/.modelflow examples/.modelflow-server
+# Ctrl+C in both terminals, then:
+rm -rf local risk-report.html examples/*/.modelflow examples/.modelflow-server
 git checkout examples
 ```
 
-## Pour aller plus loin
-- **Exemples QuantLib** : `pip install QuantLib==1.44`, puis `mf run examples/multicurve-benchmark/pipeline.toml`.
-- **PostgreSQL** : `export MODELFLOW_DATABASE_URL=postgres://…` pour la CLI, ou une section `[database]` pour le serveur.
-- **Docker** : `docker compose up --build`, après avoir renseigné `deploy/server.docker.toml`.
-- **SSO** : la section `[oidc]` du README.
+## Going further
+- **QuantLib examples**: `pip install QuantLib==1.44`, then `mf run examples/multicurve-benchmark/pipeline.toml`.
+- **PostgreSQL**: `export MODELFLOW_DATABASE_URL=postgres://…` for the CLI, or a `[database]` section for the server.
+- **Docker**: `docker compose up --build`, after filling in `deploy/server.docker.toml`.
+- **SSO**: the `[oidc]` section of the [README](../README.md#single-sign-on-oidc).

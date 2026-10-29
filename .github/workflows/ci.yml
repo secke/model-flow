@@ -6,6 +6,7 @@ on:
 
 jobs:
   test:
+    name: fmt, clippy, tests (SQLite + PostgreSQL), examples
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -29,8 +30,8 @@ jobs:
       - run: pip install QuantLib==1.44
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
-      - name: Exemples de bout en bout
+      - run: cargo test --workspace --locked
+      - name: Examples end to end
         run: |
           cargo build --release
           for e in var-equity pd-scorecard pricing-benchmark rates-benchmark multicurve-benchmark portfolio-risk; do
@@ -39,47 +40,49 @@ jobs:
             target/release/mf verify "$p"
             target/release/mf report "$p" -o "report-$e.html"
           done
-      - name: Historique de la CLI dans PostgreSQL
+      - name: CLI history in PostgreSQL
         env:
           MODELFLOW_DATABASE_URL: postgres://postgres:ci@127.0.0.1:5432/postgres?sslmode=disable
         run: |
           rm -rf examples/pd-scorecard/.modelflow
           target/release/mf run examples/pd-scorecard/pipeline.toml
           target/release/mf verify examples/pd-scorecard/pipeline.toml
-          test ! -e examples/pd-scorecard/.modelflow/runs.db || (echo "SQLite utilisé au lieu de PostgreSQL" && exit 1)
+          test ! -e examples/pd-scorecard/.modelflow/runs.db || (echo "SQLite used instead of PostgreSQL" && exit 1)
       - uses: actions/upload-artifact@v4
         with:
-          name: rapports-validation
+          name: validation-reports
           path: report-*.html
 
   docker:
+    name: Docker image and Kubernetes manifests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Construction de l'image
-        run: docker build -t modelflow:0.10.0 .
-      - name: Essai de bout en bout dans le conteneur (lecture seule, sans privilèges)
+      - name: Build the image
+        run: docker build -t modelflow:0.11.0 .
+      - name: End-to-end run in the container (read-only, unprivileged)
         run: |
           set -euo pipefail
-          TOKEN=$(docker run --rm modelflow:0.10.0 new-token | sed -n 's/.*: //p' | head -1)
-          HASH=$(docker run --rm modelflow:0.10.0 hash-token "$TOKEN")
+          TOKEN=$(docker run --rm modelflow:0.11.0 new-token | sed -n 's/.*: //p' | head -1)
+          HASH=$(docker run --rm modelflow:0.11.0 hash-token "$TOKEN")
           mkdir -p ci-cfg
           printf 'workspace = "/workspace"\nbind = "0.0.0.0:8080"\n[[user]]\nname = "ci"\nrole = "admin"\ntoken_sha256 = "%s"\n' "$HASH" > ci-cfg/server.toml
           docker run -d --name mf -p 8080:8080 --user "$(id -u):$(id -g)" --read-only --tmpfs /tmp \
             --cap-drop ALL --security-opt no-new-privileges \
-            -v "$PWD/examples:/workspace" -v "$PWD/ci-cfg/server.toml:/etc/modelflow/server.toml:ro" modelflow:0.10.0
+            -v "$PWD/examples:/workspace" -v "$PWD/ci-cfg/server.toml:/etc/modelflow/server.toml:ro" modelflow:0.11.0
           for i in $(seq 1 30); do curl -fs localhost:8080/api/health && break; sleep 1; done
           for p in multicurve-swap-benchmark pricing-library-benchmark; do
             curl -fs -X POST -H "Authorization: Bearer $TOKEN" "localhost:8080/api/pipelines/$p/runs?wait=true" | tee run.json
             grep -q '"status":"pass"' run.json
           done
           docker logs mf
-      - name: Validation des manifestes Kubernetes
+      - name: Validate the Kubernetes manifests
         run: |
           curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
           ./kubeconform -strict -summary -ignore-filename-pattern kustomization.yaml deploy/k8s/
 
   ui:
+    name: Web UI (Playwright)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -93,10 +96,10 @@ jobs:
         run: |
           npm install --no-save --prefix ui-tests playwright@1.63.0
           npx --prefix ui-tests playwright install --with-deps chromium
-      - name: Interface de bout en bout (SSO PKCE, propriétaire, validateur, auditeur)
+      - name: UI end to end (SSO PKCE, owner, validator, auditor)
         run: NODE_PATH=ui-tests/node_modules node ui-tests/e2e.cjs target/release/mf-server
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: captures-interface
+          name: ui-screenshots
           path: ui-tests/screenshots/

@@ -1,53 +1,52 @@
-# ModelFlow — cadrage (option A : pricing & modèles orchestrés)
+# ModelFlow — scope (option A: orchestrated pricing & models)
 
-## Problème
-Dans les banques d'investissement, les modèles (pricing, VaR, PD/LGD) et leurs données sont dispersés entre équipes et outils. Les versions ne sont pas tracées, les résultats ne sont pas reproductibles, et la validation (SR 26-2, SS1/23, BCBS 239) est manuelle.
+## Problem
+In investment banks, models (pricing, VaR, PD/LGD) and their data are scattered across teams and tools. Versions are not tracked, results are not reproducible, and validation (SR 26-2, SS1/23, BCBS 239) is manual.
 
-## Proposition
-Une couche d'orchestration **déterministe**, sans IA générative, qui se branche sur l'existant (Murex, Orchestrade, bibliothèques internes) :
-- pipeline en DAG : données de marché → modèle → résultats → validation ;
-- chaque étape est versionnée, ses entrées et sorties sont hachées (SHA-256) ;
-- le manifeste d'exécution permet un **rejeu à l'identique** et prouve l'absence de dérive ;
-- batterie de tests de validation exécutée automatiquement, avec rapport horodaté.
+## Proposal
+A **deterministic** orchestration layer, without generative AI, that plugs into existing systems (Murex, Orchestrade, in-house libraries):
+- DAG pipeline: market data → model → results → validation;
+- every step is versioned, its inputs and outputs are hashed (SHA-256);
+- the run manifest enables an **identical replay** and proves the absence of drift;
+- a battery of validation tests runs automatically, with a timestamped report.
 
-> Positionnement et feuille de route : [VISION.md](VISION.md).
+> Positioning and roadmap: [VISION.md](VISION.md).
 
-## État (v0.10)
-- `mf-core` : DAG, empreintes des entrées, des sorties et du code, manifeste, vérification du rejeu.
-- `mf-validate` : VaR historique ; Kupiec, Christoffersen, feux tricolores de Bâle ; PSI ; AUC, Gini, KS ; calibration binomiale par classe et Hosmer-Lemeshow.
-- `mf-runtime` : pipelines TOML, étapes CSV (série ou table), étapes intégrées, processus externes avec délai maximal, stockage SQLite, rapport de validation HTML.
-- `mf-pricing` : pricers de référence (BSM et sensibilités, Black-76, CRR américain, obligations, volatilité implicite), courbes de taux (bootstrap dépôts + swaps), swaps de taux et zéro-coupons avec DV01, benchmark de pricers avec tolérances par produit.
-- `mf-server` : API REST, jetons hachés, rôles (propriétaire du modèle, validateur, auditeur, admin), décisions de validation avec séparation des tâches, journal d'audit en ajout seul.
-- `mf-cli` : `mf run | verify | runs | show | report`.
-- Taux multi-courbes : calendrier TARGET, conventions de marché, courbe €STR et projection Euribor 6M actualisée OIS, swaps datés.
-- Stockage des sorties adressé par contenu, avec contrôle d'intégrité ; isolation des processus externes ; CSV RFC 4180 et Parquet.
-- API : file d'attente des exécutions, limitation de débit, TLS natif, authentification unique OIDC (groupes vers rôles, séparation des tâches).
-- Risque de portefeuille : VaR/ES historiques par revalorisation complète, sensibilités, stress tests avec limites, attribution du P&L (FRTB).
-- Inventaire des modèles (statuts, niveaux de risque, revues), exécutions planifiées et alertes par webhook.
-- Interface web des validateurs (SSO PKCE, lancement, rapport, rejeu, décisions, audit), testée de bout en bout.
-- Stockage PostgreSQL pour l'historique et la gouvernance (journal d'audit protégé par trigger), SQLite conservé pour l'usage local.
-- Déploiement : image Docker non root, docker-compose durci, manifestes Kubernetes (Pod Security restricted, NetworkPolicy).
-- Cinq exemples : desk actions (VaR), scorecard PD, validation de QuantLib sur options et obligations, sur courbe simple et swaps, et en multi-courbes.
-- CI GitHub : format, clippy, tests, exécution des exemples et rapports en artefacts.
+## Status (v0.11)
+- `mf-core`: DAG, fingerprints of inputs, outputs and code, manifest, replay verification.
+- [`quantparity`](https://github.com/secke/quantparity) (external dependency, cross-checked against QuantLib): historical VaR; Kupiec, Christoffersen, Basel traffic light; PSI; AUC, Gini, KS; per-grade binomial calibration and Hosmer-Lemeshow; reference pricers (BSM and Greeks, Black-76, American CRR, bonds, implied volatility), yield curves (deposit + swap bootstrap), interest rate swaps and zero-coupons with DV01, pricer benchmark with per-product tolerances.
+- `mf-runtime`: TOML pipelines, CSV steps (series or table), built-in steps, external processes with a timeout, SQLite storage, HTML validation report.
+- `mf-server`: REST API, hashed tokens, roles (model owner, validator, auditor, admin), validation decisions with segregation of duties, append-only audit log.
+- `mf-cli`: `mf run | verify | runs | show | report`.
+- Multi-curve rates: TARGET calendar, market conventions, €STR curve and OIS-discounted Euribor 6M projection, dated swaps.
+- Content-addressed output storage with integrity checks; isolation of external processes; RFC 4180 CSV and Parquet.
+- API: run queue, rate limiting, native TLS, OIDC single sign-on (groups to roles, segregation of duties).
+- Portfolio risk: historical VaR/ES by full revaluation, sensitivities, stress tests with limits, P&L attribution (FRTB).
+- Model inventory (statuses, risk tiers, reviews), scheduled runs and webhook alerts.
+- Validator web UI (SSO PKCE, triggering, report, replay, decisions, audit), tested end to end.
+- PostgreSQL storage for history and governance (audit log protected by a trigger), SQLite kept for local use.
+- Deployment: non-root Docker image, hardened docker-compose, Kubernetes manifests (Pod Security restricted, NetworkPolicy).
+- Six examples: equity desk (VaR), PD scorecard, validation of QuantLib on options and bonds, on a single curve and swaps, in multi-curve, and multi-asset portfolio risk.
+- GitHub CI: format, clippy, tests (including PostgreSQL), example runs and reports as artifacts, Docker image, UI tests.
 
-Décision 1 tranchée : les modèles existants sont intégrés comme **processus externes** (JSON sur stdin/stdout).
+Decision 1 settled: existing models are integrated as **external processes** (JSON on stdin/stdout).
 
-## Limites connues
-- Plusieurs répliques avec PostgreSQL : l'espace de travail (pipelines, données) doit être partagé entre pods.
-- L'isolation réseau des modèles externes dépend du déploiement (NetworkPolicy) ; en exécution locale, ils ont accès au réseau.
-- Taux : pas encore de swaptions, caps/floors, produits de change, jours de fixing historiques (fixings passés) ni d'autres calendriers que TARGET.
+## Known limitations
+- Several replicas with PostgreSQL: the workspace (pipelines, data) must be shared between pods.
+- Network isolation of external models depends on the deployment (NetworkPolicy); when run locally, they have network access.
+- Rates: no swaptions, caps/floors, FX products, historical fixing days (past fixings) or calendars other than TARGET yet.
 
-## Feuille de route (8 semaines)
-| Sem. | Livrable |
+## Roadmap (8 weeks)
+| Week | Deliverable |
 |---|---|
-| 1-2 | ~~Étapes externes, CSV/Parquet, SQLite et PostgreSQL, délai, isolation, stockage par contenu~~ (fait) |
-| 3-4 | ~~Christoffersen, feux tricolores, PSI, Gini/KS, calibration PD~~ (fait) ; reste : modèle challenger, LGD/EAD, tests de sensibilité |
-| 5 | ~~Pricers de référence, validation de QuantLib, courbes, swaps, multi-courbes OIS, conventions de marché~~ (fait) ; reste : fixings historiques, swaptions, caps/floors, change |
-| 6 | ~~Rapport de validation HTML~~ (fait) ; reste : export PDF, inventaire des modèles, piste d'audit signée |
-| 7 | ~~API REST, rôles, décisions, audit, file d'attente, limitation, TLS, SSO OIDC, interface web, inventaire, planification, alertes~~ (fait) |
-| 8 | ~~Image Docker, docker-compose, manifestes Kubernetes, CI de l'image~~ (fait) ; reste : chart Helm, pilote |
+| 1-2 | ~~External steps, CSV/Parquet, SQLite and PostgreSQL, timeout, isolation, content-addressed storage~~ (done) |
+| 3-4 | ~~Christoffersen, traffic light, PSI, Gini/KS, PD calibration~~ (done); remaining: challenger model, LGD/EAD, sensitivity tests |
+| 5 | ~~Reference pricers, QuantLib validation, curves, swaps, OIS multi-curve, market conventions~~ (done); remaining: historical fixings, swaptions, caps/floors, FX |
+| 6 | ~~HTML validation report~~ (done); remaining: PDF export, model inventory, signed audit trail |
+| 7 | ~~REST API, roles, decisions, audit, queue, rate limiting, TLS, OIDC SSO, web UI, inventory, scheduling, alerts~~ (done) |
+| 8 | ~~Docker image, docker-compose, Kubernetes manifests, image CI~~ (done); remaining: Helm chart, pilot |
 
-## Décisions ouvertes
-1. ~~Mode d'intégration~~ : processus externe retenu.
-2. Stockage : SQLite (pilote) puis PostgreSQL.
-3. Licence : noyau open source (Apache-2.0) + modules entreprise payants (modèle commercial).
+## Open decisions
+1. ~~Integration mode~~: external process chosen.
+2. Storage: SQLite (pilot), then PostgreSQL.
+3. License: open source core (Apache-2.0) + paid enterprise modules (business model).

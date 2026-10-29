@@ -1,63 +1,63 @@
-# ModelFlow : vision produit
+# ModelFlow: product vision
 
-## Positionnement
+## Positioning
 
-ModelFlow est la plateforme de **gouvernance, de validation et de contrôle indépendant des modèles et des valorisations** pour les banques et les gestionnaires d'actifs. Elle se branche sur les systèmes existants (Murex, Orchestrade, Calypso, bibliothèques internes) sans les remplacer.
+ModelFlow is the platform for **governance, validation and independent control of models and valuations** for banks and asset managers. It plugs into existing systems (Murex, Orchestrade, Calypso, in-house libraries) without replacing them.
 
-Le produit ne vise pas le front-to-back. L'ambition est de devenir **la référence de ce créneau**, comme Orchestrade ou Murex l'ont fait sur le leur.
+The product does not aim at front-to-back. The ambition is to become **the reference in this niche**, as Orchestrade or Murex did in theirs.
 
-## Ce qui a fait le succès de ces plateformes, et notre équivalent
+## What made these platforms successful, and our equivalent
 
-| Facteur de succès | Chez Orchestrade / Murex | Chez ModelFlow |
+| Success factor | At Orchestrade / Murex | At ModelFlow |
 |---|---|---|
-| Un modèle de données unique | Toutes les classes d'actifs dans un même modèle, au lieu d'outils juxtaposés ([The Hedge Fund Journal](https://thehedgefundjournal.com/orchestrade-cross-asset-portfolio-risk-trading/)) | Un registre scellé unique : données, code, versions et résultats de chaque modèle, quel que soit son type (marché, crédit, pricing) |
-| Mise en œuvre rapide | Mises en œuvre annoncées plus rapides que les systèmes historiques, nombreuses interfaces standard | Un binaire ou une image Docker, des pipelines décrits en TOML, des modèles branchés tels quels dans leur langage |
-| Ouverture | API ouvertes, intégration Excel | API REST, modèles externes dans tout langage, formats CSV, Parquet et JSON |
-| Confiance réglementaire | Reporting réglementaire intégré | Reproductibilité par construction, séparation des tâches, journal en ajout seul, conformes à l'esprit de SR 26-2, SS1/23 et BCBS 239 |
-| Références clients | Entrée par un segment (les fonds pour Orchestrade), puis extension | Entrée par les équipes de validation et de risque de modèle, puis extension aux équipes de risque, de valorisation et d'audit |
+| A single data model | All asset classes in one model, instead of juxtaposed tools ([The Hedge Fund Journal](https://thehedgefundjournal.com/orchestrade-cross-asset-portfolio-risk-trading/)) | A single sealed register: data, code, versions and results of every model, whatever its type (market, credit, pricing) |
+| Fast implementation | Implementations advertised as faster than legacy systems, many standard interfaces | One binary or Docker image, pipelines described in TOML, models plugged in as they are, in their own language |
+| Openness | Open APIs, Excel integration | REST API, external models in any language, CSV, Parquet and JSON formats |
+| Regulatory trust | Built-in regulatory reporting | Reproducibility by construction, segregation of duties, append-only log, in line with the spirit of SR 26-2, SS1/23 and BCBS 239 |
+| Client references | Entry through one segment (funds for Orchestrade), then expansion | Entry through validation and model risk teams, then expansion to risk, valuation and audit teams |
 
-## Proposition de valeur par utilisateur
+## Value proposition per user
 
-- **Validateur** : rejouer et comparer n'importe quelle exécution, appliquer une batterie de tests standard, statuer dans l'outil, avec un rapport prêt pour le comité.
-- **Propriétaire de modèle** : brancher son modèle sans le réécrire, voir ses résultats de contrôle à chaque exécution.
-- **Risque et contrôle de valorisation** : vérifier les prix du système de production contre une référence indépendante.
-- **Audit interne et régulateur** : reconstituer qui a fait quoi, avec quelles données et quel code, sans dépendre de personne.
+- **Validator**: replay and compare any run, apply a standard battery of tests, decide in the tool, with a committee-ready report.
+- **Model owner**: plug in their model without rewriting it, see its control results on every run.
+- **Risk and valuation control**: check production system prices against an independent reference.
+- **Internal audit and regulator**: reconstruct who did what, with which data and which code, without depending on anyone.
 
-## Feuille de route
+## Roadmap
 
-Les durées sont des ordres de grandeur, à recaler après le premier pilote.
+Durations are orders of magnitude, to be recalibrated after the first pilot.
 
-### 1. Prêt pour un pilote (0 à 4 mois)
-- ~~**Inventaire des modèles**~~ (fait en v0.9) : fiche par modèle, liée à ses pipelines et à ses décisions, circuit des statuts.
-- ~~**Planification** des exécutions et alertes~~ (fait en v0.9).
-- **Instantanés de données de marché** versionnés et adressés par contenu.
-- **Vérification indépendante des prix (IPV)** : prix de production contre prix de référence ou de marché, seuils, réserves de valorisation.
-- **Rapport de validation PDF**, signé et horodaté.
+### 1. Pilot-ready (0 to 4 months)
+- ~~**Model inventory**~~ (done in v0.9): one record per model, linked to its pipelines and decisions, status workflow.
+- ~~**Scheduling** of runs and alerts~~ (done in v0.9).
+- Versioned, content-addressed **market data snapshots**.
+- **Independent price verification (IPV)**: production prices against reference or market prices, thresholds, valuation reserves.
+- Signed and timestamped **PDF validation report**.
 
-### Risque de portefeuille (fait en v0.10)
-- VaR et ES historiques par revalorisation complète, sensibilités par facteur et par pilier, stress tests avec limites, test d'attribution du P&L du FRTB.
-- Prochaines extensions : VaR Monte-Carlo, backtesting de l'ES, FRTB approche standard, risque de change, gamma et termes croisés dans le P&L théorique.
+### Portfolio risk (done in v0.10)
+- Historical VaR and ES by full revaluation, sensitivities per factor and per pillar, stress tests with limits, FRTB P&L attribution test.
+- Next extensions: Monte Carlo VaR, ES backtesting, FRTB standardised approach, FX risk, gamma and cross terms in the risk-theoretical P&L.
 
-### 2. Profondeur de validation (4 à 12 mois)
-- **Pricing** : swaptions et caps/floors (Black, Bachelier, SABR), change, CDS ; chaque ajout étalonné contre QuantLib.
-- **Crédit** : LGD, EAD, IFRS 9 (pertes attendues, staging), backtesting des notations.
-- **Tests** : stress et sensibilité des modèles, comparaison avec des modèles challengers, suivi continu de la dérive en production.
-- **Connecteurs d'import** des exports Murex, Orchestrade et Calypso (transactions, prix, sensibilités).
+### 2. Validation depth (4 to 12 months)
+- **Pricing**: swaptions and caps/floors (Black, Bachelier, SABR), FX, CDS; every addition benchmarked against QuantLib (in [quantparity](https://github.com/secke/quantparity)).
+- **Credit**: LGD, EAD, IFRS 9 (expected losses, staging), rating backtesting.
+- **Tests**: model stress and sensitivity, comparison with challenger models, continuous drift monitoring in production.
+- **Import connectors** for Murex, Orchestrade and Calypso exports (trades, prices, sensitivities).
 
-### 3. Passage à l'échelle (12 à 24 mois)
-- **Organisation** : multi-entités et multi-juridictions, délégations de validation.
-- **Plateforme** : haute disponibilité et calcul distribué pour les gros portefeuilles.
-- **Certifications** : SOC 2 / ISO 27001, plan de réversibilité, documentation de validation du moteur lui-même.
+### 3. Scaling up (12 to 24 months)
+- **Organization**: multi-entity and multi-jurisdiction, validation delegations.
+- **Platform**: high availability and distributed computing for large portfolios.
+- **Certifications**: SOC 2 / ISO 27001, reversibility plan, validation documentation of the engine itself.
 
-## Indicateurs de succès
+## Success metrics
 
-- **Temps de mise en œuvre** : jusqu'à la première validation outillée chez un client.
-- **Couverture** : part des modèles de l'inventaire suivis dans ModelFlow.
-- **Efficacité** : délai moyen de revue d'un modèle, constats d'audit sur le risque de modèle levés.
-- **Commercial** : nombre de références clients actives, rétention.
+- **Time to implement**: until the first tooled validation at a client.
+- **Coverage**: share of the inventory's models tracked in ModelFlow.
+- **Efficiency**: average review time of a model, model risk audit findings closed.
+- **Commercial**: number of active client references, retention.
 
-## Risques
+## Risks
 
-- **Cycles de vente** de 12 à 24 mois en banque, avec des due diligences fournisseur exigeantes. Pour y répondre : un pilote ciblé et des certifications de sécurité dès que possible.
-- **Confiance dans le moteur** : il doit être lui-même validé. L'étalonnage systématique contre des références indépendantes est la réponse.
-- **Concurrence** des modules de gouvernance des grands éditeurs et des outils internes. La différence tient à l'indépendance vis-à-vis du système de production et à la reproductibilité native.
+- **Sales cycles** of 12 to 24 months in banks, with demanding vendor due diligence. Response: a targeted pilot and security certifications as early as possible.
+- **Trust in the engine**: it must itself be validated. Systematic benchmarking against independent references is the answer (the [quantparity](https://github.com/secke/quantparity) QuantLib parity suite).
+- **Competition** from the governance modules of large vendors and from in-house tools. The difference lies in independence from the production system and native reproducibility.
