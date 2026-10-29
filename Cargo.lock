@@ -1047,27 +1047,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "mf-pricing"
-version = "0.10.0"
-dependencies = [
- "mf-validate",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "mf-runtime"
 version = "0.10.0"
 dependencies = [
  "csv",
  "libc",
  "mf-core",
- "mf-pricing",
- "mf-validate",
  "native-tls",
  "parquet",
  "postgres",
  "postgres-native-tls",
+ "quantparity",
  "r2d2",
  "r2d2_postgres",
  "rusqlite",
@@ -1100,14 +1090,6 @@ dependencies = [
  "toml",
  "tower",
  "ureq",
-]
-
-[[package]]
-name = "mf-validate"
-version = "0.10.0"
-dependencies = [
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -1483,6 +1465,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "quantparity"
+version = "0.1.0"
+source = "git+https://github.com/secke/quantparity?rev=eccd51386b697edb7bd9d60c6ceb3bbe94b9e9bb#eccd51386b697edb7bd9d60c6ceb3bbe94b9e9bb"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

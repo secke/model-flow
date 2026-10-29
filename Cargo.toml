@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/mf-core", "crates/mf-validate", "crates/mf-pricing", "crates/mf-runtime", "crates/mf-server", "crates/mf-cli"]
+members = ["crates/mf-core", "crates/mf-runtime", "crates/mf-server", "crates/mf-cli"]
 
 [workspace.package]
 edition = "2021"
@@ -14,3 +14,5 @@ sha2 = "0.10"
 thiserror = "1"
 toml = "0.8"
 rusqlite = { version = "0.32", features = ["bundled"] }
+# Pricing and validation engine, cross-checked against QuantLib (pinned for reproducibility).
+quantparity = { git = "https://github.com/secke/quantparity", rev = "eccd51386b697edb7bd9d60c6ceb3bbe94b9e9bb" }

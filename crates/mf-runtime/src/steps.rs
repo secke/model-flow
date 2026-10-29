@@ -1,7 +1,7 @@
 use mf_core::{hash_bytes, Error, Inputs, Step};
-use mf_pricing::benchmark::{compare, prices_from_value, reference_prices, trades_from_value, Tolerances};
-use mf_pricing::rates::Market;
-use mf_validate::{calibration, discrimination, historical_var, psi, rolling_backtest, var_backtest};
+use quantparity::benchmark::{compare, prices_from_value, reference_prices, trades_from_value, Tolerances};
+use quantparity::curves::Market;
+use quantparity::validation::{calibration, discrimination, historical_var, psi, rolling_backtest, var_backtest};
 use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -344,7 +344,7 @@ impl Step for BuiltinStep {
                 let market = self.market(inputs)?;
                 let vals: Result<Vec<_>, _> = trades
                     .iter()
-                    .map(|t| mf_pricing::value_in(t, &market).map_err(|e| err(&self.name, format!("{}: {e}", t.id))))
+                    .map(|t| quantparity::value_in(t, &market).map_err(|e| err(&self.name, format!("{}: {e}", t.id))))
                     .collect();
                 Ok(serde_json::to_value(vals?).unwrap())
             }
@@ -368,12 +368,12 @@ impl Step for BuiltinStep {
                 let market = self.market_value(inputs)?;
                 let table = self.dep(inputs, "scenarios", 1)?;
                 let label = self.params.get("label").and_then(Value::as_str);
-                let sc = mf_pricing::risk::scenarios_from_table(table, label).map_err(|e| err(&self.name, e))?;
-                let (base, pnl) = mf_pricing::risk::revalue(&trades, &market, &sc).map_err(|e| err(&self.name, e))?;
+                let sc = quantparity::risk::scenarios_from_table(table, label).map_err(|e| err(&self.name, e))?;
+                let (base, pnl) = quantparity::risk::revalue(&trades, &market, &sc).map_err(|e| err(&self.name, e))?;
                 let totals: Vec<f64> = pnl.iter().map(|p| p.pnl).collect();
                 let cv = param_f64(&self.params, "var_confidence", 0.99);
                 let ce = param_f64(&self.params, "es_confidence", 0.975);
-                let r = mf_pricing::risk::var_es(&totals, cv, ce).ok_or_else(|| err(&self.name, "aucun scénario"))?;
+                let r = quantparity::risk::var_es(&totals, cv, ce).ok_or_else(|| err(&self.name, "aucun scénario"))?;
                 let mut order: Vec<usize> = (0..pnl.len()).collect();
                 order.sort_by(|&a, &b| totals[a].partial_cmp(&totals[b]).unwrap());
                 let worst: Vec<Value> = order
@@ -422,18 +422,18 @@ impl Step for BuiltinStep {
             "sensitivities" => {
                 let trades = trades_from_value(self.dep(inputs, "trades", 0)?).map_err(|e| err(&self.name, e))?;
                 let market = self.market_value(inputs)?;
-                let s = mf_pricing::risk::sensitivities(&trades, &market).map_err(|e| err(&self.name, e))?;
+                let s = quantparity::risk::sensitivities(&trades, &market).map_err(|e| err(&self.name, e))?;
                 Ok(json!({"factors": s}))
             }
             "stress_test" => {
                 let trades = trades_from_value(self.dep(inputs, "trades", 0)?).map_err(|e| err(&self.name, e))?;
                 let market = self.market_value(inputs)?;
                 let doc = self.dep(inputs, "scenarios", 1)?;
-                let sc: Vec<mf_pricing::risk::Scenario> =
+                let sc: Vec<quantparity::risk::Scenario> =
                     serde_json::from_value(doc.get("scenarios").cloned().unwrap_or_else(|| doc.clone()))
                         .map_err(|e| err(&self.name, format!("scénarios invalides : {e}")))?;
-                let r = mf_pricing::risk::stress(&trades, &market, &sc).map_err(|e| err(&self.name, e))?;
-                let status = r.iter().map(|x| x.status).max().unwrap_or(mf_validate::Status::Pass);
+                let r = quantparity::risk::stress(&trades, &market, &sc).map_err(|e| err(&self.name, e))?;
+                let status = r.iter().map(|x| x.status).max().unwrap_or(quantparity::Status::Pass);
                 Ok(json!({"scenarios": r, "status": status}))
             }
             // Test d'attribution du P&L (FRTB) : P&L hypothétique contre P&L théorique.
@@ -452,13 +452,13 @@ impl Step for BuiltinStep {
                         &self.name,
                     )?,
                     None => {
-                        let sens: Vec<mf_pricing::risk::Sensitivity> =
+                        let sens: Vec<quantparity::risk::Sensitivity> =
                             serde_json::from_value(self.dep(inputs, "sensitivities", 1)?["factors"].clone())
                                 .map_err(|e| err(&self.name, format!("sensibilités invalides : {e}")))?;
                         let label = self.params.get("label").and_then(Value::as_str);
-                        let sc = mf_pricing::risk::scenarios_from_table(self.dep(inputs, "scenarios", 2)?, label)
+                        let sc = quantparity::risk::scenarios_from_table(self.dep(inputs, "scenarios", 2)?, label)
                             .map_err(|e| err(&self.name, e))?;
-                        mf_pricing::risk::risk_theoretical_pnl(&sens, &sc)
+                        quantparity::risk::risk_theoretical_pnl(&sens, &sc)
                     }
                 };
                 if hpl.len() != rtpl.len() {
@@ -469,7 +469,7 @@ impl Step for BuiltinStep {
                 }
                 let min = param_f64(&self.params, "min_observations", 250.0) as usize;
                 self.json(
-                    mf_pricing::risk::pnl_attribution(&hpl, &rtpl, min),
+                    quantparity::risk::pnl_attribution(&hpl, &rtpl, min),
                     "séries insuffisantes",
                 )
             }
@@ -482,7 +482,7 @@ impl Step for BuiltinStep {
                     None if all.len() == 1 => all[0].clone(),
                     None => return Err(err(&self.name, "plusieurs courbes : préciser `curve`")),
                 };
-                mf_pricing::rates::curve_report(
+                quantparity::curves::simple::curve_report(
                     &market,
                     &name,
                     param_f64(&self.params, "tolerance", 1e-10),

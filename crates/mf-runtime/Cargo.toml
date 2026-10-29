@@ -5,8 +5,7 @@ edition.workspace = true
 
 [dependencies]
 mf-core = { path = "../mf-core" }
-mf-validate = { path = "../mf-validate" }
-mf-pricing = { path = "../mf-pricing" }
+quantparity.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
