@@ -1,0 +1,45 @@
+name = "sp500-var-backtest"
+
+[[step]]
+name = "returns"
+kind = "csv"
+version = "1.0.0"
+path = "data/returns.csv"
+column = "ret"
+
+[[step]]
+name = "days"
+kind = "csv"
+version = "1.0.0"
+path = "data/returns.csv"
+column = "day"
+
+[[step]]
+name = "var_hist_99"
+kind = "var_historical"
+version = "1.0.0"
+deps = ["returns"]
+params = { alpha = 0.99 }
+
+[[step]]
+name = "backtest_hist"
+kind = "kupiec_backtest"
+version = "1.0.0"
+deps = ["returns", "days"]
+params = { series = "returns", alpha = 0.99, window = 250, dates = "days" }
+
+[[step]]
+name = "ewma_model"
+kind = "process"
+version = "0.1.0"
+deps = ["returns"]
+command = ["python3", "../../examples/var-equity/models/ewma_var.py"]
+code = ["../../examples/var-equity/models/ewma_var.py"]
+params = { lambda = 0.94, alpha = 0.99, warmup = 30 }
+
+[[step]]
+name = "backtest_ewma"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "ewma_model", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "ewma_model", dates = "days" }

@@ -1,0 +1,25 @@
+{
+ "dates": 58,
+ "identical_replays": 58,
+ "max_repricing_error": 2.194425197110661e-16,
+ "rate_10y_range": [
+  0.00027558640324989005,
+  0.035816574153
+ ],
+ "rate_3m_range": [
+  -0.007342496460332337,
+  0.038240556492
+ ],
+ "derived_below_1y_max_bp": 86.95109675708127,
+ "derived_below_1y_median_bp": 13.47876408000002,
+ "derived_pillars_max_bp": 2.2204460492503127e-12,
+ "derived_pillars_median_bp": 2.220446049250313e-13,
+ "derived_between_pillars_max_bp": 6.7588315035292235,
+ "derived_between_pillars_median_bp": 0.02573195549142148,
+ "naive_below_1y_max_bp": 85.6714397648793,
+ "naive_below_1y_median_bp": 14.172241616441557,
+ "naive_pillars_max_bp": 7.516064255548985,
+ "naive_pillars_median_bp": 3.3974303047762087,
+ "naive_between_pillars_max_bp": 11.895448189563119,
+ "naive_between_pillars_median_bp": 3.410552582474937
+}
