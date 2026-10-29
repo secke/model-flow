@@ -1,7 +1,7 @@
-"""Historique synthétique de 300 jours de variations de facteurs de risque (déterministe).
-Corrélations : baisse des actions avec hausse des volatilités, courbes €STR et Euribor liées, OAT liée aux taux.
-Une semaine de crise (jours 200 à 206) épaissit la queue de distribution.
-Unités : SPOT relatif (0,01 = +1 %), VOL absolu (0,01 = +1 point), CURVE et YIELD en points de base."""
+"""Synthetic 300-day history of risk factor changes (deterministic).
+Correlations: equities fall as volatilities rise, linked €STR and Euribor curves, OAT linked to rates.
+A crisis week (days 200 to 206) fattens the tail of the distribution.
+Units: SPOT relative (0.01 = +1%), VOL absolute (0.01 = +1 point), CURVE and YIELD in basis points."""
 import math, random
 
 rng = random.Random(2026)
@@ -11,7 +11,7 @@ rows = []
 for d in range(1, 301):
     crisis = 200 <= d <= 206
     k = 3.0 if crisis else 1.0
-    t = rng.gauss(0, 1) / math.sqrt(rng.gammavariate(2.5, 1 / 2.5))  # queues épaisses
+    t = rng.gauss(0, 1) / math.sqrt(rng.gammavariate(2.5, 1 / 2.5))  # fat tails
     eq = (-0.012 if crisis else 0.0) + 0.012 * k * t
     cac = 0.9 * eq + 0.006 * k * rng.gauss(0, 1)
     rates = 4.5 * k * rng.gauss(0, 1) - (8 if crisis else 0)

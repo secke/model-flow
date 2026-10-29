@@ -1,7 +1,7 @@
-"""Pricer candidat QuantLib pour les produits de taux (courbe mono-devise, mono-courbe).
-Conventions alignées sur la référence : calendrier nul, dates non ajustées et SimpleDayCounter
-(fraction d'année = mois / 12), bootstrap PiecewiseLogLinearDiscount.
-Protocole ModelFlow : JSON sur stdin -> JSON sur stdout."""
+"""QuantLib candidate pricer for rates products (single-currency, single-curve).
+Conventions aligned with the reference: null calendar, unadjusted dates and SimpleDayCounter
+(year fraction = months / 12), PiecewiseLogLinearDiscount bootstrap.
+ModelFlow protocol: JSON on stdin -> JSON on stdout."""
 import json, sys
 
 import QuantLib as ql
@@ -19,7 +19,7 @@ FREQ = {1: ql.Annual, 2: ql.Semiannual, 4: ql.Quarterly, 12: ql.Monthly}
 def months(t):
     m = round(t * 12)
     if abs(m - t * 12) > 1e-9:
-        raise ValueError(f"maturité {t} non entière en mois")
+        raise ValueError(f"maturity {t} is not a whole number of months")
     return m
 
 

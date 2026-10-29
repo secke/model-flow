@@ -1,22 +1,22 @@
-// ModelFlow — console de validation. Aucune dépendance ; tout le contenu est inséré en texte (pas d'innerHTML).
+// ModelFlow — validation console. No dependencies; all content is inserted as text (no innerHTML).
 "use strict";
 
 const app = document.getElementById("app");
 const TOKEN_KEY = "mf.token";
-const LABELS = { pass: "Conforme", warn: "Réserves", fail: "Non conforme", approved: "Approuvée", rejected: "Rejetée" };
+const LABELS = { pass: "Pass", warn: "Warning", fail: "Fail", approved: "Approved", rejected: "Rejected" };
 const MODEL_STATES = {
-  development: ["En développement", "none"],
-  in_validation: ["En validation", "warn"],
-  approved: ["Approuvé", "pass"],
-  in_use: ["En usage", "pass"],
-  retired: ["Retiré", "none"],
+  development: ["In development", "none"],
+  in_validation: ["In validation", "warn"],
+  approved: ["Approved", "pass"],
+  in_use: ["In use", "pass"],
+  retired: ["Retired", "none"],
 };
-const TIERS = { 1: "1 — risque élevé", 2: "2 — risque modéré", 3: "3 — risque faible" };
-const ROLES = { admin: "Administrateur", model_owner: "Propriétaire de modèle", validator: "Validateur", auditor: "Auditeur" };
+const TIERS = { 1: "1 — high risk", 2: "2 — medium risk", 3: "3 — low risk" };
+const ROLES = { admin: "Administrator", model_owner: "Model owner", validator: "Validator", auditor: "Auditor" };
 
 let session = { token: null, me: null, config: null };
 
-// ---------- Utilitaires ----------
+// ---------- Utilities ----------
 function el(tag, attrs = {}, ...children) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -34,11 +34,11 @@ function el(tag, attrs = {}, ...children) {
 
 function state(s) {
   const key = s || "none";
-  return el("span", { class: `state ${key}` }, LABELS[key] || "Sans contrôle");
+  return el("span", { class: `state ${key}` }, LABELS[key] || "No checks");
 }
 
 function when(ts) {
-  return new Date(ts * 1000).toLocaleString("fr-FR", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+  return new Date(ts * 1000).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
 }
 
 function short(hash) {
@@ -65,13 +65,13 @@ async function api(path, opts = {}) {
   }
   const res = await fetch(path, { method: opts.method || "GET", headers, body: opts.body });
   if (res.status === 401) {
-    logout("Votre session a expiré ou le jeton est refusé. Reconnectez-vous.");
-    throw new ApiError(401, "non authentifié");
+    logout("Your session has expired or the token was rejected. Please sign in again.");
+    throw new ApiError(401, "not authenticated");
   }
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-  if (!res.ok) throw new ApiError(res.status, (data && data.error) || `erreur ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status, (data && data.error) || `error ${res.status}`);
   return data;
 }
 
@@ -79,7 +79,7 @@ function can(...roles) {
   return session.me && roles.includes(session.me.role);
 }
 
-// ---------- SSO : authorization code + PKCE ----------
+// ---------- SSO: authorization code + PKCE ----------
 function b64url(bytes) {
   return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
@@ -111,8 +111,8 @@ async function finishSso(params) {
   const saved = JSON.parse(sessionStorage.getItem("mf.pkce") || "null");
   sessionStorage.removeItem("mf.pkce");
   history.replaceState(null, "", "/" + ((saved && saved.back) || "#/"));
-  if (params.get("error")) throw new Error(`Connexion refusée par le fournisseur d'identité : ${params.get("error_description") || params.get("error")}`);
-  if (!saved || saved.state !== params.get("state")) throw new Error("Réponse de connexion inattendue (paramètre state différent). Relancez la connexion.");
+  if (params.get("error")) throw new Error(`Sign-in rejected by the identity provider: ${params.get("error_description") || params.get("error")}`);
+  if (!saved || saved.state !== params.get("state")) throw new Error("Unexpected sign-in response (state parameter mismatch). Please sign in again.");
   const sso = session.config.sso;
   const res = await fetch(sso.token_endpoint, {
     method: "POST",
@@ -126,7 +126,7 @@ async function finishSso(params) {
     }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.access_token) throw new Error(`Échange du code refusé : ${data.error_description || data.error || res.status}`);
+  if (!res.ok || !data.access_token) throw new Error(`Code exchange rejected: ${data.error_description || data.error || res.status}`);
   return data.access_token;
 }
 
@@ -158,34 +158,34 @@ function renderLogin(message, error) {
       }
     },
   },
-    el("div", { class: "field" }, el("label", { for: "token" }, "Jeton de service"), tokenInput),
-    el("button", { class: "btn", type: "submit" }, "Se connecter avec le jeton"),
+    el("div", { class: "field" }, el("label", { for: "token" }, "Service token"), tokenInput),
+    el("button", { class: "btn", type: "submit" }, "Sign in with the token"),
   );
   app.replaceChildren(el("div", { class: "login" }, el("div", { class: "login-box" },
     el("h1", {}, "ModelFlow"),
-    el("p", { class: "lead" }, "Validation des modèles : exécutions, rejeu, décisions et piste d'audit."),
+    el("p", { class: "lead" }, "Model validation: runs, replay, decisions and audit trail."),
     message && el("div", { class: "notice" }, message),
     error && el("div", { class: "notice fail", role: "alert" }, error),
-    sso && el("button", { class: "btn primary", id: "sso", onclick: () => startSso().catch((e) => renderLogin(null, e.message)) }, "Se connecter avec le compte de l'entreprise"),
-    sso && session.config.service_tokens && el("p", { class: "sep" }, "Ou, pour un compte de service :"),
+    sso && el("button", { class: "btn primary", id: "sso", onclick: () => startSso().catch((e) => renderLogin(null, e.message)) }, "Sign in with your company account"),
+    sso && session.config.service_tokens && el("p", { class: "sep" }, "Or, for a service account:"),
     (!sso || session.config.service_tokens) && form,
   )));
 }
 
-// ---------- Mise en page ----------
+// ---------- Layout ----------
 function layout(current, ...content) {
   const link = (href, label, key) => el("li", {}, el("a", { href, "aria-current": current === key ? "page" : null }, label));
   return el("div", { class: "shell" },
-    el("nav", { class: "nav", "aria-label": "Navigation principale" },
-      el("div", { class: "brand" }, "ModelFlow", el("small", {}, "Validation des modèles")),
+    el("nav", { class: "nav", "aria-label": "Main navigation" },
+      el("div", { class: "brand" }, "ModelFlow", el("small", {}, "Model validation")),
       el("ul", {},
         link("#/", "Pipelines", "pipelines"),
-        link("#/models", "Inventaire des modèles", "models"),
-        can("auditor", "admin") && link("#/audit", "Journal d'audit", "audit"),
+        link("#/models", "Model inventory", "models"),
+        can("auditor", "admin") && link("#/audit", "Audit log", "audit"),
       ),
       el("div", { class: "who" },
         el("div", {}, el("strong", {}, session.me.name), ROLES[session.me.role] || session.me.role),
-        el("button", { onclick: () => logout("Vous êtes déconnecté.") }, "Se déconnecter"),
+        el("button", { onclick: () => logout("You are signed out.") }, "Sign out"),
       ),
     ),
     el("main", { id: "main", tabindex: "-1" }, ...content),
@@ -198,7 +198,7 @@ function show(current, ...content) {
 
 function failure(err) {
   if (err.status === 401) return;
-  show("", el("div", { class: "notice fail", role: "alert" }, err.message), el("p", {}, el("a", { href: "#/" }, "Revenir aux pipelines")));
+  show("", el("div", { class: "notice fail", role: "alert" }, err.message), el("p", {}, el("a", { href: "#/" }, "Back to pipelines")));
 }
 
 // ---------- Pipelines ----------
@@ -208,16 +208,16 @@ async function viewPipelines() {
     el("td", {}, el("a", { href: `#/p/${enc(p.name)}` }, p.name)),
     el("td", { class: "num" }, p.steps.length),
     el("td", { class: "num" }, p.runs),
-    el("td", {}, p.last_run ? when(p.last_run.created_at) : el("span", { class: "muted" }, "Jamais exécuté")),
+    el("td", {}, p.last_run ? when(p.last_run.created_at) : el("span", { class: "muted" }, "Never run")),
     el("td", {}, p.last_run ? state(p.last_run.status) : ""),
-    el("td", {}, p.last_run && p.last_run.decision ? state(p.last_run.decision) : el("span", { class: "muted" }, p.last_run ? "En attente" : "")),
+    el("td", {}, p.last_run && p.last_run.decision ? state(p.last_run.decision) : el("span", { class: "muted" }, p.last_run ? "Pending" : "")),
   ));
   show("pipelines",
     el("h1", {}, "Pipelines"),
-    el("p", { class: "lead" }, "Chaque pipeline enchaîne données, modèles et tests de validation. Ouvrez-en un pour lancer une exécution ou statuer sur la dernière."),
+    el("p", { class: "lead" }, "Each pipeline chains data, models and validation tests. Open one to trigger a run or decide on the latest one."),
     el("div", { class: "table-wrap" }, list.length
-      ? el("table", {}, el("thead", {}, el("tr", {}, ["Pipeline", "Étapes", "Exécutions", "Dernière exécution", "Résultat", "Décision"].map((h) => el("th", { scope: "col" }, h)))), el("tbody", {}, rows))
-      : el("p", { class: "empty" }, "Aucun pipeline dans l'espace de travail. Ajoutez un dossier contenant un fichier pipeline.toml.")),
+      ? el("table", {}, el("thead", {}, el("tr", {}, ["Pipeline", "Steps", "Runs", "Latest run", "Result", "Decision"].map((h) => el("th", { scope: "col" }, h)))), el("tbody", {}, rows))
+      : el("p", { class: "empty" }, "No pipeline in the workspace. Add a directory containing a pipeline.toml file.")),
   );
 }
 
@@ -229,47 +229,47 @@ async function viewPipeline(name) {
     class: "btn primary", id: "launch",
     onclick: async (e) => {
       e.target.disabled = true;
-      status.replaceChildren(el("div", { class: "progress" }, "Exécution en file d'attente…"));
+      status.replaceChildren(el("div", { class: "progress" }, "Run queued…"));
       try {
         const job = await api(`/api/pipelines/${enc(name)}/runs`, { method: "POST" });
         for (;;) {
           await new Promise((r) => setTimeout(r, 800));
           const j = await api(job.href);
-          if (j.status === "running") status.replaceChildren(el("div", { class: "progress" }, "Exécution en cours…"));
+          if (j.status === "running") status.replaceChildren(el("div", { class: "progress" }, "Run in progress…"));
           if (j.status === "succeeded") { location.hash = `#/p/${enc(name)}/r/${j.run_id}`; return; }
-          if (j.status === "failed") throw new Error(`L'exécution a échoué : ${j.error}`);
+          if (j.status === "failed") throw new Error(`The run failed: ${j.error}`);
         }
       } catch (err) {
         e.target.disabled = false;
         status.replaceChildren(el("div", { class: "notice fail", role: "alert" }, err.message));
       }
     },
-  }, "Lancer une exécution");
+  }, "Trigger a run");
   const rows = runs.slice().reverse().map((r) => el("tr", { class: "link", tabindex: 0, onclick: () => (location.hash = `#/p/${enc(name)}/r/${r.id}`), onkeydown: (e) => e.key === "Enter" && (location.hash = `#/p/${enc(name)}/r/${r.id}`) },
     el("td", { class: "num" }, el("a", { href: `#/p/${enc(name)}/r/${r.id}` }, `#${r.id}`)),
     el("td", {}, when(r.created_at)),
     el("td", {}, r.triggered_by),
     el("td", {}, state(r.status)),
-    el("td", {}, r.decision ? state(r.decision) : el("span", { class: "muted" }, "En attente")),
+    el("td", {}, r.decision ? state(r.decision) : el("span", { class: "muted" }, "Pending")),
     el("td", { class: "hash" }, short(r.run_hash)),
   ));
   show("pipelines",
     el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Pipelines")),
-    el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, name), el("p", { class: "lead" }, p ? `${p.steps.length} étapes : ${p.steps.map((s) => s.name).join(", ")}.` : "")), launch),
+    el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, name), el("p", { class: "lead" }, p ? `${p.steps.length} steps: ${p.steps.map((s) => s.name).join(", ")}.` : "")), launch),
     p && (p.model || p.schedule) && el("dl", { class: "facts" },
-      p.model && el("div", {}, el("dt", {}, "Modèle"), el("dd", {}, el("a", { href: `#/models/${enc(p.model)}` }, p.model))),
-      p.schedule && el("div", {}, el("dt", {}, "Planification (UTC)"), el("dd", { class: "hash" }, p.schedule)),
-      p.next_run && el("div", {}, el("dt", {}, "Prochaine exécution"), el("dd", {}, when(p.next_run))),
+      p.model && el("div", {}, el("dt", {}, "Model"), el("dd", {}, el("a", { href: `#/models/${enc(p.model)}` }, p.model))),
+      p.schedule && el("div", {}, el("dt", {}, "Schedule (UTC)"), el("dd", { class: "hash" }, p.schedule)),
+      p.next_run && el("div", {}, el("dt", {}, "Next run"), el("dd", {}, when(p.next_run))),
     ),
     status,
-    el("h2", {}, "Exécutions"),
+    el("h2", {}, "Runs"),
     el("div", { class: "table-wrap" }, runs.length
-      ? el("table", {}, el("thead", {}, el("tr", {}, ["N°", "Date", "Lancée par", "Résultat", "Décision", "Empreinte"].map((h) => el("th", { scope: "col" }, h)))), el("tbody", {}, rows))
-      : el("p", { class: "empty" }, can("model_owner", "admin") ? "Aucune exécution. Lancez la première avec le bouton ci-dessus." : "Aucune exécution pour l'instant.")),
+      ? el("table", {}, el("thead", {}, el("tr", {}, ["No.", "Date", "Triggered by", "Result", "Decision", "Fingerprint"].map((h) => el("th", { scope: "col" }, h)))), el("tbody", {}, rows))
+      : el("p", { class: "empty" }, can("model_owner", "admin") ? "No runs yet. Trigger the first one with the button above." : "No runs yet.")),
   );
 }
 
-// ---------- Exécution ----------
+// ---------- Run ----------
 async function viewRun(name, id) {
   const base = `/api/pipelines/${enc(name)}/runs/${id}`;
   const [runs, decisions, report] = await Promise.all([
@@ -278,7 +278,7 @@ async function viewRun(name, id) {
     fetch(`${base}/report?no_verify=true`, { headers: { Authorization: `Bearer ${session.token}` } }).then((r) => (r.ok ? r.text() : null)),
   ]);
   const run = runs.find((r) => r.id === Number(id));
-  if (!run) throw new Error(`L'exécution #${id} n'existe pas pour ${name}.`);
+  if (!run) throw new Error(`Run #${id} does not exist for ${name}.`);
   const sealClass = run.status || "none";
 
   const replay = el("div", { id: "replay" });
@@ -286,26 +286,26 @@ async function viewRun(name, id) {
     class: "btn", id: "verify",
     onclick: async (e) => {
       e.target.disabled = true;
-      replay.replaceChildren(el("div", { class: "progress" }, "Rejeu en cours : le pipeline est réexécuté et comparé à l'enregistrement…"));
+      replay.replaceChildren(el("div", { class: "progress" }, "Replay in progress: the pipeline is re-run and compared with the record…"));
       try {
         const v = await api(`${base}/verify`, { method: "POST" });
         replay.replaceChildren(v.reproducible
-          ? el("div", { class: "notice pass" }, "Rejeu identique : données, code et résultats correspondent à l'enregistrement.")
-          : el("div", { class: "notice fail", role: "alert" }, "Le rejeu diffère de l'enregistrement :", el("ul", {}, v.mismatches.map((m) => el("li", {}, `${m.step} : ${m.reason}`)))));
+          ? el("div", { class: "notice pass" }, "Identical replay: data, code and results match the record.")
+          : el("div", { class: "notice fail", role: "alert" }, "The replay differs from the record:", el("ul", {}, v.mismatches.map((m) => el("li", {}, `${m.step}: ${m.reason}`)))));
       } catch (err) {
         replay.replaceChildren(el("div", { class: "notice fail", role: "alert" }, err.message));
       } finally {
         e.target.disabled = false;
       }
     },
-  }, "Rejouer l'exécution");
+  }, "Replay the run");
 
   let decide = null;
   if (can("validator")) {
     if (run.triggered_by === session.me.name) {
-      decide = el("p", { class: "muted" }, "Vous avez lancé cette exécution : un autre validateur doit statuer (séparation des tâches).");
+      decide = el("p", { class: "muted" }, "You triggered this run: another validator must decide (segregation of duties).");
     } else {
-      const comment = el("textarea", { id: "comment", placeholder: "Constats, réserves, conditions d'utilisation…" });
+      const comment = el("textarea", { id: "comment", placeholder: "Findings, reservations, conditions of use…" });
       const msg = el("div");
       const send = async (decision) => {
         try {
@@ -316,57 +316,57 @@ async function viewRun(name, id) {
         }
       };
       decide = el("div", {},
-        el("div", { class: "field" }, el("label", { for: "comment" }, "Commentaire (obligatoire pour un rejet)"), comment),
+        el("div", { class: "field" }, el("label", { for: "comment" }, "Comment (required for a rejection)"), comment),
         el("div", { class: "actions" },
-          el("button", { class: "btn approve", id: "approve", onclick: () => send("approved") }, "Approuver"),
-          el("button", { class: "btn reject", id: "reject", onclick: () => send("rejected") }, "Rejeter"),
+          el("button", { class: "btn approve", id: "approve", onclick: () => send("approved") }, "Approve"),
+          el("button", { class: "btn reject", id: "reject", onclick: () => send("rejected") }, "Reject"),
         ),
-        el("p", { class: "muted" }, "La décision n'est enregistrée que si le rejeu est identique."),
+        el("p", { class: "muted" }, "The decision is only recorded if the replay is identical."),
         msg,
       );
     }
   }
 
-  const frame = el("iframe", { class: "report", title: `Rapport de validation ${name} #${id}`, sandbox: "" });
-  frame.srcdoc = report || "<p>Rapport indisponible.</p>";
+  const frame = el("iframe", { class: "report", title: `Validation report ${name} #${id}`, sandbox: "" });
+  frame.srcdoc = report || "<p>Report unavailable.</p>";
 
   show("pipelines",
     el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Pipelines"), " / ", el("a", { href: `#/p/${enc(name)}` }, name)),
     el("div", { class: "run-head" },
-      el("div", { class: `seal ${sealClass}`, role: "img", "aria-label": `Résultat : ${LABELS[sealClass] || "sans contrôle"}, empreinte ${short(run.run_hash)}` },
-        el("div", {}, el("div", { class: "verdict" }, LABELS[sealClass] || "Sans contrôle"), el("div", { class: "print" }, run.run_hash.slice(0, 8))),
+      el("div", { class: `seal ${sealClass}`, role: "img", "aria-label": `Result: ${LABELS[sealClass] || "no checks"}, fingerprint ${short(run.run_hash)}` },
+        el("div", {}, el("div", { class: "verdict" }, LABELS[sealClass] || "No checks"), el("div", { class: "print" }, run.run_hash.slice(0, 8))),
       ),
       el("div", {},
-        el("h1", {}, `${name}, exécution #${id}`),
+        el("h1", {}, `${name}, run #${id}`),
         el("dl", { class: "facts" },
-          el("div", {}, el("dt", {}, "Lancée le"), el("dd", {}, when(run.created_at))),
-          el("div", {}, el("dt", {}, "Par"), el("dd", {}, run.triggered_by)),
-          el("div", {}, el("dt", {}, "Décision"), el("dd", {}, run.decision ? state(run.decision) : "En attente")),
-          el("div", {}, el("dt", {}, "Empreinte de l'exécution"), el("dd", { class: "hash", title: run.run_hash }, short(run.run_hash))),
+          el("div", {}, el("dt", {}, "Triggered on"), el("dd", {}, when(run.created_at))),
+          el("div", {}, el("dt", {}, "By"), el("dd", {}, run.triggered_by)),
+          el("div", {}, el("dt", {}, "Decision"), el("dd", {}, run.decision ? state(run.decision) : "Pending")),
+          el("div", {}, el("dt", {}, "Run fingerprint"), el("dd", { class: "hash", title: run.run_hash }, short(run.run_hash))),
         ),
       ),
     ),
     el("div", { class: "columns" },
-      el("section", { "aria-label": "Rapport de validation" }, el("h2", {}, "Rapport de validation"), frame),
+      el("section", { "aria-label": "Validation report" }, el("h2", {}, "Validation report"), frame),
       el("aside", {},
-        el("div", { class: "panel" }, el("h2", {}, "Reproductibilité"),
-          el("p", { class: "muted" }, "Le rejeu réexécute le pipeline et compare chaque empreinte (données, code, résultats)."),
+        el("div", { class: "panel" }, el("h2", {}, "Reproducibility"),
+          el("p", { class: "muted" }, "Replay re-runs the pipeline and compares every fingerprint (data, code, results)."),
           replayBtn, replay),
-        el("div", { class: "panel" }, el("h2", {}, "Décisions"),
+        el("div", { class: "panel" }, el("h2", {}, "Decisions"),
           decisions.length
             ? el("ul", { class: "timeline" }, decisions.map((d) => el("li", { class: d.decision },
                 el("div", {}, state(d.decision), " ", el("strong", {}, d.user)),
                 el("div", { class: "meta" }, when(d.created_at)),
                 d.comment && el("p", {}, d.comment))))
-            : el("p", { class: "muted" }, "Aucune décision pour cette exécution."),
-          decide && el("h2", {}, "Statuer"),
+            : el("p", { class: "muted" }, "No decision for this run."),
+          decide && el("h2", {}, "Decide"),
           decide),
       ),
     ),
   );
 }
 
-// ---------- Inventaire des modèles ----------
+// ---------- Model inventory ----------
 function modelState(s) {
   const [label, cls] = MODEL_STATES[s] || [s, "none"];
   return el("span", { class: `state ${cls}` }, label);
@@ -395,12 +395,12 @@ function modelForm(initial, onSave, submitLabel) {
       }
     },
   },
-    field("id", "Identifiant", initial ? null : "Lettres, chiffres, points, tirets. Le même identifiant se déclare dans pipeline.toml (model = …)."),
-    field("name", "Nom"),
-    field("owner", "Propriétaire"),
-    field("purpose", "Usage"),
-    field("tier", "Niveau de risque"),
-    field("review", "Prochaine revue"),
+    field("id", "Identifier", initial ? null : "Letters, digits, dots, dashes. The same identifier is declared in pipeline.toml (model = …)."),
+    field("name", "Name"),
+    field("owner", "Owner"),
+    field("purpose", "Purpose"),
+    field("tier", "Risk tier"),
+    field("review", "Next review"),
     el("div", { class: "actions" }, el("button", { class: "btn primary", type: "submit", id: "m-save" }, submitLabel)),
     msg,
   );
@@ -414,8 +414,8 @@ async function viewModels() {
     onclick: () => createBox.replaceChildren(modelForm(null, async (m) => {
       await api("/api/models", { method: "POST", json: m });
       location.hash = `#/models/${enc(m.id)}`;
-    }, "Enregistrer le modèle")),
-  }, "Enregistrer un modèle");
+    }, "Register the model")),
+  }, "Register a model");
   const rows = data.models.map((m) => {
     const last = m.pipelines.map((p) => p.last_run).filter(Boolean).sort((a, b) => b.created_at - a.created_at)[0];
     return el("tr", { class: "link", tabindex: 0, onclick: () => (location.hash = `#/models/${enc(m.id)}`), onkeydown: (e) => e.key === "Enter" && (location.hash = `#/models/${enc(m.id)}`) },
@@ -424,25 +424,25 @@ async function viewModels() {
       el("td", {}, m.owner),
       el("td", { class: "num" }, m.tier),
       el("td", {}, modelState(m.status)),
-      el("td", {}, m.next_review ? (m.review_overdue ? el("span", { class: "state fail" }, `En retard (${m.next_review})`) : m.next_review) : el("span", { class: "muted" }, "Non fixée")),
-      el("td", {}, m.pipelines.length ? m.pipelines.map((p) => p.pipeline).join(", ") : el("span", { class: "muted" }, "Aucun")),
-      el("td", {}, last ? state(last.status) : el("span", { class: "muted" }, "Jamais exécuté")),
+      el("td", {}, m.next_review ? (m.review_overdue ? el("span", { class: "state fail" }, `Overdue (${m.next_review})`) : m.next_review) : el("span", { class: "muted" }, "Not set")),
+      el("td", {}, m.pipelines.length ? m.pipelines.map((p) => p.pipeline).join(", ") : el("span", { class: "muted" }, "None")),
+      el("td", {}, last ? state(last.status) : el("span", { class: "muted" }, "Never run")),
     );
   });
   show("models",
-    el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, "Inventaire des modèles"), el("p", { class: "lead" }, "Chaque modèle, son propriétaire, son niveau de risque, son statut et sa prochaine revue. Seul un validateur peut approuver un modèle.")), add),
+    el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, "Model inventory"), el("p", { class: "lead" }, "Every model, its owner, risk tier, status and next review. Only a validator can approve a model.")), add),
     createBox,
     el("div", { class: "table-wrap" }, data.models.length
-      ? el("table", {}, el("thead", {}, el("tr", {}, ["Identifiant", "Nom", "Propriétaire", "Niveau", "Statut", "Prochaine revue", "Pipelines", "Dernier résultat"].map((h) => el("th", { scope: "col" }, h)))), el("tbody", {}, rows))
-      : el("p", { class: "empty" }, "Aucun modèle enregistré.")),
-    data.unregistered.length > 0 && el("div", { class: "notice" }, `Pipelines rattachés à un modèle absent de l'inventaire : ${data.unregistered.join(", ")}.`),
+      ? el("table", {}, el("thead", {}, el("tr", {}, ["Identifier", "Name", "Owner", "Tier", "Status", "Next review", "Pipelines", "Latest result"].map((h) => el("th", { scope: "col" }, h)))), el("tbody", {}, rows))
+      : el("p", { class: "empty" }, "No registered model.")),
+    data.unregistered.length > 0 && el("div", { class: "notice" }, `Pipelines linked to a model missing from the inventory: ${data.unregistered.join(", ")}.`),
   );
 }
 
 async function viewModel(id) {
   const data = await api("/api/models");
   const m = data.models.find((x) => x.id === id);
-  if (!m) throw new Error(`Le modèle ${id} n'est pas dans l'inventaire.`);
+  if (!m) throw new Error(`Model ${id} is not in the inventory.`);
   const msg = el("div");
   const setStatus = async (status) => {
     try {
@@ -456,49 +456,49 @@ async function viewModel(id) {
   const btn = (to, label, cls = "btn") => el("button", { class: cls, id: `status-${to}`, onclick: () => setStatus(to) }, label);
   const actions = [];
   if (can("validator") && m.status !== "retired") {
-    if (m.status !== "approved") actions.push(btn("approved", "Approuver le modèle", "btn approve"));
-    if (m.status !== "in_validation") actions.push(btn("in_validation", "Renvoyer en validation"));
+    if (m.status !== "approved") actions.push(btn("approved", "Approve the model", "btn approve"));
+    if (m.status !== "in_validation") actions.push(btn("in_validation", "Send back to validation"));
   }
   if (own) {
-    if (m.status === "development") actions.push(btn("in_validation", "Soumettre à la validation", "btn primary"));
-    if (m.status === "approved") actions.push(btn("in_use", "Mettre en usage", "btn primary"));
-    if (m.status !== "development" && m.status !== "retired") actions.push(btn("development", "Repasser en développement"));
-    if (m.status !== "retired") actions.push(btn("retired", "Retirer le modèle", "btn reject"));
+    if (m.status === "development") actions.push(btn("in_validation", "Submit for validation", "btn primary"));
+    if (m.status === "approved") actions.push(btn("in_use", "Put into use", "btn primary"));
+    if (m.status !== "development" && m.status !== "retired") actions.push(btn("development", "Back to development"));
+    if (m.status !== "retired") actions.push(btn("retired", "Retire the model", "btn reject"));
   }
   const editBox = el("div");
   show("models",
-    el("div", { class: "crumbs" }, el("a", { href: "#/models" }, "Inventaire des modèles")),
+    el("div", { class: "crumbs" }, el("a", { href: "#/models" }, "Model inventory")),
     el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, `${m.id} · ${m.name}`), el("p", { class: "lead" }, m.purpose || "")),
       own && el("button", { class: "btn", id: "edit-model", onclick: () => editBox.replaceChildren(modelForm(m, async (u) => {
         await api(`/api/models/${enc(id)}`, { method: "PUT", json: u });
         route();
-      }, "Enregistrer les modifications")) }, "Modifier la fiche")),
+      }, "Save changes")) }, "Edit record")),
     el("dl", { class: "facts" },
-      el("div", {}, el("dt", {}, "Statut"), el("dd", {}, modelState(m.status))),
-      el("div", {}, el("dt", {}, "Propriétaire"), el("dd", {}, m.owner)),
-      el("div", {}, el("dt", {}, "Niveau de risque"), el("dd", {}, TIERS[m.tier] || m.tier)),
-      el("div", {}, el("dt", {}, "Prochaine revue"), el("dd", {}, m.next_review ? (m.review_overdue ? el("span", { class: "state fail" }, `En retard (${m.next_review})`) : m.next_review) : "Non fixée")),
-      el("div", {}, el("dt", {}, "Dernière modification"), el("dd", {}, `${when(m.updated_at)} par ${m.updated_by}`)),
+      el("div", {}, el("dt", {}, "Status"), el("dd", {}, modelState(m.status))),
+      el("div", {}, el("dt", {}, "Owner"), el("dd", {}, m.owner)),
+      el("div", {}, el("dt", {}, "Risk tier"), el("dd", {}, TIERS[m.tier] || m.tier)),
+      el("div", {}, el("dt", {}, "Next review"), el("dd", {}, m.next_review ? (m.review_overdue ? el("span", { class: "state fail" }, `Overdue (${m.next_review})`) : m.next_review) : "Not set")),
+      el("div", {}, el("dt", {}, "Last modified"), el("dd", {}, `${when(m.updated_at)} by ${m.updated_by}`)),
     ),
     actions.length > 0 && el("div", { class: "actions", id: "model-actions" }, actions),
     msg,
     editBox,
-    el("h2", {}, "Pipelines rattachés"),
+    el("h2", {}, "Linked pipelines"),
     el("div", { class: "table-wrap" }, m.pipelines.length
-      ? el("table", {}, el("thead", {}, el("tr", {}, ["Pipeline", "Planification (UTC)", "Dernière exécution", "Résultat", "Décision"].map((h) => el("th", { scope: "col" }, h)))),
+      ? el("table", {}, el("thead", {}, el("tr", {}, ["Pipeline", "Schedule (UTC)", "Latest run", "Result", "Decision"].map((h) => el("th", { scope: "col" }, h)))),
           el("tbody", {}, m.pipelines.map((p) => el("tr", {},
             el("td", {}, el("a", { href: `#/p/${enc(p.pipeline)}` }, p.pipeline)),
             el("td", { class: "hash" }, p.schedule || "—"),
-            el("td", {}, p.last_run ? el("a", { href: `#/p/${enc(p.pipeline)}/r/${p.last_run.id}` }, `#${p.last_run.id} · ${when(p.last_run.created_at)}`) : el("span", { class: "muted" }, "Jamais exécuté")),
+            el("td", {}, p.last_run ? el("a", { href: `#/p/${enc(p.pipeline)}/r/${p.last_run.id}` }, `#${p.last_run.id} · ${when(p.last_run.created_at)}`) : el("span", { class: "muted" }, "Never run")),
             el("td", {}, p.last_run ? state(p.last_run.status) : ""),
-            el("td", {}, p.last_run && p.last_run.decision ? state(p.last_run.decision) : el("span", { class: "muted" }, p.last_run ? "En attente" : "")),
+            el("td", {}, p.last_run && p.last_run.decision ? state(p.last_run.decision) : el("span", { class: "muted" }, p.last_run ? "Pending" : "")),
           ))))
-      : el("p", { class: "empty" }, `Aucun pipeline ne déclare ce modèle. Ajoutez model = "${m.id}" dans le pipeline.toml concerné.`)),
+      : el("p", { class: "empty" }, `No pipeline declares this model. Add model = "${m.id}" to the relevant pipeline.toml.`)),
   );
 }
 
 // ---------- Audit ----------
-const OUTCOMES = { ok: "Réussi", denied: "Refusé (droits)", approved: "Approuvée", rejected: "Rejetée", reproducible: "Reproductible", mismatch: "Écart au rejeu" };
+const OUTCOMES = { ok: "Succeeded", denied: "Denied (permissions)", approved: "Approved", rejected: "Rejected", reproducible: "Reproducible", mismatch: "Replay mismatch" };
 
 function outcomeClass(o) {
   if (/^(denied|refused|error|mismatch|rejected)/.test(o)) return "fail";
@@ -520,17 +520,17 @@ async function viewAudit() {
       el("td", {}, e.target),
       el("td", {}, el("span", { class: `state ${outcomeClass(e.outcome)}` }, OUTCOMES[e.outcome] || e.outcome)),
     )));
-    if (!rows.length) tbody.replaceChildren(el("tr", {}, el("td", { colspan: 6, class: "empty" }, "Aucune entrée ne correspond à ce filtre.")));
+    if (!rows.length) tbody.replaceChildren(el("tr", {}, el("td", { colspan: 6, class: "empty" }, "No entry matches this filter.")));
   };
-  const search = el("input", { type: "search", id: "filter", placeholder: "Filtrer : utilisateur, action, cible…", "aria-label": "Filtrer le journal", oninput: (e) => fill(e.target.value) });
+  const search = el("input", { type: "search", id: "filter", placeholder: "Filter: user, action, target…", "aria-label": "Filter the log", oninput: (e) => fill(e.target.value) });
   fill("");
   show("audit",
-    el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, "Journal d'audit"), el("p", { class: "lead" }, "Toutes les actions, y compris les refus. Le journal est en ajout seul : la base refuse toute modification.")), search),
-    el("div", { class: "table-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, ["Date", "Utilisateur", "Rôle", "Action", "Cible", "Résultat"].map((h) => el("th", { scope: "col" }, h)))), tbody)),
+    el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, "Audit log"), el("p", { class: "lead" }, "Every action, including denials. The log is append-only: the database rejects any modification.")), search),
+    el("div", { class: "table-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, ["Date", "User", "Role", "Action", "Target", "Outcome"].map((h) => el("th", { scope: "col" }, h)))), tbody)),
   );
 }
 
-// ---------- Routage ----------
+// ---------- Routing ----------
 async function route() {
   if (!session.token) return renderLogin();
   const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);

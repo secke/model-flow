@@ -36,7 +36,7 @@ params = { alpha = 0.99, window = 250 }
     ws
 }
 
-/// URL d'une base PostgreSQL de test neuve (MODELFLOW_TEST_DATABASE_URL), si disponible.
+/// URL of a fresh PostgreSQL test database (MODELFLOW_TEST_DATABASE_URL), if available.
 async fn pg_url(tag: &str) -> Option<String> {
     let admin = std::env::var("MODELFLOW_TEST_DATABASE_URL").ok()?;
     let name = format!("mf_api_{}_{}", tag.replace('-', "_"), std::process::id());
@@ -114,7 +114,7 @@ async fn full_validation_workflow_sqlite() {
 async fn full_validation_workflow_postgres() {
     match pg_url("flow").await {
         Some(u) => full_validation_workflow(Some(u)).await,
-        None => eprintln!("MODELFLOW_TEST_DATABASE_URL absent : test PostgreSQL ignoré"),
+        None => eprintln!("MODELFLOW_TEST_DATABASE_URL not set: PostgreSQL test skipped"),
     }
 }
 
@@ -124,14 +124,14 @@ async fn full_validation_workflow(db: Option<String>) {
     let (_, h, _) = call(&app, "GET", "/api/health", None, None).await;
     assert_eq!(h["storage"], if db.is_some() { "postgres" } else { "sqlite" });
 
-    // Authentification
+    // Authentication
     assert_eq!(call(&app, "GET", "/api/health", None, None).await.0, StatusCode::OK);
     assert_eq!(
         call(&app, "GET", "/api/pipelines", None, None).await.0,
         StatusCode::UNAUTHORIZED
     );
     assert_eq!(
-        call(&app, "GET", "/api/pipelines", Some("faux"), None).await.0,
+        call(&app, "GET", "/api/pipelines", Some("wrong"), None).await.0,
         StatusCode::UNAUTHORIZED
     );
     let (s, me, _) = call(&app, "GET", "/api/me", Some("tok-bob"), None).await;
@@ -141,7 +141,7 @@ async fn full_validation_workflow(db: Option<String>) {
     assert_eq!(s, StatusCode::OK);
     assert_eq!(list[0]["name"], "desk-var");
 
-    // Seul le propriétaire du modèle (ou un admin) lance une exécution
+    // Only the model owner (or an admin) can trigger a run
     assert_eq!(
         call(&app, "POST", "/api/pipelines/desk-var/runs", Some("tok-bob"), None)
             .await
@@ -159,13 +159,13 @@ async fn full_validation_workflow(db: Option<String>) {
     assert_eq!(s, StatusCode::CREATED, "{run}");
     assert_eq!(run["id"], 1);
     assert_eq!(
-        call(&app, "POST", "/api/pipelines/inconnu/runs", Some("tok-alice"), None)
+        call(&app, "POST", "/api/pipelines/unknown/runs", Some("tok-alice"), None)
             .await
             .0,
         StatusCode::NOT_FOUND
     );
 
-    // Rejeu
+    // Replay
     let (s, v, _) = call(
         &app,
         "POST",
@@ -176,8 +176,8 @@ async fn full_validation_workflow(db: Option<String>) {
     .await;
     assert_eq!((s, v["reproducible"].as_bool()), (StatusCode::OK, Some(true)));
 
-    // Décision : réservée au validateur, rejet motivé
-    let approve = json!({"decision": "approved", "comment": "backtest conforme"});
+    // Decision: validator only, rejection must be justified
+    let approve = json!({"decision": "approved", "comment": "backtest compliant"});
     assert_eq!(
         call(
             &app,
@@ -218,7 +218,7 @@ async fn full_validation_workflow(db: Option<String>) {
         (Some("alice"), Some("approved"))
     );
 
-    // Rapport HTML avec la décision
+    // HTML report with the decision
     let (s, _, html) = call(
         &app,
         "GET",
@@ -228,9 +228,9 @@ async fn full_validation_workflow(db: Option<String>) {
     )
     .await;
     assert_eq!(s, StatusCode::OK);
-    assert!(html.contains("Décisions de validation") && html.contains("backtest conforme"));
+    assert!(html.contains("Validation decisions") && html.contains("backtest compliant"));
 
-    // Altération des données : rejeu en écart, décision refusée
+    // Data tampering: replay mismatch, decision refused
     let csv = ws.join("desk/returns.csv");
     let original = std::fs::read_to_string(&csv).unwrap();
     let tampered: Vec<String> = original
@@ -266,7 +266,7 @@ async fn full_validation_workflow(db: Option<String>) {
         StatusCode::CONFLICT
     );
 
-    // Journal d'audit : réservé à l'auditeur, trace les refus
+    // Audit log: auditor only, records denials
     assert_eq!(
         call(&app, "GET", "/api/audit", Some("tok-alice"), None).await.0,
         StatusCode::FORBIDDEN
@@ -312,7 +312,7 @@ async fn runs_are_queued_and_tracked_sqlite() {
 async fn runs_are_queued_and_tracked_postgres() {
     match pg_url("jobs").await {
         Some(u) => runs_are_queued_and_tracked(Some(u)).await,
-        None => eprintln!("MODELFLOW_TEST_DATABASE_URL absent : test PostgreSQL ignoré"),
+        None => eprintln!("MODELFLOW_TEST_DATABASE_URL not set: PostgreSQL test skipped"),
     }
 }
 
@@ -340,7 +340,7 @@ async fn runs_are_queued_and_tracked(db: Option<String>) {
         StatusCode::NOT_FOUND
     );
 
-    // Échec d'exécution : le travail passe en `failed` avec le message d'erreur.
+    // Run failure: the job becomes `failed` with the error message.
     std::fs::write(ws.join("desk/returns.csv"), "day,ret\n0,abc\n").unwrap();
     let (s, _, body) = call(
         &app,
@@ -351,7 +351,7 @@ async fn runs_are_queued_and_tracked(db: Option<String>) {
     )
     .await;
     assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
-    assert!(body.contains("non numérique"));
+    assert!(body.contains("not numeric"));
     let _ = std::fs::remove_dir_all(&ws);
 }
 
@@ -369,7 +369,7 @@ async fn rate_limit_per_user() {
         call(&app, "GET", "/api/me", Some("tok-bob"), None).await.0,
         StatusCode::TOO_MANY_REQUESTS
     );
-    // La limite est propre à chaque utilisateur.
+    // The limit applies per user.
     assert_eq!(
         call(&app, "GET", "/api/me", Some("tok-carol"), None).await.0,
         StatusCode::OK
@@ -380,7 +380,7 @@ async fn rate_limit_per_user() {
 #[tokio::test]
 async fn postgres_audit_log_is_append_only() {
     let Some(url) = pg_url("audit").await else {
-        eprintln!("MODELFLOW_TEST_DATABASE_URL absent : test PostgreSQL ignoré");
+        eprintln!("MODELFLOW_TEST_DATABASE_URL not set: PostgreSQL test skipped");
         return;
     };
     let ws = workspace("audit-pg");
@@ -397,7 +397,7 @@ async fn postgres_audit_log_is_append_only() {
         );
         for sql in ["UPDATE audit SET outcome = 'ok'", "DELETE FROM audit", "TRUNCATE audit"] {
             let e = c.batch_execute(sql).unwrap_err();
-            assert!(e.as_db_error().unwrap().message().contains("ajout seul"), "{sql}");
+            assert!(e.as_db_error().unwrap().message().contains("append-only"), "{sql}");
         }
     })
     .await

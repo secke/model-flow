@@ -1,6 +1,6 @@
-// Test de bout en bout de l'interface : SSO (code + PKCE) avec un fournisseur simulé, puis
-// propriétaire → lance, validateur → rejoue et statue, auditeur → consulte le journal.
-// Usage : node ui-tests/e2e.cjs [chemin/vers/mf-server]   (captures dans $SHOTS, défaut ui-tests/screenshots)
+// End-to-end UI test: SSO (code + PKCE) with a simulated provider, then
+// owner → triggers, validator → replays and decides, auditor → reviews the log.
+// Usage: node ui-tests/e2e.cjs [path/to/mf-server]   (screenshots in $SHOTS, default ui-tests/screenshots)
 "use strict";
 const { chromium } = require("playwright");
 const { spawn } = require("child_process");
@@ -26,7 +26,7 @@ function freePort() {
 }
 
 function check(cond, msg) {
-  if (!cond) throw new Error(`Échec : ${msg}`);
+  if (!cond) throw new Error(`Failed: ${msg}`);
   console.log(`  ok  ${msg}`);
 }
 
@@ -76,41 +76,41 @@ roles_claim = "groups"
     await page.waitForSelector("nav.nav");
   };
   const logout = async () => {
-    await page.click("text=Se déconnecter");
+    await page.click("text=Sign out");
     await page.waitForSelector("#sso");
   };
 
   try {
-    console.log("En-têtes de sécurité");
+    console.log("Security headers");
     const h = (await fetch(origin + "/")).headers;
-    check((h.get("content-security-policy") || "").includes("script-src 'self'"), "CSP restreint les scripts à l'origine");
-    check(h.get("x-frame-options") === "DENY", "l'interface ne peut pas être encadrée");
+    check((h.get("content-security-policy") || "").includes("script-src 'self'"), "CSP restricts scripts to the origin");
+    check(h.get("x-frame-options") === "DENY", "the UI cannot be framed");
 
-    console.log("Propriétaire du modèle");
+    console.log("Model owner");
     await login("dana");
-    check((await page.textContent(".who")).includes("Propriétaire de modèle"), "rôle issu du groupe SSO");
+    check((await page.textContent(".who")).includes("Model owner"), "role derived from the SSO group");
     await page.screenshot({ path: path.join(SHOTS, "1-pipelines.png"), fullPage: true });
 
-    await page.click("text=Inventaire des modèles");
-    await page.waitForSelector("text=Pipelines rattachés à un modèle absent");
-    check(true, "un pipeline rattaché à un modèle non inventorié est signalé");
+    await page.click("text=Model inventory");
+    await page.waitForSelector("text=Pipelines linked to a model missing");
+    check(true, "a pipeline linked to an uninventoried model is flagged");
     await page.click("#new-model");
     await page.fill("#m-id", "PD-RETAIL-01");
-    await page.fill("#m-name", "Scorecard PD particuliers");
-    await page.fill("#m-purpose", "Probabilité de défaut à un an, portefeuille de détail (IRB).");
+    await page.fill("#m-name", "Retail PD scorecard");
+    await page.fill("#m-purpose", "One-year probability of default, retail portfolio (IRB).");
     await page.selectOption("#m-tier", "1");
     await page.fill("#m-review", "2027-03-31");
     await page.click("#m-save");
-    await page.waitForSelector("text=Scorecard PD particuliers");
-    check((await page.textContent(".facts")).includes("En développement"), "modèle enregistré en développement");
-    check((await page.$("#status-approved")) === null, "un propriétaire ne peut pas approuver son modèle");
+    await page.waitForSelector("text=Retail PD scorecard");
+    check((await page.textContent(".facts")).includes("In development"), "model registered in development");
+    check((await page.$("#status-approved")) === null, "an owner cannot approve their own model");
     await page.click("#status-in_validation");
-    await page.waitForSelector("text=En validation");
-    check(true, "modèle soumis à la validation");
+    await page.waitForSelector("text=In validation");
+    check(true, "model submitted for validation");
 
     await page.goto(origin + "/#/p/pd-retail-scorecard");
-    await page.waitForSelector("text=Prochaine exécution");
-    check((await page.textContent(".facts")).includes("0 6 * * 1-5"), "planification affichée sur le pipeline");
+    await page.waitForSelector("text=Next run");
+    check((await page.textContent(".facts")).includes("0 6 * * 1-5"), "schedule shown on the pipeline");
     await page.goto(origin + "/#/");
     await page.waitForSelector("text=pd-retail-scorecard");
     await page.click("text=pd-retail-scorecard");
@@ -118,76 +118,76 @@ roles_claim = "groups"
     await page.click("#launch");
     await page.waitForURL(/#\/p\/.+\/r\/1$/, { timeout: 60000 });
     await page.waitForSelector(".seal");
-    check((await page.textContent(".seal .verdict")) === "Non conforme", "le sceau affiche le verdict de l'exécution");
-    check((await page.$("#approve")) === null, "un propriétaire ne peut pas statuer");
+    check((await page.textContent(".seal .verdict")) === "Fail", "the seal shows the run verdict");
+    check((await page.$("#approve")) === null, "an owner cannot decide");
     const frame = page.frameLocator("iframe.report");
-    await frame.locator("text=Non conforme — actions requises").waitFor();
-    check(true, "le rapport de validation est affiché");
+    await frame.locator("text=Non-compliant — action required").waitFor();
+    check(true, "the validation report is displayed");
     await logout();
 
-    console.log("Validateur");
+    console.log("Validator");
     await login("eli");
     await page.goto(origin + "/#/p/pd-retail-scorecard/r/1");
     await page.waitForSelector("#verify");
     await page.click("#verify");
-    await page.waitForSelector("text=Rejeu identique", { timeout: 60000 });
-    check(true, "le rejeu confirme la reproductibilité");
+    await page.waitForSelector("text=Identical replay", { timeout: 60000 });
+    check(true, "replay confirms reproducibility");
     await page.click("#reject");
     await page.waitForSelector(".notice.fail");
-    check((await page.textContent(".notice.fail")).includes("motivé"), "un rejet sans commentaire est refusé");
-    await page.fill("#comment", "Classe 6 sous-estimée (taux observé 14,9 % pour une PD de 10 %) : recalibrage requis avant usage.");
+    check((await page.textContent(".notice.fail")).includes("justified"), "a rejection without a comment is refused");
+    await page.fill("#comment", "Grade 6 underestimated (observed rate 14.9% for a 10% PD): recalibration required before use.");
     await page.click("#reject");
     await page.waitForSelector(".timeline li.rejected");
-    check((await page.textContent(".timeline")).includes("eli"), "la décision est enregistrée et attribuée");
+    check((await page.textContent(".timeline")).includes("eli"), "the decision is recorded and attributed");
     await page.screenshot({ path: path.join(SHOTS, "2-run-validator.png"), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: path.join(SHOTS, "3-run-mobile.png"), fullPage: true });
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    check(overflow <= 0, `pas de défilement horizontal sur mobile (${overflow}px)`);
+    check(overflow <= 0, `no horizontal scrolling on mobile (${overflow}px)`);
     await page.setViewportSize({ width: 1280, height: 900 });
 
     await page.goto(origin + "/#/models/PD-RETAIL-01");
     await page.waitForSelector("#status-approved");
-    check((await page.$("#edit-model")) === null, "un validateur ne modifie pas la fiche");
+    check((await page.$("#edit-model")) === null, "a validator cannot edit the record");
     await page.click("#status-approved");
     await page.waitForSelector(".notice.fail");
-    check((await page.textContent(".notice.fail")).includes("dernière exécution rejetée"), "modèle non approuvable tant que sa dernière exécution est rejetée");
+    check((await page.textContent(".notice.fail")).includes("latest run rejected"), "model cannot be approved while its latest run is rejected");
     await page.goto(origin + "/#/models");
-    await page.waitForSelector("text=Scorecard PD particuliers");
-    await page.screenshot({ path: path.join(SHOTS, "5-inventaire.png"), fullPage: true });
+    await page.waitForSelector("text=Retail PD scorecard");
+    await page.screenshot({ path: path.join(SHOTS, "5-inventory.png"), fullPage: true });
     const stray = await page.evaluate(() => [...document.querySelector("main").childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() !== ""));
-    check(!stray, "aucun texte parasite dans la page");
+    check(!stray, "no stray text in the page");
     await logout();
 
-    console.log("Auditeur");
+    console.log("Auditor");
     await login("carol");
-    check((await page.$("text=Journal d'audit")) !== null, "le journal d'audit est accessible");
+    check((await page.$("text=Audit log")) !== null, "the audit log is accessible");
     await page.goto(origin + "/#/p/pd-retail-scorecard");
     await page.waitForSelector("h1");
-    check((await page.$("#launch")) === null, "un auditeur ne peut pas lancer d'exécution");
+    check((await page.$("#launch")) === null, "an auditor cannot trigger a run");
     await page.goto(origin + "/#/audit");
     await page.waitForSelector("#filter");
     await page.fill("#filter", "run.decide");
     const text = await page.textContent("tbody");
-    check(text.includes("eli") && text.includes("Rejetée"), "le journal trace la décision du validateur");
+    check(text.includes("eli") && text.includes("Rejected"), "the log records the validator's decision");
     await page.fill("#filter", "model.status");
-    check((await page.textContent("tbody")).includes("refused: in_validation -> approved"), "le journal trace le refus d'approbation du modèle");
-    await page.fill("#filter", "valeur-introuvable");
-    check((await page.textContent("tbody")).includes("Aucune entrée"), "le filtre du journal signale l'absence de résultat");
+    check((await page.textContent("tbody")).includes("refused: in_validation -> approved"), "the log records the refused model approval");
+    await page.fill("#filter", "value-not-found");
+    check((await page.textContent("tbody")).includes("No entry"), "the log filter reports no results");
     await page.fill("#filter", "");
     await page.screenshot({ path: path.join(SHOTS, "4-audit.png"), fullPage: true });
     await logout();
 
-    console.log("Séparation des tâches au niveau SSO");
+    console.log("Segregation of duties at SSO level");
     await page.goto(origin + "/");
     await page.click("#sso");
     await page.click("#user-fred");
     await page.waitForSelector(".notice.fail");
-    check((await page.textContent(".notice.fail")).includes("séparation des tâches"), "rôles incompatibles refusés à la connexion");
+    check((await page.textContent(".notice.fail")).includes("segregation of duties"), "incompatible roles rejected at sign-in");
 
     const csp = problems.filter((p) => /Content Security Policy|Refused/i.test(p));
-    check(csp.length === 0, `aucune violation de la politique de sécurité (${csp.join(" | ")})`);
-    console.log("\nTous les contrôles de l'interface sont passés.");
+    check(csp.length === 0, `no security policy violation (${csp.join(" | ")})`);
+    console.log("\nAll UI checks passed.");
   } finally {
     await browser.close();
     server.kill();

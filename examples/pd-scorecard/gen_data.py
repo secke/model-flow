@@ -1,5 +1,5 @@
-"""Génère deux portefeuilles synthétiques (développement et revue annuelle) pour un modèle de PD à 7 classes.
-Le portefeuille courant glisse vers les classes risquées et la classe 6 y est sous-estimée (DR réel 15 % pour PD 10 %)."""
+"""Generates two synthetic portfolios (development and annual review) for a 7-grade PD model.
+The current portfolio drifts towards the risky grades, and grade 6 is underestimated there (actual DR 15% for a 10% PD)."""
 import random
 
 PD = {1: 0.002, 2: 0.005, 3: 0.01, 4: 0.02, 5: 0.05, 6: 0.10, 7: 0.20}

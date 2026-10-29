@@ -1,10 +1,10 @@
-//! Rapport de validation HTML autonome (une seule page, sans dépendance externe).
+//! Self-contained HTML validation report (a single page, no external dependency).
 
 use mf_core::{Manifest, Mismatch};
 use serde_json::Value;
 use std::fmt::Write;
 
-/// Décision de validation enregistrée (approbation ou rejet).
+/// Recorded validation decision (approval or rejection).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Decision {
     pub user: String,
@@ -18,7 +18,7 @@ pub struct ReportMeta<'a> {
     pub run_id: i64,
     pub created_at: i64,
     pub generated_at: i64,
-    /// `None` si le rejeu n'a pas été effectué.
+    /// `None` if the replay was not performed.
     pub replay: Option<&'a [Mismatch]>,
     pub decisions: &'a [Decision],
 }
@@ -30,7 +30,7 @@ fn esc(s: &str) -> String {
         .replace('"', "&quot;")
 }
 
-/// Date UTC lisible à partir d'un horodatage Unix (algorithme civil_from_days).
+/// Human-readable UTC date from a Unix timestamp (civil_from_days algorithm).
 pub fn utc(ts: i64) -> String {
     let (days, secs) = (ts.div_euclid(86_400), ts.rem_euclid(86_400));
     let z = days + 719_468;
@@ -64,7 +64,7 @@ fn num(x: f64) -> String {
         return x.to_string();
     }
     if x.abs() >= 1e4 && x.abs() < 1e15 {
-        // Montants : groupement des milliers, sans décimales.
+        // Amounts: thousands grouping, no decimals.
         let r = x.round() as i64;
         let digits = r.unsigned_abs().to_string();
         let mut g = String::new();
@@ -94,9 +94,9 @@ fn scalar(v: &Value) -> String {
         Value::Null => "—".into(),
         Value::Bool(b) => {
             if *b {
-                "oui".into()
+                "yes".into()
             } else {
-                "non".into()
+                "no".into()
             }
         }
         Value::Number(n) => n.as_f64().map(num).unwrap_or_else(|| n.to_string()),
@@ -108,11 +108,11 @@ fn scalar(v: &Value) -> String {
 
 fn numeric_summary(a: &[Value]) -> String {
     if a.is_empty() {
-        return "<span class=\"muted\">aucun</span>".into();
+        return "<span class=\"muted\">none</span>".into();
     }
     let xs: Vec<f64> = a.iter().filter_map(Value::as_f64).collect();
     if xs.is_empty() {
-        return format!("[{} éléments]", a.len());
+        return format!("[{} items]", a.len());
     }
     let (min, max) = xs
         .iter()
@@ -122,7 +122,7 @@ fn numeric_summary(a: &[Value]) -> String {
         return xs.iter().map(|x| num(*x)).collect::<Vec<_>>().join(" · ");
     }
     format!(
-        "<span class=\"muted\">{} valeurs — min {} · moy. {} · max {}</span>",
+        "<span class=\"muted\">{} values — min {} · mean {} · max {}</span>",
         a.len(),
         num(min),
         num(mean),
@@ -130,7 +130,7 @@ fn numeric_summary(a: &[Value]) -> String {
     )
 }
 
-/// Rendu générique : objet → tableau clé/valeur, tableau d'objets → tableau à colonnes.
+/// Generic rendering: object → key/value table, array of objects → column table.
 fn render(v: &Value, depth: usize) -> String {
     match v {
         Value::Object(map) => {
@@ -189,16 +189,16 @@ pub fn render_html(meta: &ReportMeta, m: &Manifest) -> String {
         "pass"
     };
     let verdict = match overall {
-        "fail" => "Non conforme — actions requises",
-        "warn" => "Conforme avec réserves",
-        _ => "Conforme",
+        "fail" => "Non-compliant — action required",
+        "warn" => "Compliant with reservations",
+        _ => "Compliant",
     };
 
     let mut h = String::new();
     let _ = write!(
         h,
-        r#"<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Rapport de validation — {p}</title><style>
+        r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Validation report — {p}</title><style>
 :root{{--bg:#f7f7f5;--card:#fff;--fg:#1c1c1a;--muted:#6b6b66;--line:#e3e2dd;--ok:#1f7a4d;--okb:#e3f3ea;--warn:#8a5a00;--warnb:#fbf0d9;--bad:#a8261b;--badb:#fbe4e1}}
 @media (prefers-color-scheme:dark){{:root{{--bg:#151514;--card:#1e1e1c;--fg:#ecebe6;--muted:#9a9993;--line:#33322f;--ok:#6fd3a0;--okb:#173326;--warn:#f2c25c;--warnb:#3a2e12;--bad:#ff8a7d;--badb:#3d1c18}}}}
 *{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,"Segoe UI",Inter,Roboto,sans-serif}}
@@ -216,14 +216,14 @@ details{{background:var(--card);border:1px solid var(--line);border-radius:10px;
 details>div{{padding:0 16px 16px;overflow-x:auto}}.verdict{{font-size:16px;font-weight:600;margin-top:14px}}
 footer{{margin-top:40px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}}@media print{{details{{break-inside:avoid}}details>div{{display:block}}}}
 </style></head><body><main>
-<div class="muted">Rapport de validation de modèles · ModelFlow</div><h1>{p}</h1>
+<div class="muted">Model validation report · ModelFlow</div><h1>{p}</h1>
 <div class="verdict">{b} {verdict}</div>
 <div class="cards">
-<div class="card"><div class="k">Exécution</div><div class="v">#{id}</div><div class="muted">{created}</div></div>
-<div class="card"><div class="k">Tests conformes</div><div class="v" style="color:var(--ok)">{pass}</div></div>
-<div class="card"><div class="k">Réserves</div><div class="v" style="color:var(--warn)">{warn}</div></div>
-<div class="card"><div class="k">Non conformes</div><div class="v" style="color:var(--bad)">{fail}</div></div>
-<div class="card"><div class="k">Reproductibilité</div><div class="v">{replay}</div></div>
+<div class="card"><div class="k">Run</div><div class="v">#{id}</div><div class="muted">{created}</div></div>
+<div class="card"><div class="k">Passed tests</div><div class="v" style="color:var(--ok)">{pass}</div></div>
+<div class="card"><div class="k">Warnings</div><div class="v" style="color:var(--warn)">{warn}</div></div>
+<div class="card"><div class="k">Failed tests</div><div class="v" style="color:var(--bad)">{fail}</div></div>
+<div class="card"><div class="k">Reproducibility</div><div class="v">{replay}</div></div>
 </div>"#,
         p = esc(meta.pipeline),
         b = badge(overall),
@@ -232,13 +232,13 @@ footer{{margin-top:40px;color:var(--muted);font-size:12px;overflow-wrap:anywhere
         replay = match replay_ok {
             Some(true) => badge("pass"),
             Some(false) => badge("fail"),
-            None => "<span class=\"muted\">non vérifiée</span>".into(),
+            None => "<span class=\"muted\">not verified</span>".into(),
         },
     );
 
     if let Some(mm) = meta.replay.filter(|mm| !mm.is_empty()) {
         h.push_str(
-            "<h2>Écarts au rejeu</h2><div class=\"wrap\"><table class=\"steps\"><tr><th>Étape</th><th>Écart</th></tr>",
+            "<h2>Replay mismatches</h2><div class=\"wrap\"><table class=\"steps\"><tr><th>Step</th><th>Mismatch</th></tr>",
         );
         for x in mm {
             let _ = write!(h, "<tr><td>{}</td><td>{}</td></tr>", esc(&x.step), esc(&x.reason));
@@ -247,43 +247,38 @@ footer{{margin-top:40px;color:var(--muted);font-size:12px;overflow-wrap:anywhere
     }
 
     if !meta.decisions.is_empty() {
-        h.push_str("<h2>Décisions de validation</h2><div class=\"wrap\"><table class=\"steps\"><tr><th>Date</th><th>Validateur</th><th>Décision</th><th>Commentaire</th></tr>");
+        h.push_str("<h2>Validation decisions</h2><div class=\"wrap\"><table class=\"steps\"><tr><th>Date</th><th>Validator</th><th>Decision</th><th>Comment</th></tr>");
         for d in meta.decisions {
             let b = if d.decision == "approved" {
                 badge("pass")
             } else {
                 badge("fail")
             };
-            let label = match d.decision.as_str() {
-                "approved" => "approuvée",
-                "rejected" => "rejetée",
-                other => other,
-            };
             let _ = write!(
                 h,
                 "<tr><td>{}</td><td>{}</td><td>{b} {}</td><td>{}</td></tr>",
                 utc(d.created_at),
                 esc(&d.user),
-                esc(label),
+                esc(&d.decision),
                 esc(&d.comment)
             );
         }
         h.push_str("</table></div>");
     }
 
-    h.push_str("<h2>Étapes</h2><div class=\"wrap\"><table class=\"steps\"><tr><th>Étape</th><th>Version</th><th>Statut</th><th>Empreinte sortie</th><th>Empreinte code</th></tr>");
+    h.push_str("<h2>Steps</h2><div class=\"wrap\"><table class=\"steps\"><tr><th>Step</th><th>Version</th><th>Status</th><th>Output hash</th><th>Code hash</th></tr>");
     for s in &m.steps {
         let _ = write!(
             h,
             "<tr><td>{}</td><td class=\"mono\">{}</td><td>{}</td><td class=\"mono\">{}</td><td class=\"mono\">{}</td></tr>",
             esc(&s.name),
             esc(&s.version),
-            status_of(&s.output).map(badge).unwrap_or_else(|| "<span class=\"muted\">donnée</span>".into()),
+            status_of(&s.output).map(badge).unwrap_or_else(|| "<span class=\"muted\">data</span>".into()),
             &s.output_hash[..12],
             s.code_hash.as_deref().map(|c| &c[..12]).unwrap_or("—"),
         );
     }
-    h.push_str("</table></div><h2>Détail des résultats</h2>");
+    h.push_str("</table></div><h2>Detailed results</h2>");
     for s in m.steps.iter().filter(|s| status_of(&s.output).is_some()) {
         let open = if status_of(&s.output) == Some("pass") {
             ""
@@ -301,7 +296,7 @@ footer{{margin-top:40px;color:var(--muted);font-size:12px;overflow-wrap:anywhere
     }
     let _ = write!(
         h,
-        "<footer>run_hash <span class=\"mono\">{}</span><br>Rapport généré le {}. Les empreintes SHA-256 permettent de rejouer et d'auditer chaque résultat (<span class=\"mono\">mf verify</span>).</footer></main></body></html>",
+        "<footer>run_hash <span class=\"mono\">{}</span><br>Report generated on {}. SHA-256 fingerprints make every result replayable and auditable (<span class=\"mono\">mf verify</span>).</footer></main></body></html>",
         m.run_hash,
         utc(meta.generated_at)
     );

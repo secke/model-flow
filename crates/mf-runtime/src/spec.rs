@@ -7,10 +7,10 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Deserialize)]
 pub struct PipelineSpec {
     pub name: String,
-    /// Identifiant du modèle dans l'inventaire (facultatif).
+    /// Model identifier in the inventory (optional).
     #[serde(default)]
     pub model: Option<String>,
-    /// Planification au format cron à 5 champs, en UTC (ex. `"0 6 * * 1-5"`), exécutée par le serveur.
+    /// 5-field cron schedule, in UTC (e.g. `"0 6 * * 1-5"`), run by the server.
     #[serde(default)]
     pub schedule: Option<String>,
     #[serde(rename = "step")]
@@ -36,9 +36,9 @@ pub struct StepSpec {
     pub command: Option<Vec<String>>,
     #[serde(default)]
     pub code: Vec<String>,
-    /// Délai maximal d'un processus externe (défaut : 300 s).
+    /// Maximum duration of an external process (default: 300 s).
     pub timeout_secs: Option<u64>,
-    /// Variables d'environnement transmises au processus (l'environnement est vidé par défaut).
+    /// Environment variables passed to the process (the environment is cleared by default).
     #[serde(default)]
     pub env: std::collections::BTreeMap<String, String>,
     #[serde(default)]
@@ -50,10 +50,10 @@ pub struct StepSpec {
 }
 
 pub fn parse(text: &str) -> Result<PipelineSpec, String> {
-    toml::from_str(text).map_err(|e| format!("pipeline invalide: {e}"))
+    toml::from_str(text).map_err(|e| format!("invalid pipeline: {e}"))
 }
 
-/// Charge un fichier pipeline ; les chemins relatifs partent de son dossier.
+/// Loads a pipeline file; relative paths start from its directory.
 pub fn load(path: &Path) -> Result<(PipelineSpec, PathBuf), String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let base = path.parent().map(Path::to_path_buf).unwrap_or_default();
@@ -63,20 +63,20 @@ pub fn load(path: &Path) -> Result<(PipelineSpec, PathBuf), String> {
 pub fn build(spec: &PipelineSpec, base: &Path) -> Result<Pipeline, String> {
     let mut p = Pipeline::new();
     for s in &spec.steps {
-        let need = |o: &Option<String>, f: &str| o.clone().ok_or(format!("étape {}: champ `{f}` requis", s.name));
+        let need = |o: &Option<String>, f: &str| o.clone().ok_or(format!("step {}: field `{f}` is required", s.name));
         p = match s.kind.as_str() {
             "csv" | "parquet" => {
                 let (columns, table) = match (&s.column, s.columns.is_empty()) {
                     (Some(c), true) => (vec![c.clone()], false),
                     (None, false) => (s.columns.clone(), true),
-                    _ => return Err(format!("étape {}: indiquer `column` ou `columns`", s.name)),
+                    _ => return Err(format!("step {}: specify `column` or `columns`", s.name)),
                 };
                 let format = if s.kind == "parquet" {
                     TableFormat::Parquet
                 } else {
                     let d = s.delimiter.as_deref().unwrap_or(",");
                     if d.len() != 1 {
-                        return Err(format!("étape {}: `delimiter` doit être un caractère ASCII", s.name));
+                        return Err(format!("step {}: `delimiter` must be an ASCII character", s.name));
                     }
                     TableFormat::Csv {
                         delimiter: d.as_bytes()[0],
@@ -101,7 +101,7 @@ pub fn build(spec: &PipelineSpec, base: &Path) -> Result<Pipeline, String> {
                     .command
                     .clone()
                     .filter(|c| !c.is_empty())
-                    .ok_or(format!("étape {}: `command` requis", s.name))?;
+                    .ok_or(format!("step {}: `command` is required", s.name))?;
                 p.step(ProcessStep {
                     name: s.name.clone(),
                     version: s.version.clone(),
@@ -128,7 +128,7 @@ pub fn build(spec: &PipelineSpec, base: &Path) -> Result<Pipeline, String> {
                 kind: k.to_string(),
                 params: s.params.clone(),
             }),
-            k => return Err(format!("étape {}: type inconnu `{k}`", s.name)),
+            k => return Err(format!("step {}: unknown type `{k}`", s.name)),
         };
     }
     Ok(p)

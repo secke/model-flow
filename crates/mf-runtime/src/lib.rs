@@ -1,5 +1,5 @@
-//! Exécution concrète : spécification TOML, étapes CSV / intégrées / processus externes,
-//! stockage des manifestes en SQLite.
+//! Concrete execution: TOML specification, CSV / built-in / external process steps,
+//! manifest storage in SQLite.
 
 pub mod pg;
 pub mod report;

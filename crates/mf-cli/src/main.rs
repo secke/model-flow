@@ -2,14 +2,14 @@ use mf_runtime::{report, spec, store::Store};
 use std::{env, path::Path, process::ExitCode};
 
 const USAGE: &str = "usage:
-  mf run    <pipeline.toml>              exécute et enregistre l'exécution
-  mf verify <pipeline.toml> [--run ID]   rejoue et compare (défaut : dernière exécution)
-  mf runs   <pipeline.toml>              liste les exécutions
-  mf show   <pipeline.toml> [--run ID]   affiche le manifeste JSON
-  mf report <pipeline.toml> [--run ID] [-o rapport.html] [--no-verify]
-                                         rapport de validation HTML
+  mf run    <pipeline.toml>              run and record the execution
+  mf verify <pipeline.toml> [--run ID]   replay and compare (default: latest run)
+  mf runs   <pipeline.toml>              list runs
+  mf show   <pipeline.toml> [--run ID]   print the JSON manifest
+  mf report <pipeline.toml> [--run ID] [-o report.html] [--no-verify]
+                                         HTML validation report
 
-Historique : SQLite dans <dossier du pipeline>/.modelflow, ou PostgreSQL si MODELFLOW_DATABASE_URL est défini.";
+History: SQLite in <pipeline directory>/.modelflow, or PostgreSQL when MODELFLOW_DATABASE_URL is set.";
 
 fn now() -> i64 {
     std::time::SystemTime::now()
@@ -31,7 +31,7 @@ fn short(v: &serde_json::Value) -> String {
     }
     let s = v.to_string();
     if s.len() > 140 {
-        format!("{}… ({} octets)", &s[..140], s.len())
+        format!("{}… ({} bytes)", &s[..140], s.len())
     } else {
         s
     }
@@ -43,12 +43,12 @@ fn run_id(args: &[String]) -> Result<Option<i64>, String> {
             .get(i + 1)
             .and_then(|v| v.parse().ok())
             .map(Some)
-            .ok_or_else(|| "--run attend un entier".into()),
+            .ok_or_else(|| "--run expects an integer".into()),
         None => Ok(None),
     }
 }
 
-/// Historique : PostgreSQL si `MODELFLOW_DATABASE_URL` est défini, sinon SQLite à côté du pipeline.
+/// History: PostgreSQL when `MODELFLOW_DATABASE_URL` is set, otherwise SQLite next to the pipeline.
 fn open_store(base: &Path) -> Result<Store, String> {
     match std::env::var("MODELFLOW_DATABASE_URL") {
         Ok(url) if !url.is_empty() => Store::postgres(&mf_runtime::pg::connect_store(&url, 2)?),
@@ -69,23 +69,20 @@ fn real_main(args: &[String]) -> Result<bool, String> {
             for s in &m.steps {
                 println!("{:<20} v{:<8} {}", s.name, s.version, short(&s.output));
             }
-            let user = std::env::var("USER").unwrap_or_else(|_| "inconnu".into());
+            let user = std::env::var("USER").unwrap_or_else(|_| "unknown".into());
             let id = store.save(&sp.name, &m, &format!("cli:{user}"))?;
-            println!("\nexécution #{id}  run_hash={}", m.run_hash);
+            println!("\nrun #{id}  run_hash={}", m.run_hash);
             Ok(true)
         }
         "verify" => {
             let (id, reference) = store.get(&sp.name, run_id(args)?)?;
             let mm = spec::build(&sp, &base)?.verify(&reference).map_err(|e| e.to_string())?;
             if mm.is_empty() {
-                println!(
-                    "OK : exécution #{id} rejouée à l'identique ({} étapes)",
-                    reference.steps.len()
-                );
+                println!("OK: run #{id} replayed identically ({} steps)", reference.steps.len());
                 Ok(true)
             } else {
                 for x in &mm {
-                    println!("ÉCART [{}] {}", x.step, x.reason);
+                    println!("MISMATCH [{}] {}", x.step, x.reason);
                 }
                 Ok(false)
             }
@@ -126,7 +123,7 @@ fn real_main(args: &[String]) -> Result<bool, String> {
                 .map(Into::into)
                 .unwrap_or_else(|| base.join(format!(".modelflow/report-{id}.html")));
             std::fs::write(&out, report::render_html(&meta, &m)).map_err(|e| e.to_string())?;
-            println!("rapport écrit : {}", out.display());
+            println!("report written: {}", out.display());
             Ok(true)
         }
         _ => Err(USAGE.into()),

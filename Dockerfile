@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Image ModelFlow : binaires `mf` et `mf-server`, Python et QuantLib pour les modèles externes.
+# ModelFlow image: `mf` and `mf-server` binaries, Python and QuantLib for external models.
 
 FROM rust:1.88-bookworm AS build
 WORKDIR /src

@@ -7,7 +7,7 @@ version = "1.0.0"
 path = "data/returns.csv"
 column = "ret"
 
-# Modèle de référence intégré
+# Built-in reference model
 [[step]]
 name = "var_hist_99"
 kind = "var_historical"
@@ -22,7 +22,7 @@ version = "1.0.0"
 deps = ["returns"]
 params = { alpha = 0.99, window = 250 }
 
-# Modèle externe (n'importe quel langage) : VaR EWMA en Python
+# External model (any language): EWMA VaR in Python
 [[step]]
 name = "ewma_model"
 kind = "process"

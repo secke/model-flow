@@ -1,8 +1,8 @@
-//! API REST de ModelFlow : exécutions, rejeu, rapports, décisions de validation et journal d'audit.
+//! ModelFlow REST API: runs, replay, reports, validation decisions and audit log.
 //!
-//! Authentification par jeton porteur (seule l'empreinte SHA-256 est stockée dans la configuration).
-//! Rôles : `admin`, `model_owner`, `validator`, `auditor`. Séparation des tâches : seul un validateur
-//! peut approuver ou rejeter, jamais sur une exécution qu'il a lancée, et uniquement si le rejeu est identique.
+//! Bearer token authentication (only the SHA-256 fingerprint is stored in the configuration).
+//! Roles: `admin`, `model_owner`, `validator`, `auditor`. Segregation of duties: only a validator
+//! can approve or reject, never a run they triggered, and only if the replay is identical.
 
 pub mod alerts;
 pub mod governance;
@@ -51,7 +51,7 @@ fn default_rate() -> u32 {
     120
 }
 
-/// Certificat et clé PEM pour servir directement en HTTPS.
+/// PEM certificate and key to serve HTTPS directly.
 #[derive(Debug, Clone, Deserialize)]
 pub struct TlsConfig {
     pub cert: PathBuf,
@@ -60,24 +60,24 @@ pub struct TlsConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ServerConfig {
-    /// Dossier contenant un sous-dossier par pipeline (`<dossier>/pipeline.toml`).
+    /// Directory containing one subdirectory per pipeline (`<dir>/pipeline.toml`).
     pub workspace: PathBuf,
     #[serde(default = "default_bind")]
     pub bind: String,
     #[serde(rename = "user", default)]
     pub users: Vec<UserConfig>,
-    /// Nombre maximal d'exécutions simultanées (les suivantes attendent en file).
+    /// Maximum number of concurrent runs (further runs wait in a queue).
     #[serde(default = "default_concurrency")]
     pub max_concurrent_runs: usize,
-    /// Requêtes authentifiées autorisées par utilisateur et par minute.
+    /// Authenticated requests allowed per user and per minute.
     #[serde(default = "default_rate")]
     pub rate_limit_per_minute: u32,
     pub tls: Option<TlsConfig>,
-    /// Base PostgreSQL partagée ; sans cette section, SQLite (fichiers locaux, instance unique).
+    /// Shared PostgreSQL database; without this section, SQLite (local files, single instance).
     pub database: Option<DatabaseConfig>,
-    /// Authentification unique OpenID Connect (en plus des jetons de service `[[user]]`).
+    /// OpenID Connect single sign-on (in addition to the `[[user]]` service tokens).
     pub oidc: Option<oidc::OidcConfig>,
-    /// Adresse publique de l'interface, utilisée pour les liens des alertes.
+    /// Public URL of the web UI, used for links in alerts.
     pub public_url: Option<String>,
     #[serde(default)]
     pub scheduler: SchedulerConfig,
@@ -114,9 +114,9 @@ fn default_pool() -> u32 {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct DatabaseConfig {
-    /// URL libpq ; préférer `url_env` pour ne pas écrire le mot de passe dans la configuration.
+    /// libpq URL; prefer `url_env` to keep the password out of the configuration.
     pub url: Option<String>,
-    /// Nom de la variable d'environnement contenant l'URL (ex. `MODELFLOW_DATABASE_URL`).
+    /// Name of the environment variable holding the URL (e.g. `MODELFLOW_DATABASE_URL`).
     pub url_env: Option<String>,
     #[serde(default = "default_pool")]
     pub max_connections: u32,
@@ -126,15 +126,15 @@ impl DatabaseConfig {
     pub fn resolve_url(&self) -> Result<String, String> {
         match (&self.url, &self.url_env) {
             (Some(u), None) => Ok(u.clone()),
-            (None, Some(v)) => std::env::var(v).map_err(|_| format!("variable d'environnement `{v}` absente")),
-            _ => Err("[database] : indiquer `url` ou `url_env`".into()),
+            (None, Some(v)) => std::env::var(v).map_err(|_| format!("environment variable `{v}` is not set")),
+            _ => Err("[database]: specify `url` or `url_env`".into()),
         }
     }
 }
 
 impl ServerConfig {
     pub fn parse(text: &str, base: &FsPath) -> Result<Self, String> {
-        let mut c: ServerConfig = toml::from_str(text).map_err(|e| format!("configuration invalide: {e}"))?;
+        let mut c: ServerConfig = toml::from_str(text).map_err(|e| format!("invalid configuration: {e}"))?;
         if c.workspace.is_relative() {
             c.workspace = base.join(&c.workspace);
         }
@@ -153,16 +153,16 @@ impl ServerConfig {
             }
         }
         if c.max_concurrent_runs == 0 || c.rate_limit_per_minute == 0 {
-            return Err("max_concurrent_runs et rate_limit_per_minute doivent être ≥ 1".into());
+            return Err("max_concurrent_runs and rate_limit_per_minute must be ≥ 1".into());
         }
         let mut names = std::collections::HashSet::new();
         for u in &c.users {
             if !names.insert(&u.name) {
-                return Err(format!("utilisateur en double: {}", u.name));
+                return Err(format!("duplicate user: {}", u.name));
             }
             if u.token_sha256.len() != 64 || !u.token_sha256.chars().all(|ch| ch.is_ascii_hexdigit()) {
                 return Err(format!(
-                    "{}: token_sha256 doit être une empreinte SHA-256 hexadécimale",
+                    "{}: token_sha256 must be a hexadecimal SHA-256 fingerprint",
                     u.name
                 ));
             }
@@ -183,17 +183,17 @@ pub fn hash_token(token: &str) -> String {
         .collect()
 }
 
-/// Jeton aléatoire de 256 bits.
+/// Random 256-bit token.
 pub fn new_token() -> String {
     let mut b = [0u8; 32];
-    getrandom::getrandom(&mut b).expect("source d'aléa");
+    getrandom::getrandom(&mut b).expect("randomness source");
     format!("mft_{}", b.iter().map(|x| format!("{x:02x}")).collect::<String>())
 }
 
-// ---------- État et erreurs ----------
+// ---------- State and errors ----------
 
 enum Backend {
-    /// Une base SQLite par pipeline (historique) et une base de gouvernance dans l'espace de travail.
+    /// One SQLite database per pipeline (history) and one governance database in the workspace.
     Sqlite {
         gov_db: PathBuf,
     },
@@ -217,13 +217,13 @@ struct Inner {
 pub struct AppState(Arc<Inner>);
 
 impl AppState {
-    /// Initialise l'état (connexion et migrations). Les appels de base de données sont synchrones :
-    /// ils s'exécutent dans un thread dédié, ce qui permet l'appel depuis un contexte asynchrone.
+    /// Initializes the state (connection and migrations). Database calls are synchronous:
+    /// they run on a dedicated thread, so this can be called from an asynchronous context.
     pub fn new(cfg: &ServerConfig) -> Result<Self, String> {
         std::thread::scope(|sc| {
             sc.spawn(|| Self::init(cfg))
                 .join()
-                .map_err(|_| "initialisation interrompue".to_string())?
+                .map_err(|_| "initialization interrupted".to_string())?
         })
     }
 
@@ -258,12 +258,12 @@ impl AppState {
             rate: cfg.rate_limit_per_minute as f64,
             buckets: Default::default(),
         }));
-        // Les travaux interrompus par un arrêt du serveur sont marqués en échec.
+        // Jobs interrupted by a server shutdown are marked as failed.
         state.gov().map_err(|e| e.1)?.fail_interrupted_jobs()?;
         Ok(state)
     }
 
-    /// Moteur de stockage utilisé (`sqlite` ou `postgres`).
+    /// Storage backend in use (`sqlite` or `postgres`).
     pub fn backend_name(&self) -> &'static str {
         match self.0.backend {
             Backend::Sqlite { .. } => "sqlite",
@@ -281,7 +281,7 @@ impl AppState {
         }
     }
 
-    /// Seau à jetons par utilisateur : `rate` requêtes par minute, rafale de même taille.
+    /// Per-user token bucket: `rate` requests per minute, burst of the same size.
     fn allow(&self, user: &str) -> bool {
         let mut b = self.0.buckets.lock().unwrap();
         let now = std::time::Instant::now();
@@ -334,7 +334,7 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> ApiResult<T> + Send + '
         .map_err(|e| ApiError::internal(e.to_string()))?
 }
 
-// ---------- Authentification ----------
+// ---------- Authentication ----------
 
 #[derive(Debug, Clone)]
 pub struct Auth {
@@ -352,10 +352,10 @@ impl FromRequestParts<AppState> for Auth {
             .get(header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.strip_prefix("Bearer "))
-            .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "jeton manquant (Authorization: Bearer …)"))?;
+            .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "missing token (Authorization: Bearer …)"))?;
         let token = token.trim().to_string();
         let auth = match (&state.0.oidc, token.matches('.').count() == 2) {
-            // Jeton JWT : authentification unique OIDC (vérification bloquante possible : rechargement du JWKS).
+            // JWT: OIDC single sign-on (verification may block: JWKS reload).
             (Some(o), true) => {
                 let o = o.clone();
                 let t = token.clone();
@@ -370,7 +370,7 @@ impl FromRequestParts<AppState> for Auth {
                     Err(e) => return Err(ApiError::new(StatusCode::UNAUTHORIZED, e.message)),
                 }
             }
-            // Jeton de service : comparaison de l'empreinte SHA-256.
+            // Service token: SHA-256 fingerprint comparison.
             _ => {
                 let h = hash_token(&token);
                 state
@@ -382,7 +382,7 @@ impl FromRequestParts<AppState> for Auth {
                         name: u.name.clone(),
                         role: u.role,
                     })
-                    .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "jeton invalide"))?
+                    .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "invalid token"))?
             }
         };
         if state.allow(&auth.name) {
@@ -390,13 +390,13 @@ impl FromRequestParts<AppState> for Auth {
         } else {
             Err(ApiError::new(
                 StatusCode::TOO_MANY_REQUESTS,
-                "limite de requêtes atteinte, réessayer plus tard",
+                "rate limit reached, try again later",
             ))
         }
     }
 }
 
-/// Vérifie le rôle ; un refus est inscrit au journal d'audit.
+/// Checks the role; a denial is written to the audit log.
 async fn authorize(state: &AppState, auth: &Auth, roles: &[Role], action: &str, target: &str) -> ApiResult<()> {
     if roles.contains(&auth.role) {
         return Ok(());
@@ -410,7 +410,7 @@ async fn authorize(state: &AppState, auth: &Auth, roles: &[Role], action: &str, 
     .await;
     Err(ApiError::new(
         StatusCode::FORBIDDEN,
-        format!("le rôle {:?} ne permet pas `{action}`", auth.role),
+        format!("role {:?} does not allow `{action}`", auth.role),
     ))
 }
 
@@ -433,7 +433,7 @@ fn discover(ws: &FsPath) -> ApiResult<BTreeMap<String, PathBuf>> {
 fn locate(state: &AppState, name: &str) -> ApiResult<PathBuf> {
     discover(&state.0.workspace)?
         .remove(name)
-        .ok_or_else(|| ApiError::not_found(format!("pipeline `{name}` inconnu")))
+        .ok_or_else(|| ApiError::not_found(format!("unknown pipeline `{name}`")))
 }
 
 fn mismatches_json(mm: &[mf_core::Mismatch]) -> Value {
@@ -457,7 +457,7 @@ async fn health(State(st): State<AppState>) -> Json<Value> {
     Json(json!({ "status": "ok", "version": env!("CARGO_PKG_VERSION"), "storage": st.backend_name() }))
 }
 
-// ---------- Interface web ----------
+// ---------- Web UI ----------
 
 const UI_HTML: &str = include_str!("../ui/index.html");
 const UI_JS: &str = include_str!("../ui/app.js");
@@ -496,7 +496,7 @@ async fn ui_css() -> Response {
         .into_response()
 }
 
-/// Configuration publique de l'interface : paramètres SSO (aucun secret, client public PKCE).
+/// Public UI configuration: SSO parameters (no secret, public PKCE client).
 async fn ui_config(State(st): State<AppState>) -> Json<Value> {
     let sso = match st.0.oidc.clone() {
         Some(o) if o.config().client_id.is_some() => {
@@ -517,7 +517,7 @@ async fn ui_config(State(st): State<AppState>) -> Json<Value> {
     Json(json!({"version": env!("CARGO_PKG_VERSION"), "sso": sso, "service_tokens": !st.0.users.is_empty()}))
 }
 
-/// En-têtes de sécurité appliqués à toutes les réponses.
+/// Security headers applied to every response.
 async fn security_headers(
     State(st): State<AppState>,
     req: axum::extract::Request,
@@ -608,12 +608,12 @@ async fn list_runs(State(st): State<AppState>, _auth: Auth, Path(name): Path<Str
 
 #[derive(Deserialize)]
 struct RunQuery {
-    /// Attendre la fin de l'exécution plutôt que de rendre la main immédiatement (202).
+    /// Wait for the run to finish instead of returning immediately (202).
     #[serde(default)]
     wait: bool,
 }
 
-/// Exécute un pipeline pour un travail déjà enregistré (thread bloquant), puis alerte si nécessaire.
+/// Runs a pipeline for an already recorded job (blocking thread), then alerts if needed.
 fn execute_job(st: &AppState, job: i64, name: &str, auth: &Auth) -> Result<(i64, Value), String> {
     let gov = st.gov().map_err(|e| e.1)?;
     gov.job_started(job)?;
@@ -674,7 +674,7 @@ fn execute_job(st: &AppState, job: i64, name: &str, auth: &Auth) -> Result<(i64,
     result.map(|(id, v, _)| (id, v))
 }
 
-/// Enregistre un travail et le place dans la file (exécution bornée par le sémaphore).
+/// Records a job and queues it (execution bounded by the semaphore).
 async fn enqueue(
     st: &AppState,
     name: &str,
@@ -689,7 +689,7 @@ async fn enqueue(
     let (st3, name3, auth3) = (st.clone(), name.to_string(), auth.clone());
     let sem = st.0.runs.clone();
     let task = tokio::spawn(async move {
-        let _permit = sem.acquire_owned().await.expect("sémaphore");
+        let _permit = sem.acquire_owned().await.expect("semaphore");
         tokio::task::spawn_blocking(move || execute_job(&st3, job, &name3, &auth3))
             .await
             .unwrap_or_else(|e| Err(e.to_string()))
@@ -697,8 +697,8 @@ async fn enqueue(
     Ok((job, task))
 }
 
-/// Un passage du planificateur à l'instant `now` : réserve les créneaux dus et lance les exécutions.
-/// Renvoie les travaux créés.
+/// One scheduler pass at time `now`: claims the due slots and starts the runs.
+/// Returns the created jobs.
 pub async fn scheduler_tick(st: &AppState, now: i64) -> Result<Vec<i64>, String> {
     let st2 = st.clone();
     let due = tokio::task::spawn_blocking(move || -> Result<Vec<String>, String> {
@@ -710,7 +710,7 @@ pub async fn scheduler_tick(st: &AppState, now: i64) -> Result<Vec<i64>, String>
             let cron = match scheduler::parse(&expr) {
                 Ok(c) => c,
                 Err(e) => {
-                    eprintln!("{name} : {e}");
+                    eprintln!("{name}: {e}");
                     continue;
                 }
             };
@@ -722,7 +722,7 @@ pub async fn scheduler_tick(st: &AppState, now: i64) -> Result<Vec<i64>, String>
                     if let Some(slot) = scheduler::latest_due(&cron, last, now) {
                         if gov.schedule_claim(&name, Some(last), slot)? {
                             gov.audit(
-                                "planificateur",
+                                "scheduler",
                                 Role::ModelOwner,
                                 "schedule.trigger",
                                 &name,
@@ -739,7 +739,7 @@ pub async fn scheduler_tick(st: &AppState, now: i64) -> Result<Vec<i64>, String>
     .await
     .map_err(|e| e.to_string())??;
     let system = Auth {
-        name: "planificateur".into(),
+        name: "scheduler".into(),
         role: Role::ModelOwner,
     };
     let mut jobs = vec![];
@@ -749,7 +749,7 @@ pub async fn scheduler_tick(st: &AppState, now: i64) -> Result<Vec<i64>, String>
     Ok(jobs)
 }
 
-/// Lance la boucle du planificateur (si activée).
+/// Starts the scheduler loop (if enabled).
 pub fn start_scheduler(st: AppState) {
     if !st.0.scheduler.enabled {
         return;
@@ -759,7 +759,7 @@ pub fn start_scheduler(st: AppState) {
         loop {
             let now = chrono::Utc::now().timestamp();
             if let Err(e) = scheduler_tick(&st, now).await {
-                eprintln!("planificateur : {e}");
+                eprintln!("scheduler: {e}");
             }
             tokio::time::sleep(every).await;
         }
@@ -790,7 +790,7 @@ async fn get_job(State(st): State<AppState>, _auth: Auth, Path(id): Path<i64>) -
             .job(id)
             .map_err(ApiError::internal)?
             .map(Json)
-            .ok_or_else(|| ApiError::not_found(format!("travail #{id} introuvable")))
+            .ok_or_else(|| ApiError::not_found(format!("job #{id} not found")))
     })
     .await
 }
@@ -856,7 +856,7 @@ async fn get_report(
         let info = store
             .info(&name, id)
             .map_err(ApiError::internal)?
-            .ok_or_else(|| ApiError::not_found("exécution"))?;
+            .ok_or_else(|| ApiError::not_found("run not found"))?;
         let mm = if q.no_verify {
             None
         } else {
@@ -898,13 +898,13 @@ async fn decide(
     if body.decision != "approved" && body.decision != "rejected" {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
-            "`decision` doit valoir `approved` ou `rejected`",
+            "`decision` must be `approved` or `rejected`",
         ));
     }
     if body.decision == "rejected" && body.comment.trim().is_empty() {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
-            "un rejet doit être motivé (`comment`)",
+            "a rejection must be justified (`comment`)",
         ));
     }
     blocking(move || {
@@ -914,17 +914,17 @@ async fn decide(
             .store_for(&toml)?
             .info(&name, id)
             .map_err(ApiError::internal)?
-            .ok_or_else(|| ApiError::not_found(format!("exécution #{id} introuvable")))?;
+            .ok_or_else(|| ApiError::not_found(format!("run #{id} not found")))?;
         let refuse = |why: &str| {
             let _ = gov.audit(&auth.name, auth.role, "run.decide", &target, &format!("refused: {why}"));
             Err(ApiError::new(StatusCode::CONFLICT, why.to_string()))
         };
         if info.triggered_by == auth.name {
-            return refuse("séparation des tâches : impossible de valider sa propre exécution");
+            return refuse("segregation of duties: you cannot validate your own run");
         }
         let mm = verify_run(&st, &toml, &name, id)?;
         if !mm.is_empty() {
-            return refuse("le rejeu n'est pas identique : décision impossible");
+            return refuse("the replay is not identical: no decision possible");
         }
         let did = gov
             .decide(&name, id, &body.decision, &body.comment, &auth.name)
@@ -966,7 +966,7 @@ async fn audit_log(State(st): State<AppState>, auth: Auth, Query(q): Query<Audit
     .await
 }
 
-// ---------- Inventaire des modèles ----------
+// ---------- Model inventory ----------
 
 #[derive(Deserialize)]
 struct ModelBody {
@@ -989,17 +989,17 @@ fn bad_request(m: impl Into<String>) -> ApiError {
 fn validate_model(b: &ModelBody) -> ApiResult<()> {
     if b.id.is_empty() || b.id.len() > 64 || !b.id.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c)) {
         return Err(bad_request(
-            "`id` : 1 à 64 caractères parmi lettres, chiffres, `.`, `_`, `-`",
+            "`id`: 1 to 64 characters among letters, digits, `.`, `_`, `-`",
         ));
     }
     if b.name.trim().is_empty() || b.owner.trim().is_empty() {
-        return Err(bad_request("`name` et `owner` sont obligatoires"));
+        return Err(bad_request("`name` and `owner` are required"));
     }
     if !(1..=3).contains(&b.tier) {
-        return Err(bad_request("`tier` : 1 (risque élevé), 2 ou 3 (faible)"));
+        return Err(bad_request("`tier`: 1 (high risk), 2 or 3 (low)"));
     }
     if let Some(d) = &b.next_review {
-        chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| bad_request("`next_review` : date AAAA-MM-JJ"))?;
+        chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| bad_request("`next_review`: date YYYY-MM-DD"))?;
     }
     Ok(())
 }
@@ -1050,12 +1050,12 @@ async fn create_model(State(st): State<AppState>, auth: Auth, Json(b): Json<Mode
     if auth.role == Role::ModelOwner && b.owner != auth.name {
         return Err(ApiError::new(
             StatusCode::FORBIDDEN,
-            "un propriétaire ne peut enregistrer que ses propres modèles",
+            "an owner can only register their own models",
         ));
     }
     let status = b.status.clone().unwrap_or_else(|| "development".into());
     if !["development", "in_validation"].contains(&status.as_str()) {
-        return Err(bad_request("statut initial : `development` ou `in_validation`"));
+        return Err(bad_request("initial status: `development` or `in_validation`"));
     }
     blocking(move || {
         let gov = st.gov()?;
@@ -1073,7 +1073,7 @@ async fn create_model(State(st): State<AppState>, auth: Auth, Json(b): Json<Mode
         if !gov.create_model(&m, &auth.name).map_err(ApiError::internal)? {
             return Err(ApiError::new(
                 StatusCode::CONFLICT,
-                format!("le modèle `{}` existe déjà", m.id),
+                format!("model `{}` already exists", m.id),
             ));
         }
         gov.audit(&auth.name, auth.role, "model.create", &m.id, "ok")
@@ -1088,10 +1088,10 @@ fn find_model(gov: &Gov, id: &str) -> ApiResult<governance::ModelRecord> {
         .map_err(ApiError::internal)?
         .into_iter()
         .find(|m| m.id == id)
-        .ok_or_else(|| ApiError::not_found(format!("modèle `{id}` introuvable")))
+        .ok_or_else(|| ApiError::not_found(format!("model `{id}` not found")))
 }
 
-/// Modification de la fiche (hors statut, qui suit son propre circuit).
+/// Updates the model record (except the status, which follows its own workflow).
 async fn update_model(
     State(st): State<AppState>,
     auth: Auth,
@@ -1108,7 +1108,7 @@ async fn update_model(
             let _ = gov.audit(&auth.name, auth.role, "model.update", &id, "denied");
             return Err(ApiError::new(
                 StatusCode::FORBIDDEN,
-                "seul le propriétaire du modèle (ou un admin) peut le modifier",
+                "only the model owner (or an admin) can modify it",
             ));
         }
         let m = governance::ModelRecord {
@@ -1135,8 +1135,8 @@ struct StatusBody {
     status: String,
 }
 
-/// Circuit des statuts : le validateur approuve (ou renvoie en validation) ; le propriétaire ou
-/// l'admin gère le développement, la mise en usage (après approbation) et le retrait.
+/// Status workflow: the validator approves (or sends back to validation); the owner or
+/// the admin handles development, deployment to use (after approval) and retirement.
 async fn set_model_status(
     State(st): State<AppState>,
     auth: Auth,
@@ -1153,7 +1153,7 @@ async fn set_model_status(
     .await?;
     if !governance::MODEL_STATUSES.contains(&b.status.as_str()) {
         return Err(bad_request(format!(
-            "statut inconnu ; valeurs : {}",
+            "unknown status; values: {}",
             governance::MODEL_STATUSES.join(", ")
         )));
     }
@@ -1168,15 +1168,15 @@ async fn set_model_status(
                 own && match to {
                     "development" | "in_validation" | "retired" => true,
                     "in_use" => ["approved", "in_use"].contains(&m.status.as_str()),
-                    _ => false, // « approved » est réservé au validateur
+                    _ => false, // "approved" is reserved for the validator
                 }
             }
             Role::Auditor => false,
         };
         let change = format!("{} -> {to}", m.status);
         if allowed && to == "approved" {
-            // L'approbation du modèle s'appuie sur des exécutions validées : la dernière exécution de
-            // chaque pipeline rattaché doit avoir été approuvée.
+            // Model approval relies on validated runs: the latest run of
+            // every linked pipeline must have been approved.
             let mut blockers = vec![];
             let mut linked = 0;
             for (name, toml) in discover(&st.0.workspace)? {
@@ -1191,17 +1191,14 @@ async fn set_model_status(
                     .and_then(|r| gov.decisions(&name, r.id).ok())
                     .and_then(|d| d.last().map(|x| x.decision.clone()));
                 match (last, decision.as_deref()) {
-                    (None, _) => blockers.push(format!("{name} : aucune exécution")),
+                    (None, _) => blockers.push(format!("{name}: no run")),
                     (Some(r), Some("approved")) => drop(r),
-                    (Some(r), Some(d)) => {
-                        let d = if d == "rejected" { "rejetée" } else { d };
-                        blockers.push(format!("{name} #{} : dernière exécution {d}", r.id))
-                    }
-                    (Some(r), None) => blockers.push(format!("{name} #{} : en attente de décision", r.id)),
+                    (Some(r), Some(d)) => blockers.push(format!("{name} #{}: latest run {d}", r.id)),
+                    (Some(r), None) => blockers.push(format!("{name} #{}: awaiting decision", r.id)),
                 }
             }
             if linked == 0 {
-                blockers.push("aucun pipeline de validation ne déclare ce modèle".into());
+                blockers.push("no validation pipeline declares this model".into());
             }
             if !blockers.is_empty() {
                 let _ = gov.audit(
@@ -1213,7 +1210,7 @@ async fn set_model_status(
                 );
                 return Err(ApiError::new(
                     StatusCode::CONFLICT,
-                    format!("approbation impossible : {}", blockers.join(" ; ")),
+                    format!("approval not possible: {}", blockers.join("; ")),
                 ));
             }
         }
@@ -1221,7 +1218,7 @@ async fn set_model_status(
             let _ = gov.audit(&auth.name, auth.role, "model.status", &id, &format!("denied: {change}"));
             return Err(ApiError::new(
                 StatusCode::FORBIDDEN,
-                format!("changement de statut non autorisé ({change})"),
+                format!("status change not allowed ({change})"),
             ));
         }
         m.status = to.to_string();

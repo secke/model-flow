@@ -12,7 +12,7 @@ kind = "json"
 version = "1.0.0"
 path = "trades.json"
 
-# Courbe EUR 6M : re-pricing des dépôts et swaps d'entrée
+# EUR 6M curve: re-pricing of the input deposits and swaps
 [[step]]
 name = "curve_eur_6m"
 kind = "curve_bootstrap"
@@ -20,7 +20,7 @@ version = "1.0.0"
 deps = ["market"]
 params = { curve = "EUR-6M", tolerance = 1e-12, grid_step = 1.0 }
 
-# Valorisation de référence (NPV, taux par, DV01)
+# Reference valuation (NPV, par rate, DV01)
 [[step]]
 name = "reference_valuation"
 kind = "price_portfolio"
@@ -28,7 +28,7 @@ version = "1.0.0"
 deps = ["trades", "market"]
 params = { trades = "trades", market = "market" }
 
-# Pricer de production à valider : QuantLib
+# Production pricer under validation: QuantLib
 [[step]]
 name = "quantlib"
 kind = "process"
@@ -49,7 +49,7 @@ trades = "trades"
 candidate = "quantlib"
 reference = "reference_valuation"
 
-# NPV en devise : 1 centime d'écart admis sur les swaps, 1e-6 sur les zéro-coupons.
+# NPV in currency: 1 cent difference allowed on swaps, 1e-6 on zero-coupons.
 [step.params.tolerances]
 default = { abs = 1e-8, rel = 1e-9 }
 interest_rate_swap = { abs = 0.01, rel = 0.0 }

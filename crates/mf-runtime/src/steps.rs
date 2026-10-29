@@ -17,21 +17,21 @@ fn err(step: &str, msg: impl Into<String>) -> Error {
 
 fn to_floats(arr: &[Value], step: &str) -> Result<Vec<f64>, Error> {
     arr.iter()
-        .map(|x| x.as_f64().ok_or_else(|| err(step, "valeur non numérique")))
+        .map(|x| x.as_f64().ok_or_else(|| err(step, "non-numeric value")))
         .collect()
 }
 
-/// Série numérique : tableau, objet `{"values": [...]}`, ou colonne `col` d'une table `{col: [...]}`.
+/// Numeric series: array, `{"values": [...]}` object, or column `col` of a `{col: [...]}` table.
 fn series(v: &Value, col: Option<&str>, step: &str) -> Result<Vec<f64>, Error> {
     let arr = match col {
         Some(c) => v
             .get(c)
             .and_then(Value::as_array)
-            .ok_or_else(|| err(step, format!("colonne `{c}` absente")))?,
+            .ok_or_else(|| err(step, format!("column `{c}` not found")))?,
         None => v
             .as_array()
             .or_else(|| v.get("values").and_then(Value::as_array))
-            .ok_or_else(|| err(step, "série attendue (tableau de nombres)"))?,
+            .ok_or_else(|| err(step, "expected a series (array of numbers)"))?,
     };
     to_floats(arr, step)
 }
@@ -48,8 +48,8 @@ fn param_str<'a>(p: &'a Value, k: &str, default: &'a str) -> &'a str {
     p.get(k).and_then(Value::as_str).unwrap_or(default)
 }
 
-/// Identifiant de l'implémentation des étapes intégrées : une montée de version du moteur
-/// modifie leur empreinte de code, ce que signale le rejeu.
+/// Identifier of the built-in step implementation: an engine version bump
+/// changes their code fingerprint, which replay reports.
 pub const ENGINE: &str = concat!("mf-runtime ", env!("CARGO_PKG_VERSION"));
 
 fn engine_hash(kind: &str) -> Option<String> {
@@ -63,8 +63,8 @@ pub enum TableFormat {
     Parquet,
 }
 
-/// Lit une colonne (série) ou plusieurs colonnes (table `{col: [...]}`) numériques d'un fichier CSV
-/// (RFC 4180 : guillemets, séparateur configurable) ou Parquet.
+/// Reads one numeric column (series) or several numeric columns (`{col: [...]}` table) from a CSV
+/// file (RFC 4180: quoting, configurable delimiter) or a Parquet file.
 pub struct TableStep {
     pub name: String,
     pub version: String,
@@ -87,19 +87,17 @@ fn read_csv(path: &std::path::Path, columns: &[String], delimiter: u8) -> Result
             header
                 .iter()
                 .position(|h| h == c)
-                .ok_or_else(|| format!("colonne `{c}` absente"))
+                .ok_or_else(|| format!("column `{c}` not found"))
         })
         .collect::<Result<_, _>>()?;
     let mut cols = vec![vec![]; idx.len()];
     for (n, rec) in rdr.records().enumerate() {
-        let rec = rec.map_err(|e| format!("ligne {}: {e}", n + 2))?;
+        let rec = rec.map_err(|e| format!("line {}: {e}", n + 2))?;
         for (k, &i) in idx.iter().enumerate() {
-            let cell = rec
-                .get(i)
-                .ok_or_else(|| format!("ligne {}: colonne manquante", n + 2))?;
+            let cell = rec.get(i).ok_or_else(|| format!("line {}: missing column", n + 2))?;
             cols[k].push(
                 cell.parse::<f64>()
-                    .map_err(|_| format!("ligne {}: `{cell}` non numérique", n + 2))?,
+                    .map_err(|_| format!("line {}: `{cell}` is not numeric", n + 2))?,
             );
         }
     }
@@ -114,7 +112,7 @@ fn read_parquet(path: &std::path::Path, columns: &[String]) -> Result<Vec<Vec<f6
     let schema = reader.metadata().file_metadata().schema_descr_ptr();
     for c in columns {
         if !schema.columns().iter().any(|d| d.name() == c) {
-            return Err(format!("colonne `{c}` absente"));
+            return Err(format!("column `{c}` not found"));
         }
     }
     let mut cols = vec![vec![]; columns.len()];
@@ -132,8 +130,8 @@ fn read_parquet(path: &std::path::Path, columns: &[String]) -> Result<Vec<Vec<f6
                     Field::UInt(x) => *x as f64,
                     Field::ULong(x) => *x as f64,
                     Field::Bool(b) => f64::from(u8::from(*b)),
-                    Field::Null => return Err(format!("ligne {}: valeur manquante dans `{name}`", n + 1)),
-                    other => return Err(format!("ligne {}: `{name}` non numérique ({other})", n + 1)),
+                    Field::Null => return Err(format!("line {}: missing value in `{name}`", n + 1)),
+                    other => return Err(format!("line {}: `{name}` is not numeric ({other})", n + 1)),
                 };
                 cols[k].push(v);
             }
@@ -176,7 +174,7 @@ impl Step for TableStep {
 }
 
 // ---------- JSON ----------
-/// Lit un document JSON (transactions, paramètres de marché, prix…).
+/// Reads a JSON document (trades, market parameters, prices…).
 pub struct JsonStep {
     pub name: String,
     pub version: String,
@@ -199,11 +197,11 @@ impl Step for JsonStep {
     fn run(&self, _: &Inputs) -> Result<Value, Error> {
         let text = std::fs::read_to_string(&self.path)
             .map_err(|e| err(&self.name, format!("{}: {e}", self.path.display())))?;
-        serde_json::from_str(&text).map_err(|e| err(&self.name, format!("JSON invalide: {e}")))
+        serde_json::from_str(&text).map_err(|e| err(&self.name, format!("invalid JSON: {e}")))
     }
 }
 
-// ---------- Étapes intégrées ----------
+// ---------- Built-in steps ----------
 pub struct BuiltinStep {
     pub name: String,
     pub version: String,
@@ -229,17 +227,17 @@ impl BuiltinStep {
         "pd_calibration",
     ];
 
-    /// Entrée nommée par le paramètre `key`, sinon la dépendance n° `idx`.
+    /// Input named by the `key` parameter, otherwise dependency number `idx`.
     fn dep<'a>(&self, inputs: &'a Inputs, key: &str, idx: usize) -> Result<&'a Value, Error> {
         let name = self
             .params
             .get(key)
             .and_then(Value::as_str)
             .or_else(|| self.deps.get(idx).map(String::as_str))
-            .ok_or_else(|| err(&self.name, format!("dépendance `{key}` manquante")))?;
+            .ok_or_else(|| err(&self.name, format!("missing dependency `{key}`")))?;
         inputs
             .get(name)
-            .ok_or_else(|| err(&self.name, format!("`{name}` n'est pas déclaré dans deps")))
+            .ok_or_else(|| err(&self.name, format!("`{name}` is not declared in deps")))
     }
 
     fn column(&self) -> Option<&str> {
@@ -250,7 +248,7 @@ impl BuiltinStep {
         series(t, Some(param_str(&self.params, key, default)), &self.name)
     }
 
-    /// Document de marché brut (JSON) désigné par `market`, ou `null`.
+    /// Raw market document (JSON) named by `market`, or `null`.
     fn market_value(&self, inputs: &Inputs) -> Result<Value, Error> {
         match self.params.get("market").and_then(Value::as_str) {
             Some(_) => Ok(self.dep(inputs, "market", usize::MAX)?.clone()),
@@ -258,7 +256,7 @@ impl BuiltinStep {
         }
     }
 
-    /// Courbes de marché : dépendance désignée par le paramètre `market` (facultatif).
+    /// Market curves: dependency named by the `market` parameter (optional).
     fn market(&self, inputs: &Inputs) -> Result<Market, Error> {
         match self.params.get("market").and_then(Value::as_str) {
             Some(_) => Market::from_value(self.dep(inputs, "market", usize::MAX)?).map_err(|e| err(&self.name, e)),
@@ -290,26 +288,26 @@ impl Step for BuiltinStep {
         match self.kind.as_str() {
             "var_historical" => {
                 let r = series(self.dep(inputs, "series", 0)?, self.column(), &self.name)?;
-                let v = historical_var(&r, alpha).ok_or_else(|| err(&self.name, "série vide ou invalide"))?;
+                let v = historical_var(&r, alpha).ok_or_else(|| err(&self.name, "empty or invalid series"))?;
                 Ok(json!({ "alpha": alpha, "var": v, "observations": r.len() }))
             }
             "kupiec_backtest" => {
                 let r = series(self.dep(inputs, "series", 0)?, self.column(), &self.name)?;
                 let w = param_f64(&self.params, "window", 250.0) as usize;
-                self.json(rolling_backtest(&r, w, alpha), "série trop courte")
+                self.json(rolling_backtest(&r, w, alpha), "series too short")
             }
-            // Prévisions d'un modèle externe : {"start": i, "var": [...]}, var[j] prévoit returns[start + j].
+            // Forecasts from an external model: {"start": i, "var": [...]}, var[j] forecasts returns[start + j].
             "backtest_forecasts" => {
                 let r = series(self.dep(inputs, "returns", 0)?, self.column(), &self.name)?;
                 let f = self.dep(inputs, "forecasts", 1)?;
                 let start = f.get("start").and_then(Value::as_u64).unwrap_or(0) as usize;
                 let var = series(f.get("var").unwrap_or(&Value::Null), None, &self.name)?;
                 if var.is_empty() || start + var.len() > r.len() {
-                    return Err(err(&self.name, "prévisions vides ou plus longues que la série"));
+                    return Err(err(&self.name, "forecasts are empty or longer than the series"));
                 }
                 self.json(
                     var_backtest(&r[start..start + var.len()], &var, alpha),
-                    "backtest impossible",
+                    "backtest not possible",
                 )
             }
             "psi" => {
@@ -317,7 +315,7 @@ impl Step for BuiltinStep {
                 let base = series(self.dep(inputs, "baseline", 0)?, col, &self.name)?;
                 let cur = series(self.dep(inputs, "current", 1)?, col, &self.name)?;
                 let bins = param_f64(&self.params, "bins", 10.0) as usize;
-                self.json(psi(&base, &cur, bins), "échantillons vides")
+                self.json(psi(&base, &cur, bins), "empty samples")
             }
             "pd_discrimination" => {
                 let t = self.dep(inputs, "table", 0)?;
@@ -329,7 +327,7 @@ impl Step for BuiltinStep {
                 );
                 self.json(
                     discrimination(&score, &def, p, w),
-                    "données invalides (au moins un défaut et un non-défaut requis)",
+                    "invalid data (at least one default and one non-default are required)",
                 )
             }
             "pd_calibration" => {
@@ -337,7 +335,7 @@ impl Step for BuiltinStep {
                 let grade = self.table_col(t, "grade", "grade")?;
                 let pd = self.table_col(t, "pd", "pd")?;
                 let def = flags(&self.table_col(t, "default", "default")?);
-                self.json(calibration(&grade, &pd, &def), "données invalides")
+                self.json(calibration(&grade, &pd, &def), "invalid data")
             }
             "price_portfolio" => {
                 let trades = trades_from_value(self.dep(inputs, "trades", 0)?).map_err(|e| err(&self.name, e))?;
@@ -348,7 +346,7 @@ impl Step for BuiltinStep {
                     .collect();
                 Ok(serde_json::to_value(vals?).unwrap())
             }
-            // Pricer candidat vs. référence (dépendance `reference`, sinon bibliothèque intégrée).
+            // Candidate pricer vs. reference (`reference` dependency, otherwise the built-in library).
             "pricing_benchmark" => {
                 let trades = trades_from_value(self.dep(inputs, "trades", 0)?).map_err(|e| err(&self.name, e))?;
                 let candidate = prices_from_value(self.dep(inputs, "candidate", 1)?).map_err(|e| err(&self.name, e))?;
@@ -362,7 +360,7 @@ impl Step for BuiltinStep {
                 let b = compare(&trades, &reference, &candidate, &tol).map_err(|e| err(&self.name, e))?;
                 Ok(serde_json::to_value(b).unwrap())
             }
-            // Risque de portefeuille : revalorisation complète sur scénarios historiques, VaR/ES, limites.
+            // Portfolio risk: full revaluation on historical scenarios, VaR/ES, limits.
             "portfolio_var" => {
                 let trades = trades_from_value(self.dep(inputs, "trades", 0)?).map_err(|e| err(&self.name, e))?;
                 let market = self.market_value(inputs)?;
@@ -373,7 +371,7 @@ impl Step for BuiltinStep {
                 let totals: Vec<f64> = pnl.iter().map(|p| p.pnl).collect();
                 let cv = param_f64(&self.params, "var_confidence", 0.99);
                 let ce = param_f64(&self.params, "es_confidence", 0.975);
-                let r = quantparity::risk::var_es(&totals, cv, ce).ok_or_else(|| err(&self.name, "aucun scénario"))?;
+                let r = quantparity::risk::var_es(&totals, cv, ce).ok_or_else(|| err(&self.name, "no scenario"))?;
                 let mut order: Vec<usize> = (0..pnl.len()).collect();
                 order.sort_by(|&a, &b| totals[a].partial_cmp(&totals[b]).unwrap());
                 let worst: Vec<Value> = order
@@ -381,7 +379,7 @@ impl Step for BuiltinStep {
                     .take(5)
                     .map(|&i| json!({"scenario": pnl[i].name, "pnl": totals[i]}))
                     .collect();
-                // Contributions des positions au scénario qui détermine la VaR.
+                // Position contributions to the scenario that sets the VaR.
                 let k = order.iter().position(|&i| -totals[i] <= r.var + 1e-9).unwrap_or(0);
                 let at_var = &pnl[order[k]];
                 let contributions: Vec<Value> = trades
@@ -431,12 +429,12 @@ impl Step for BuiltinStep {
                 let doc = self.dep(inputs, "scenarios", 1)?;
                 let sc: Vec<quantparity::risk::Scenario> =
                     serde_json::from_value(doc.get("scenarios").cloned().unwrap_or_else(|| doc.clone()))
-                        .map_err(|e| err(&self.name, format!("scénarios invalides : {e}")))?;
+                        .map_err(|e| err(&self.name, format!("invalid scenarios: {e}")))?;
                 let r = quantparity::risk::stress(&trades, &market, &sc).map_err(|e| err(&self.name, e))?;
                 let status = r.iter().map(|x| x.status).max().unwrap_or(quantparity::Status::Pass);
                 Ok(json!({"scenarios": r, "status": status}))
             }
-            // Test d'attribution du P&L (FRTB) : P&L hypothétique contre P&L théorique.
+            // P&L attribution test (FRTB): hypothetical P&L vs. risk-theoretical P&L.
             "pnl_attribution" => {
                 let hpl = series(
                     self.dep(inputs, "hypothetical", 0)?.get("pnl").unwrap_or(&Value::Null),
@@ -454,7 +452,7 @@ impl Step for BuiltinStep {
                     None => {
                         let sens: Vec<quantparity::risk::Sensitivity> =
                             serde_json::from_value(self.dep(inputs, "sensitivities", 1)?["factors"].clone())
-                                .map_err(|e| err(&self.name, format!("sensibilités invalides : {e}")))?;
+                                .map_err(|e| err(&self.name, format!("invalid sensitivities: {e}")))?;
                         let label = self.params.get("label").and_then(Value::as_str);
                         let sc = quantparity::risk::scenarios_from_table(self.dep(inputs, "scenarios", 2)?, label)
                             .map_err(|e| err(&self.name, e))?;
@@ -464,23 +462,23 @@ impl Step for BuiltinStep {
                 if hpl.len() != rtpl.len() {
                     return Err(err(
                         &self.name,
-                        format!("séries de longueurs différentes ({} et {})", hpl.len(), rtpl.len()),
+                        format!("series have different lengths ({} and {})", hpl.len(), rtpl.len()),
                     ));
                 }
                 let min = param_f64(&self.params, "min_observations", 250.0) as usize;
                 self.json(
                     quantparity::risk::pnl_attribution(&hpl, &rtpl, min),
-                    "séries insuffisantes",
+                    "insufficient series",
                 )
             }
-            // Construction de courbe et contrôle de re-pricing des instruments d'entrée.
+            // Curve construction and re-pricing check of the input instruments.
             "curve_bootstrap" => {
                 let market = Market::from_value(self.dep(inputs, "market", 0)?).map_err(|e| err(&self.name, e))?;
                 let all: Vec<String> = market.curves.keys().chain(market.dated.keys()).cloned().collect();
                 let name = match self.params.get("curve").and_then(Value::as_str) {
                     Some(n) => n.to_string(),
                     None if all.len() == 1 => all[0].clone(),
-                    None => return Err(err(&self.name, "plusieurs courbes : préciser `curve`")),
+                    None => return Err(err(&self.name, "several curves: specify `curve`")),
                 };
                 quantparity::curves::simple::curve_report(
                     &market,
@@ -490,22 +488,22 @@ impl Step for BuiltinStep {
                 )
                 .map_err(|e| err(&self.name, e))
             }
-            k => Err(err(&self.name, format!("type inconnu `{k}`"))),
+            k => Err(err(&self.name, format!("unknown type `{k}`"))),
         }
     }
 }
 
-// ---------- Processus externe ----------
-/// Limites appliquées au processus externe (Unix : `setrlimit`).
+// ---------- External process ----------
+/// Limits applied to the external process (Unix: `setrlimit`).
 #[derive(Debug, Clone)]
 pub struct Limits {
-    /// Mémoire virtuelle maximale (RLIMIT_AS), en Mo.
+    /// Maximum virtual memory (RLIMIT_AS), in MB.
     pub memory_mb: Option<u64>,
-    /// Temps CPU maximal (RLIMIT_CPU), en secondes.
+    /// Maximum CPU time (RLIMIT_CPU), in seconds.
     pub cpu_secs: Option<u64>,
-    /// Taille maximale d'un fichier écrit (RLIMIT_FSIZE), en Mo.
+    /// Maximum size of a written file (RLIMIT_FSIZE), in MB.
     pub file_size_mb: Option<u64>,
-    /// Taille maximale de la sortie standard, en Mo.
+    /// Maximum size of standard output, in MB.
     pub max_output_mb: u64,
 }
 
@@ -520,18 +518,18 @@ impl Default for Limits {
     }
 }
 
-/// Protocole : le processus reçoit sur stdin `{"inputs": {...}, "params": {...}}`
-/// et écrit un unique document JSON sur stdout. Code de sortie ≠ 0 = échec.
+/// Protocol: the process receives `{"inputs": {...}, "params": {...}}` on stdin
+/// and writes a single JSON document to stdout. Exit code ≠ 0 = failure.
 ///
-/// Isolation : environnement vidé (seuls `PATH`, `LANG`, `HOME`, `TMPDIR`, `PYTHONHASHSEED`, les
-/// variables `env` et celles listées dans `pass_env` sont transmises), limites de ressources,
-/// plafond de sortie, groupe de processus dédié tué à l'issue (aucun processus orphelin).
+/// Isolation: cleared environment (only `PATH`, `LANG`, `HOME`, `TMPDIR`, `PYTHONHASHSEED`, the
+/// `env` variables and those listed in `pass_env` are passed), resource limits,
+/// output cap, dedicated process group killed at the end (no orphan processes).
 pub struct ProcessStep {
     pub name: String,
     pub version: String,
     pub deps: Vec<String>,
     pub command: Vec<String>,
-    /// Fichiers dont le contenu entre dans l'empreinte de code.
+    /// Files whose content is part of the code fingerprint.
     pub code: Vec<PathBuf>,
     pub params: Value,
     pub cwd: PathBuf,
@@ -543,7 +541,7 @@ pub struct ProcessStep {
 
 #[cfg(unix)]
 fn kill_group(pid: u32) {
-    // SAFETY : appel système sans effet sur la mémoire du processus courant.
+    // SAFETY: system call with no effect on the current process's memory.
     unsafe {
         libc::kill(-(pid as i32), libc::SIGKILL);
     }
@@ -558,7 +556,7 @@ fn apply_limits(cmd: &mut Command, l: &Limits) {
     let mb = |x: u64| x.saturating_mul(1024 * 1024);
     let (mem, cpu, fsize) = (l.memory_mb.map(mb), l.cpu_secs, l.file_size_mb.map(mb));
     cmd.process_group(0);
-    // SAFETY : la fermeture n'appelle que setrlimit, sûr entre fork et exec.
+    // SAFETY: the closure only calls setrlimit, which is safe between fork and exec.
     unsafe {
         cmd.pre_exec(move || {
             let set = |res, v: u64| {
@@ -611,7 +609,7 @@ impl Step for ProcessStep {
             );
             buf.extend(std::fs::read(f).unwrap_or_else(|_| b"<absent>".to_vec()));
         }
-        // L'environnement explicite influe sur le calcul ; seuls les noms des variables transmises comptent.
+        // The explicit environment affects the computation; only the names of passed variables count.
         buf.extend(serde_json::to_vec(&(&self.env, &self.pass_env)).unwrap());
         Some(hash_bytes(&buf))
     }
@@ -645,7 +643,7 @@ impl Step for ProcessStep {
         apply_limits(&mut cmd, &self.limits);
         let mut child = cmd
             .spawn()
-            .map_err(|e| err(&self.name, format!("lancement `{}`: {e}", self.command[0])))?;
+            .map_err(|e| err(&self.name, format!("failed to start `{}`: {e}", self.command[0])))?;
         let pid = child.id();
         let mut stdin = child.stdin.take().unwrap();
         let stdout = child.stdout.take().unwrap();
@@ -680,7 +678,7 @@ impl Step for ProcessStep {
                 finish(&mut child);
                 return Err(err(
                     &self.name,
-                    format!("sortie supérieure à {} Mo", self.limits.max_output_mb),
+                    format!("output larger than {} MB", self.limits.max_output_mb),
                 ));
             }
             match child.try_wait().map_err(|e| err(&self.name, e.to_string()))? {
@@ -689,19 +687,19 @@ impl Step for ProcessStep {
                     finish(&mut child);
                     return Err(err(
                         &self.name,
-                        format!("délai dépassé ({} s)", self.timeout.as_secs_f64()),
+                        format!("timeout exceeded ({} s)", self.timeout.as_secs_f64()),
                     ));
                 }
                 None => std::thread::sleep(Duration::from_millis(5)),
             }
         };
-        // Les éventuels processus descendants restés actifs sont arrêtés (et libèrent les tubes).
+        // Any descendant processes still running are killed (which releases the pipes).
         kill_group(pid);
         let stdout = out.join().unwrap_or_default();
         if overflow.load(Ordering::SeqCst) {
             return Err(err(
                 &self.name,
-                format!("sortie supérieure à {} Mo", self.limits.max_output_mb),
+                format!("output larger than {} MB", self.limits.max_output_mb),
             ));
         }
         if !status.success() {
@@ -710,7 +708,7 @@ impl Step for ProcessStep {
                 .to_string();
             return Err(err(&self.name, format!("code {status}: {msg}")));
         }
-        serde_json::from_slice(&stdout).map_err(|e| err(&self.name, format!("sortie JSON invalide: {e}")))
+        serde_json::from_slice(&stdout).map_err(|e| err(&self.name, format!("invalid JSON output: {e}")))
     }
 }
 
@@ -768,7 +766,7 @@ mod tests {
         let e = table(p, &["b"], TableFormat::Csv { delimiter: b',' })
             .run(&BTreeMap::new())
             .unwrap_err();
-        assert!(e.to_string().contains("ligne 2"));
+        assert!(e.to_string().contains("line 2"));
     }
 
     #[test]
@@ -818,7 +816,7 @@ mod tests {
 
     #[test]
     fn environment_is_cleared() {
-        std::env::set_var("MF_TEST_SECRET", "fuite");
+        std::env::set_var("MF_TEST_SECRET", "leak");
         let mut p = sh(
             r#"printf '{"secret":"%s","explicit":"%s"}' "$MF_TEST_SECRET" "$MF_EXPLICIT""#,
             5000,
@@ -830,7 +828,7 @@ mod tests {
             (Some(""), Some("ok"))
         );
         p.pass_env = vec!["MF_TEST_SECRET".into()];
-        assert_eq!(p.run(&BTreeMap::new()).unwrap()["secret"], "fuite");
+        assert_eq!(p.run(&BTreeMap::new()).unwrap()["secret"], "leak");
     }
 
     #[test]
@@ -842,7 +840,7 @@ mod tests {
             .run(&BTreeMap::new())
             .unwrap_err()
             .to_string()
-            .contains("sortie supérieure"));
+            .contains("output larger"));
         assert!(t.elapsed() < Duration::from_secs(5));
     }
 
@@ -885,7 +883,7 @@ mod tests {
     fn process_timeout_kills() {
         let t = Instant::now();
         let e = sh("sleep 5", 200).run(&BTreeMap::new()).unwrap_err().to_string();
-        assert!(e.contains("délai") && t.elapsed() < Duration::from_secs(3));
+        assert!(e.contains("timeout") && t.elapsed() < Duration::from_secs(3));
     }
 
     fn builtin(kind: &str, deps: &[&str], params: Value) -> BuiltinStep {

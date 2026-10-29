@@ -13,7 +13,7 @@ kind = "json"
 version = "1.0.0"
 path = "trades.json"
 
-# Variations quotidiennes des facteurs de risque (300 jours)
+# Daily risk factor changes (300 days)
 [[step]]
 name = "history"
 kind = "csv"
@@ -27,7 +27,7 @@ kind = "json"
 version = "1.0.0"
 path = "stress.json"
 
-# VaR 99 % et ES 97,5 % historiques par revalorisation complète, avec limites
+# Historical 99% VaR and 97.5% ES by full revaluation, with limits
 [[step]]
 name = "var_es"
 kind = "portfolio_var"
@@ -35,7 +35,7 @@ version = "1.0.0"
 deps = ["positions", "history", "market"]
 params = { trades = "positions", scenarios = "history", market = "market", label = "day", var_confidence = 0.99, es_confidence = 0.975, var_limit = 550000, es_limit = 750000 }
 
-# Sensibilités : delta, vega, DV01 par pilier de courbe, sensibilité au rendement
+# Sensitivities: delta, vega, DV01 per curve pillar, yield sensitivity
 [[step]]
 name = "sensitivities"
 kind = "sensitivities"
@@ -50,7 +50,7 @@ version = "1.0.0"
 deps = ["positions", "stress_scenarios", "market"]
 params = { trades = "positions", scenarios = "stress_scenarios", market = "market" }
 
-# Test d'attribution du P&L (FRTB) : revalorisation complète contre P&L théorique des sensibilités
+# P&L attribution test (FRTB): full revaluation vs. risk-theoretical P&L from sensitivities
 [[step]]
 name = "pnl_attribution"
 kind = "pnl_attribution"

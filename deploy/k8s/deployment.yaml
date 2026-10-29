@@ -6,8 +6,8 @@ metadata:
   labels:
     app.kubernetes.io/name: modelflow
 spec:
-  # Une réplique avec SQLite. Avec PostgreSQL, plusieurs répliques sont possibles si l'espace de
-  # travail est partagé (volume ReadWriteMany ou dépôt Git synchronisé dans chaque pod).
+  # One replica with SQLite. With PostgreSQL, several replicas are possible if the workspace
+  # is shared (ReadWriteMany volume or a Git repository synced into each pod).
   replicas: 1
   strategy:
     type: Recreate
@@ -28,10 +28,10 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       initContainers:
-        # Démonstration : copie les exemples dans l'espace de travail s'il est vide.
-        # En production, alimenter /workspace depuis un dépôt Git (git-sync) ou un pipeline CI.
+        # Demo: copies the examples into the workspace if it is empty.
+        # In production, populate /workspace from a Git repository (git-sync) or a CI pipeline.
         - name: seed-examples
-          image: modelflow:0.10.0
+          image: modelflow:0.11.0
           command: ["sh", "-c", "[ -n \"$(ls -A /workspace)\" ] || cp -r /opt/modelflow/examples/. /workspace/"]
           securityContext:
             allowPrivilegeEscalation: false
@@ -43,7 +43,7 @@ spec:
               mountPath: /workspace
       containers:
         - name: modelflow
-          image: modelflow:0.10.0
+          image: modelflow:0.11.0
           args: ["serve", "--config", "/etc/modelflow/server.toml"]
           env:
             - name: MODELFLOW_DATABASE_URL

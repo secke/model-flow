@@ -1,5 +1,5 @@
-/* ModelFlow — console de validation des modèles.
-   Registre scellé : surfaces calmes, tableaux, un seul élément fort (le sceau de l'exécution). */
+/* ModelFlow — model validation console.
+   Sealed register: calm surfaces, tables, a single strong element (the run seal). */
 
 :root {
   --paper: #f3f5f7;
@@ -49,7 +49,7 @@ a { color: inherit; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
 button, input, textarea { font: inherit; color: inherit; }
 
-/* ---------- Structure ---------- */
+/* ---------- Layout ---------- */
 .shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
 .nav {
   background: var(--ink);
@@ -101,7 +101,7 @@ h2 { font-size: 18px; font-weight: 600; margin: 36px 0 12px; }
 .crumbs a { text-decoration: none; }
 .crumbs a:hover { text-decoration: underline; }
 
-/* ---------- Tableaux ---------- */
+/* ---------- Tables ---------- */
 .table-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
@@ -114,7 +114,7 @@ td.num { font-variant-numeric: tabular-nums; }
 .muted { color: var(--slate); }
 .empty { padding: 28px 16px; color: var(--slate); }
 
-/* ---------- États ---------- */
+/* ---------- States ---------- */
 .state {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 13px; font-weight: 500;
@@ -127,7 +127,7 @@ td.num { font-variant-numeric: tabular-nums; }
 .state.fail, .state.rejected { color: var(--fail); background: var(--fail-bg); }
 .state.none { color: var(--slate); background: var(--soft); }
 
-/* ---------- Boutons et formulaires ---------- */
+/* ---------- Buttons and forms ---------- */
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
   border: 1px solid var(--line); background: var(--surface);
@@ -157,14 +157,14 @@ textarea { min-height: 84px; resize: vertical; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .progress::before { animation: none; } }
 
-/* ---------- Connexion ---------- */
+/* ---------- Sign-in ---------- */
 .login { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
 .login-box { width: min(440px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 32px; }
 .login-box h1 { font-size: 24px; }
 .login-box .sep { margin: 22px 0 14px; color: var(--slate); font-size: 14px; }
 .login-box .btn { width: 100%; justify-content: center; }
 
-/* ---------- Exécution : le sceau ---------- */
+/* ---------- Run: the seal ---------- */
 .run-head { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center; margin-bottom: 8px; }
 .seal {
   --c: var(--slate); --bg: var(--soft);

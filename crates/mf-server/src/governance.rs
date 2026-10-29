@@ -1,5 +1,5 @@
-//! Décisions de validation, travaux d'exécution et journal d'audit en ajout seul.
-//! Deux implémentations : SQLite (fichier local) et PostgreSQL (partagée entre instances).
+//! Validation decisions, run jobs and append-only audit log.
+//! Two implementations: SQLite (local file) and PostgreSQL (shared across instances).
 
 use crate::Role;
 use mf_runtime::pg::{PgConn, PgPool};
@@ -9,18 +9,18 @@ use serde_json::{json, Value};
 use std::cell::RefCell;
 use std::path::Path;
 
-/// Fiche d'inventaire d'un modèle.
+/// Inventory record of a model.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct ModelRecord {
     pub id: String,
     pub name: String,
     pub owner: String,
     pub purpose: String,
-    /// Niveau de risque : 1 (élevé) à 3 (faible).
+    /// Risk tier: 1 (high) to 3 (low).
     pub tier: i64,
     /// `development`, `in_validation`, `approved`, `in_use`, `retired`.
     pub status: String,
-    /// Date de prochaine revue (AAAA-MM-JJ).
+    /// Next review date (YYYY-MM-DD).
     pub next_review: Option<String>,
     #[serde(default)]
     pub updated_at: i64,
@@ -42,7 +42,7 @@ fn now() -> i64 {
         .as_secs() as i64
 }
 
-/// Identifiant de l'instance (nom d'hôte, c'est-à-dire le pod sous Kubernetes).
+/// Instance identifier (host name, i.e. the pod on Kubernetes).
 pub fn instance_id() -> String {
     std::env::var("HOSTNAME")
         .ok()
@@ -55,7 +55,7 @@ pub fn instance_id() -> String {
         .unwrap_or_else(|| "local".into())
 }
 
-/// Schéma PostgreSQL de la gouvernance (idempotent). Le journal d'audit refuse UPDATE, DELETE et TRUNCATE.
+/// PostgreSQL governance schema (idempotent). The audit log rejects UPDATE, DELETE and TRUNCATE.
 pub const PG_SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS decisions (
     id BIGSERIAL PRIMARY KEY, pipeline TEXT NOT NULL, run_id BIGINT NOT NULL,
@@ -73,13 +73,13 @@ CREATE TABLE IF NOT EXISTS models (
     created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL, updated_by TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS schedules (pipeline TEXT PRIMARY KEY, last_slot BIGINT NOT NULL);
 CREATE OR REPLACE FUNCTION mf_audit_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN RAISE EXCEPTION 'journal d''audit en ajout seul'; END $$;
+BEGIN RAISE EXCEPTION 'append-only audit log'; END $$;
 CREATE OR REPLACE TRIGGER audit_no_change BEFORE UPDATE OR DELETE ON audit
     FOR EACH ROW EXECUTE FUNCTION mf_audit_append_only();
 CREATE OR REPLACE TRIGGER audit_no_truncate BEFORE TRUNCATE ON audit
     FOR EACH STATEMENT EXECUTE FUNCTION mf_audit_append_only();";
 
-/// Paramètre de requête commun aux deux moteurs.
+/// Query parameter shared by both backends.
 enum P<'a> {
     I(i64),
     S(&'a str),
@@ -87,7 +87,7 @@ enum P<'a> {
     OS(Option<&'a str>),
 }
 
-/// Type attendu d'une colonne lue.
+/// Expected type of a column being read.
 #[derive(Clone, Copy)]
 enum C {
     I,
@@ -98,8 +98,8 @@ enum C {
 
 fn pg_err(e: postgres::Error) -> String {
     e.as_db_error()
-        .map(|d| format!("PostgreSQL : {}", d.message()))
-        .unwrap_or_else(|| format!("PostgreSQL : {e}"))
+        .map(|d| format!("PostgreSQL: {}", d.message()))
+        .unwrap_or_else(|| format!("PostgreSQL: {e}"))
 }
 
 impl Gov {
@@ -131,9 +131,9 @@ impl Gov {
                 created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, updated_by TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS schedules (pipeline TEXT PRIMARY KEY, last_slot INTEGER NOT NULL);
              CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit
-                BEGIN SELECT RAISE(ABORT, 'journal d''audit en ajout seul'); END;
+                BEGIN SELECT RAISE(ABORT, 'append-only audit log'); END;
              CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit
-                BEGIN SELECT RAISE(ABORT, 'journal d''audit en ajout seul'); END;",
+                BEGIN SELECT RAISE(ABORT, 'append-only audit log'); END;",
         )
         .map_err(|e| e.to_string())?;
         let has_instance: bool = c
@@ -149,11 +149,11 @@ impl Gov {
 
     pub fn postgres(pool: &PgPool) -> Result<Self, String> {
         Ok(Gov::Postgres(Box::new(RefCell::new(
-            pool.get().map_err(|e| format!("PostgreSQL : {e}"))?,
+            pool.get().map_err(|e| format!("PostgreSQL: {e}"))?,
         ))))
     }
 
-    /// Adapte une requête écrite avec `$n` et `{user}` au moteur.
+    /// Adapts a query written with `$n` and `{user}` to the backend.
     fn sql(&self, q: &str) -> String {
         match self {
             Gov::Sqlite(_) => {
@@ -269,10 +269,10 @@ impl Gov {
         .map(|_| ())
     }
 
-    /// Marque en échec les travaux restés en cours lors d'un arrêt : tous en SQLite (instance unique),
-    /// ceux de cette instance en PostgreSQL (les autres instances continuent les leurs).
+    /// Marks jobs left running at shutdown as failed: all of them on SQLite (single instance),
+    /// only this instance's on PostgreSQL (other instances keep theirs running).
     pub fn fail_interrupted_jobs(&self) -> Result<u64, String> {
-        let base = "UPDATE jobs SET status = 'failed', error = 'interrompu par un arrêt du serveur', finished_at = $1
+        let base = "UPDATE jobs SET status = 'failed', error = 'interrupted by a server shutdown', finished_at = $1
                     WHERE status IN ('queued', 'running')";
         match self {
             Gov::Sqlite(_) => self.exec(base, &[P::I(now())]),
@@ -368,7 +368,7 @@ impl Gov {
             .collect())
     }
 
-    /// Dernier créneau planifié traité pour un pipeline.
+    /// Latest scheduled slot processed for a pipeline.
     pub fn schedule_last(&self, pipeline: &str) -> Result<Option<i64>, String> {
         let rows = self.query(
             "SELECT last_slot FROM schedules WHERE pipeline = $1",
@@ -378,7 +378,7 @@ impl Gov {
         Ok(rows.first().and_then(|r| r[0].as_i64()))
     }
 
-    /// Réserve un créneau (comparer-et-échanger) : une seule instance l'obtient.
+    /// Claims a slot (compare-and-swap): only one instance gets it.
     pub fn schedule_claim(&self, pipeline: &str, previous: Option<i64>, slot: i64) -> Result<bool, String> {
         let n = match previous {
             None => self.exec(

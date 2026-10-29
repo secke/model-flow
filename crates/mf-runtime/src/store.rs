@@ -1,5 +1,5 @@
-//! Historique des exécutions et magasin de sorties adressé par contenu.
-//! Deux implémentations : SQLite (fichier local, une base par pipeline) et PostgreSQL (partagée).
+//! Run history and content-addressed output store.
+//! Two implementations: SQLite (local file, one database per pipeline) and PostgreSQL (shared).
 
 use crate::pg::{PgConn, PgPool};
 use mf_core::{hash_value, Manifest};
@@ -20,11 +20,11 @@ pub struct RunRow {
     pub run_hash: String,
     pub created_at: i64,
     pub triggered_by: String,
-    /// Pire statut des étapes de contrôle (`pass`, `warn`, `fail`), absent s'il n'y en a aucune.
+    /// Worst status of the check steps (`pass`, `warn`, `fail`), absent if there are none.
     pub status: Option<String>,
 }
 
-/// Pire statut (`fail` > `warn` > `pass`) parmi les sorties des étapes.
+/// Worst status (`fail` > `warn` > `pass`) among the step outputs.
 pub fn overall_status(m: &Manifest) -> Option<String> {
     let rank = |s: &str| match s {
         "fail" => 3,
@@ -54,7 +54,7 @@ fn pg_err(e: postgres::Error) -> String {
     }
 }
 
-/// Schéma PostgreSQL des exécutions (idempotent).
+/// PostgreSQL schema for runs (idempotent).
 pub const PG_SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS runs (
     id BIGSERIAL PRIMARY KEY,
@@ -92,7 +92,7 @@ impl Store {
                 content TEXT NOT NULL);",
         )
         .map_err(|e| e.to_string())?;
-        // Migration v0.5 : auteur de l'exécution.
+        // v0.5 migration: run author.
         let has_col: bool = c
             .prepare("SELECT 1 FROM pragma_table_info('runs') WHERE name = 'triggered_by'")
             .and_then(|mut s| s.exists([]))
@@ -112,15 +112,15 @@ impl Store {
         Ok(Store::Sqlite(c))
     }
 
-    /// Connexion prise dans le pool PostgreSQL (schéma créé par [`crate::pg::connect`]).
+    /// Connection taken from the PostgreSQL pool (schema created by [`crate::pg::connect`]).
     pub fn postgres(pool: &PgPool) -> Result<Self, String> {
         Ok(Store::Postgres(Box::new(RefCell::new(
             pool.get().map_err(|e| format!("PostgreSQL : {e}"))?,
         ))))
     }
 
-    /// Enregistre une exécution. Les sorties sont stockées une seule fois, adressées par leur
-    /// empreinte (déduplication entre exécutions) ; le manifeste ne garde que les empreintes.
+    /// Records a run. Outputs are stored once, addressed by their
+    /// fingerprint (deduplicated across runs); the manifest only keeps the fingerprints.
     pub fn save(&self, pipeline: &str, m: &Manifest, triggered_by: &str) -> Result<i64, String> {
         let mut slim = m.clone();
         let blobs: Vec<(String, String)> = m
@@ -188,19 +188,19 @@ impl Store {
         }
     }
 
-    /// Recharge les sorties depuis le magasin et vérifie leur intégrité.
+    /// Reloads the outputs from the store and checks their integrity.
     fn hydrate(&self, m: &mut Manifest) -> Result<(), String> {
         for s in &mut m.steps {
             if !s.output.is_null() {
-                continue; // manifeste antérieur à la v0.6 : sortie en ligne
+                continue; // manifest older than v0.6: inline output
             }
             let content = self
                 .blob(&s.output_hash)?
-                .ok_or_else(|| format!("sortie de l'étape {} absente du magasin", s.name))?;
+                .ok_or_else(|| format!("output of step {} not found in the store", s.name))?;
             let v: Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
             if hash_value(&v) != s.output_hash {
                 return Err(format!(
-                    "intégrité compromise : la sortie stockée de l'étape {} a été modifiée",
+                    "integrity compromised: the stored output of step {} has been modified",
                     s.name
                 ));
             }
@@ -209,7 +209,7 @@ impl Store {
         Ok(())
     }
 
-    /// Taille du magasin : (nombre de sorties distinctes, octets).
+    /// Store size: (number of distinct outputs, bytes).
     pub fn blob_stats(&self) -> Result<(i64, i64), String> {
         match self {
             Store::Sqlite(c) => c
@@ -230,7 +230,7 @@ impl Store {
         }
     }
 
-    /// Exécution `id`, ou la dernière du pipeline si `id` est absent.
+    /// Run `id`, or the pipeline's latest run if `id` is absent.
     pub fn get(&self, pipeline: &str, id: Option<i64>) -> Result<(i64, Manifest), String> {
         let found: Option<(i64, String)> = match self {
             Store::Sqlite(c) => match id {
@@ -263,7 +263,7 @@ impl Store {
                 .map(|r| (r.get(0), r.get(1)))
             }
         };
-        let (rid, text) = found.ok_or_else(|| "aucune exécution trouvée".to_string())?;
+        let (rid, text) = found.ok_or_else(|| "no run found".to_string())?;
         let mut m: Manifest = serde_json::from_str(&text).map_err(|e| e.to_string())?;
         self.hydrate(&mut m)?;
         Ok((rid, m))
@@ -335,12 +335,12 @@ mod tests {
         fn sql(&self) -> &Connection {
             match self {
                 Store::Sqlite(c) => c,
-                Store::Postgres(_) => panic!("SQLite attendu"),
+                Store::Postgres(_) => panic!("SQLite expected"),
             }
         }
     }
 
-    /// Base PostgreSQL de test (variable MODELFLOW_TEST_DATABASE_URL), sinon `None`.
+    /// Test PostgreSQL database (MODELFLOW_TEST_DATABASE_URL variable), otherwise `None`.
     fn pg_store(tag: &str) -> Option<Store> {
         let admin = std::env::var("MODELFLOW_TEST_DATABASE_URL").ok()?;
         let url = crate::pg::create_test_database(&admin, &format!("mf_store_{tag}_{}", std::process::id())).unwrap();
@@ -362,7 +362,7 @@ mod tests {
     #[test]
     fn postgres_roundtrip_dedup_and_integrity() {
         let Some(s) = pg_store("rt") else {
-            eprintln!("MODELFLOW_TEST_DATABASE_URL absent : test PostgreSQL ignoré");
+            eprintln!("MODELFLOW_TEST_DATABASE_URL not set: PostgreSQL test skipped");
             return;
         };
         let m = sample();
@@ -373,13 +373,13 @@ mod tests {
         assert_eq!((id, back.steps[0].output.clone()), (2, m.steps[0].output.clone()));
         assert_eq!(s.info("p", 1).unwrap().unwrap().triggered_by, "alice");
         assert_eq!(s.list("p").unwrap().len(), 2);
-        assert!(s.get("autre", None).is_err());
+        assert!(s.get("other", None).is_err());
         if let Store::Postgres(c) = &s {
             c.borrow_mut()
                 .execute("UPDATE blobs SET content = '[2.0]'", &[])
                 .unwrap();
         }
-        assert!(s.get("p", Some(1)).unwrap_err().contains("intégrité"));
+        assert!(s.get("p", Some(1)).unwrap_err().contains("integrity"));
     }
 
     #[test]
@@ -421,18 +421,18 @@ mod tests {
         s.save("p", &m, "a").unwrap();
         s.save("p", &m, "a").unwrap();
         let (n, bytes) = s.blob_stats().unwrap();
-        assert_eq!(n, 1, "une seule copie pour deux exécutions identiques");
+        assert_eq!(n, 1, "a single copy for two identical runs");
         assert!(bytes > 30_000);
-        // Relecture exacte des flottants (sinon l'empreinte diffère après stockage).
+        // Exact float round-trip (otherwise the fingerprint differs after storage).
         let manifest_len: i64 = s
             .sql()
             .query_row("SELECT length(manifest) FROM runs WHERE id = 2", [], |r| r.get(0))
             .unwrap();
-        assert!(manifest_len < 1_000, "manifeste allégé : {manifest_len} octets");
+        assert!(manifest_len < 1_000, "lightweight manifest: {manifest_len} bytes");
         assert_eq!(s.get("p", Some(2)).unwrap().1.steps[0].output, m.steps[0].output);
 
         s.sql().execute("UPDATE blobs SET content = '[2.0]'", []).unwrap();
-        assert!(s.get("p", Some(1)).unwrap_err().contains("intégrité"));
+        assert!(s.get("p", Some(1)).unwrap_err().contains("integrity"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

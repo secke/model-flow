@@ -1,8 +1,8 @@
-# Démarrage local : renseigner deploy/server.docker.toml puis `docker compose up --build`.
+# Local start: fill in deploy/server.docker.toml, then `docker compose up --build`.
 services:
   modelflow:
     build: .
-    image: modelflow:0.10.0
+    image: modelflow:0.11.0
     ports:
       - "127.0.0.1:8080:8080"
     volumes:

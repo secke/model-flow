@@ -1,4 +1,4 @@
-//! Inventaire des modèles, planification et alertes.
+//! Model inventory, scheduling and alerts.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -19,7 +19,7 @@ fn workspace(tag: &str, schedule: &str, failing: bool) -> PathBuf {
         .collect();
     std::fs::write(dir.join("returns.csv"), format!("day,ret\n{rows}")).unwrap();
     let extra = if failing {
-        "[[step]]\nname = \"broken\"\nkind = \"process\"\nversion = \"1\"\ncommand = [\"sh\", \"-c\", \"echo panne >&2; exit 2\"]\n"
+        "[[step]]\nname = \"broken\"\nkind = \"process\"\nversion = \"1\"\ncommand = [\"sh\", \"-c\", \"echo outage >&2; exit 2\"]\n"
     } else {
         ""
     };
@@ -84,8 +84,8 @@ async fn call(app: &axum::Router, method: &str, uri: &str, token: &str, body: Op
 }
 
 fn model(owner: &str) -> Value {
-    json!({"id": "VAR-DESK-01", "name": "VaR historique du desk actions", "owner": owner,
-           "purpose": "Capital réglementaire risque de marché", "tier": 1, "next_review": "2020-01-31"})
+    json!({"id": "VAR-DESK-01", "name": "Historical VaR of the equity desk", "owner": owner,
+           "purpose": "Market risk regulatory capital", "tier": 1, "next_review": "2020-01-31"})
 }
 
 #[tokio::test]
@@ -93,7 +93,7 @@ async fn inventory_rules() {
     let ws = workspace("rules", "", false);
     let app = router(state(&ws, ""));
 
-    // Création : propriétaire pour lui-même uniquement, validation des champs.
+    // Creation: owners only for themselves, field validation.
     assert_eq!(
         call(&app, "POST", "/api/models", "tok-alice", Some(model("zoe")))
             .await
@@ -119,7 +119,7 @@ async fn inventory_rules() {
         StatusCode::CONFLICT
     );
 
-    // Liste : pipeline rattaché et revue en retard.
+    // List: linked pipeline and overdue review.
     let (_, list) = call(&app, "GET", "/api/models", "tok-carol", None).await;
     let m = &list["models"][0];
     assert_eq!(
@@ -127,7 +127,7 @@ async fn inventory_rules() {
         (Some("desk-var"), Some(true))
     );
 
-    // Modification : seul le propriétaire ; le statut n'est pas modifiable par cette voie.
+    // Update: owner only; the status cannot be changed this way.
     let mut upd = model("alice");
     upd["next_review"] = json!("2099-06-30");
     upd["status"] = json!("approved");
@@ -143,7 +143,7 @@ async fn inventory_rules() {
         (StatusCode::OK, Some("development"), Some("2099-06-30"))
     );
 
-    // Circuit des statuts.
+    // Status workflow.
     let st = |s: &str| Some(json!({"status": s}));
     assert_eq!(
         call(
@@ -187,7 +187,7 @@ async fn inventory_rules() {
             .0,
         StatusCode::FORBIDDEN
     );
-    // L'approbation exige une dernière exécution approuvée sur chaque pipeline rattaché.
+    // Approval requires an approved latest run on every linked pipeline.
     let (s, e) = call(
         &app,
         "POST",
@@ -197,7 +197,7 @@ async fn inventory_rules() {
     )
     .await;
     assert_eq!(s, StatusCode::CONFLICT);
-    assert!(e["error"].as_str().unwrap().contains("aucune exécution"));
+    assert!(e["error"].as_str().unwrap().contains("no run"));
     call(
         &app,
         "POST",
@@ -215,10 +215,10 @@ async fn inventory_rules() {
     )
     .await;
     assert!(
-        s == StatusCode::CONFLICT && e["error"].as_str().unwrap().contains("en attente"),
+        s == StatusCode::CONFLICT && e["error"].as_str().unwrap().contains("awaiting"),
         "{e}"
     );
-    let ok = Some(json!({"decision": "approved", "comment": "backtest conforme"}));
+    let ok = Some(json!({"decision": "approved", "comment": "backtest compliant"}));
     assert_eq!(
         call(&app, "POST", "/api/pipelines/desk-var/runs/1/decisions", "tok-bob", ok)
             .await
@@ -287,7 +287,7 @@ async fn wait_job(app: &axum::Router, id: i64) -> Value {
         }
         tokio::time::sleep(std::time::Duration::from_millis(25)).await;
     }
-    panic!("travail {id} non terminé");
+    panic!("job {id} not finished");
 }
 
 #[tokio::test]
@@ -295,27 +295,27 @@ async fn scheduler_claims_due_slots_once() {
     let ws = workspace("sched", "schedule = \"*/5 * * * *\"", false);
     let st = state(&ws, "");
     let app = router(st.clone());
-    let t0 = 1_800_000_000; // multiple de 300 s
+    let t0 = 1_800_000_000; // multiple of 300 s
     assert!(
         scheduler_tick(&st, t0 + 10).await.unwrap().is_empty(),
-        "première découverte : rien n'est lancé"
+        "first discovery: nothing is started"
     );
     assert!(
         scheduler_tick(&st, t0 + 200).await.unwrap().is_empty(),
-        "créneau pas encore atteint"
+        "slot not reached yet"
     );
     let jobs = scheduler_tick(&st, t0 + 310).await.unwrap();
     assert_eq!(jobs.len(), 1);
     let j = wait_job(&app, jobs[0]).await;
     assert_eq!(
         (j["status"].as_str(), j["user"].as_str()),
-        (Some("succeeded"), Some("planificateur"))
+        (Some("succeeded"), Some("scheduler"))
     );
     assert!(
         scheduler_tick(&st, t0 + 320).await.unwrap().is_empty(),
-        "créneau déjà traité"
+        "slot already processed"
     );
-    // Une heure d'interruption : un seul rattrapage (le dernier créneau).
+    // One hour of downtime: a single catch-up (the latest slot).
     assert_eq!(scheduler_tick(&st, t0 + 3_900).await.unwrap().len(), 1);
     let (_, p) = call(&app, "GET", "/api/pipelines", "tok-carol", None).await;
     assert_eq!(p[0]["schedule"], "*/5 * * * *");
@@ -326,7 +326,7 @@ async fn scheduler_claims_due_slots_once() {
 #[tokio::test(flavor = "multi_thread")]
 async fn scheduler_single_winner_across_instances() {
     let Ok(admin) = std::env::var("MODELFLOW_TEST_DATABASE_URL") else {
-        eprintln!("MODELFLOW_TEST_DATABASE_URL absent : test PostgreSQL ignoré");
+        eprintln!("MODELFLOW_TEST_DATABASE_URL not set: PostgreSQL test skipped");
         return;
     };
     let name = format!("mf_sched_{}", std::process::id());
@@ -344,7 +344,7 @@ async fn scheduler_single_winner_across_instances() {
         assert_eq!(
             ja.unwrap().len() + jb.unwrap().len(),
             1,
-            "créneau {k} : une seule instance l'exécute"
+            "slot {k}: a single instance runs it"
         );
     }
     let _ = std::fs::remove_dir_all(&ws);
@@ -388,7 +388,7 @@ async fn alerts_on_failure() {
         (got[0]["status"].as_str(), got[0]["pipeline"].as_str()),
         (Some("error"), Some("desk-var"))
     );
-    assert!(got[0]["text"].as_str().unwrap().contains("panne"));
+    assert!(got[0]["text"].as_str().unwrap().contains("outage"));
     assert_eq!(got[0]["link"], "https://modelflow.example/#/p/desk-var");
     let (_, log) = call(&app, "GET", "/api/audit", "tok-carol", None).await;
     assert!(log.to_string().contains("alert.send"));

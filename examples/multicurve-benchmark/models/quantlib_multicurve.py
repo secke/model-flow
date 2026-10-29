@@ -1,7 +1,7 @@
-"""Pricer candidat QuantLib multi-courbes : €STR (OISRateHelper) pour l'actualisation, Euribor 6M
-(DepositRateHelper + SwapRateHelper actualisés €STR) pour la projection. Conventions de marché EUR :
-TARGET, spot T+2, Modified Following, fixe annuel 30/360, variable semestriel Act/360.
-Protocole ModelFlow : JSON sur stdin -> JSON sur stdout."""
+"""Multi-curve QuantLib candidate pricer: €STR (OISRateHelper) for discounting, Euribor 6M
+(DepositRateHelper + SwapRateHelper discounted on €STR) for projection. EUR market conventions:
+TARGET, spot T+2, Modified Following, annual fixed 30/360, semi-annual floating Act/360.
+ModelFlow protocol: JSON on stdin -> JSON on stdout."""
 import json, sys
 
 import QuantLib as ql

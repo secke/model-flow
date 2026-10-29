@@ -1,5 +1,5 @@
-//! Moteur d'orchestration déterministe : DAG d'étapes versionnées,
-//! empreintes SHA-256 des entrées/sorties, manifeste d'exécution et rejeu vérifié.
+//! Deterministic orchestration engine: DAG of versioned steps,
+//! SHA-256 fingerprints of inputs/outputs, run manifest and verified replay.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -9,23 +9,23 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("dépendance inconnue: {step} -> {dep}")]
+    #[error("unknown dependency: {step} -> {dep}")]
     UnknownDep { step: String, dep: String },
-    #[error("cycle détecté dans le pipeline")]
+    #[error("cycle detected in the pipeline")]
     Cycle,
-    #[error("étape dupliquée: {0}")]
+    #[error("duplicate step: {0}")]
     Duplicate(String),
-    #[error("échec de l'étape {step}: {msg}")]
+    #[error("step {step} failed: {msg}")]
     Step { step: String, msg: String },
 }
 
-/// Empreinte canonique d'une valeur JSON (les clés d'objet sont triées).
+/// Canonical fingerprint of a JSON value (object keys are sorted).
 pub fn hash_value(v: &Value) -> String {
-    let bytes = serde_json::to_vec(v).expect("sérialisation JSON");
+    let bytes = serde_json::to_vec(v).expect("JSON serialization");
     Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Empreinte SHA-256 d'octets bruts (fichiers de code, données).
+/// SHA-256 fingerprint of raw bytes (code files, data).
 pub fn hash_bytes(b: &[u8]) -> String {
     Sha256::digest(b).iter().map(|x| format!("{x:02x}")).collect()
 }
@@ -34,11 +34,11 @@ pub type Inputs = BTreeMap<String, Value>;
 
 pub trait Step {
     fn name(&self) -> &str;
-    /// Version du code/modèle : toute modification doit l'incrémenter.
+    /// Code/model version: any change must bump it.
     fn version(&self) -> &str;
     fn deps(&self) -> &[String];
     fn run(&self, inputs: &Inputs) -> Result<Value, Error>;
-    /// Empreinte du code exécuté (scripts, binaires) si connue.
+    /// Fingerprint of the executed code (scripts, binaries), if known.
     fn code_hash(&self) -> Option<String> {
         None
     }
@@ -46,7 +46,7 @@ pub trait Step {
 
 type StepFn = Box<dyn Fn(&Inputs) -> Result<Value, String>>;
 
-/// Étape définie par une fonction.
+/// Step defined by a function.
 pub struct FnStep {
     name: String,
     version: String,
@@ -102,7 +102,7 @@ pub struct StepRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {
     pub steps: Vec<StepRecord>,
-    /// Empreinte de l'ensemble (noms, versions, entrées, sorties).
+    /// Fingerprint of the whole run (names, versions, inputs, outputs).
     pub run_hash: String,
 }
 
@@ -127,7 +127,7 @@ impl Pipeline {
         self
     }
 
-    /// Ordre topologique stable (Kahn, ordre d'insertion pour départager).
+    /// Stable topological order (Kahn, insertion order breaks ties).
     fn order(&self) -> Result<Vec<usize>, Error> {
         let mut idx: HashMap<&str, usize> = HashMap::new();
         for (i, s) in self.steps.iter().enumerate() {
@@ -197,21 +197,21 @@ impl Pipeline {
         })
     }
 
-    /// Ré-exécute le pipeline et compare avec un manifeste de référence.
+    /// Re-runs the pipeline and compares it with a reference manifest.
     pub fn verify(&self, reference: &Manifest) -> Result<Vec<Mismatch>, Error> {
         let fresh = self.execute()?;
         let mut mm = vec![];
         if fresh.steps.len() != reference.steps.len() {
             mm.push(Mismatch {
                 step: "*".into(),
-                reason: "nombre d'étapes différent".into(),
+                reason: "different number of steps".into(),
             });
         }
         for (a, b) in fresh.steps.iter().zip(&reference.steps) {
             if a.name != b.name {
                 mm.push(Mismatch {
                     step: b.name.clone(),
-                    reason: "étape différente".into(),
+                    reason: "different step".into(),
                 });
                 continue;
             }
@@ -224,19 +224,19 @@ impl Pipeline {
             if a.code_hash != b.code_hash && a.version == b.version {
                 mm.push(Mismatch {
                     step: a.name.clone(),
-                    reason: "code modifié sans changement de version".into(),
+                    reason: "code changed without a version bump".into(),
                 });
             }
             if a.input_hash != b.input_hash {
                 mm.push(Mismatch {
                     step: a.name.clone(),
-                    reason: "entrées différentes".into(),
+                    reason: "different inputs".into(),
                 });
             }
             if a.output_hash != b.output_hash {
                 mm.push(Mismatch {
                     step: a.name.clone(),
-                    reason: "résultat non reproductible".into(),
+                    reason: "non-reproducible result".into(),
                 });
             }
         }
@@ -274,8 +274,8 @@ mod tests {
     fn detects_changed_inputs() {
         let m = pipe(21).execute().unwrap();
         let mm = pipe(22).verify(&m).unwrap();
-        assert!(mm.iter().any(|x| x.step == "a" && x.reason.contains("résultat")));
-        assert!(mm.iter().any(|x| x.step == "b" && x.reason.contains("entrées")));
+        assert!(mm.iter().any(|x| x.step == "a" && x.reason.contains("result")));
+        assert!(mm.iter().any(|x| x.step == "b" && x.reason.contains("inputs")));
     }
 
     #[test]

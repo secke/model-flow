@@ -1,5 +1,5 @@
-//! SSO OIDC : jetons signés par un fournisseur d'identité simulé. Les clés RSA de test sont générées
-//! à l'exécution (openssl) : aucune clé privée n'est versionnée.
+//! OIDC SSO: tokens signed by a simulated identity provider. The test RSA keys are generated
+//! at runtime (openssl): no private key is committed.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -12,11 +12,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 
-const ISS: &str = "https://idp.banque.example/realms/risk";
+const ISS: &str = "https://idp.bank.example/realms/risk";
 const AUD: &str = "modelflow-api";
 
-/// Dossier contenant `idp-key.pem`, `other-key.pem`, `jwks.json` (kid test-key-1) et
-/// `jwks-rotated.json` (test-key-1 et test-key-2), créé une fois par exécution des tests.
+/// Directory containing `idp-key.pem`, `other-key.pem`, `jwks.json` (kid test-key-1) and
+/// `jwks-rotated.json` (test-key-1 and test-key-2), created once per test run.
 fn fixtures() -> PathBuf {
     static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
     DIR.get_or_init(|| {
@@ -38,7 +38,7 @@ fn fixtures() -> PathBuf {
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
                 .status()
-                .expect("openssl requis pour les tests OIDC")
+                .expect("openssl is required for the OIDC tests")
                 .success();
             assert!(ok);
             let out = std::process::Command::new("openssl")
@@ -134,7 +134,7 @@ async fn valid_tokens_map_to_roles() {
         &sign(
             "idp-key.pem",
             "test-key-1",
-            claims("dana", &["MF-Owners", "Autre-Groupe"]),
+            claims("dana", &["MF-Owners", "Other-Group"]),
         ),
     )
     .await;
@@ -152,7 +152,7 @@ async fn valid_tokens_map_to_roles() {
     )
     .await;
     assert_eq!(b["role"], "validator");
-    // Les jetons de service restent acceptés.
+    // Service tokens are still accepted.
     let (s, b) = me(&app, "tok-service").await;
     assert_eq!((s, b["role"].as_str()), (StatusCode::OK, Some("admin")));
 }
@@ -170,7 +170,7 @@ async fn segregation_of_duties_and_unmapped_groups() {
     )
     .await;
     assert_eq!(s, StatusCode::FORBIDDEN);
-    assert!(b["error"].as_str().unwrap().contains("séparation des tâches"));
+    assert!(b["error"].as_str().unwrap().contains("segregation of duties"));
     let (s, _) = me(&app, &sign("idp-key.pem", "test-key-1", claims("gina", &["Finance"]))).await;
     assert_eq!(s, StatusCode::FORBIDDEN);
 }
@@ -182,21 +182,21 @@ async fn invalid_tokens_are_rejected() {
     let cases = {
         let mut v = vec![];
         let mut x = c.clone();
-        x["aud"] = json!("autre-api");
+        x["aud"] = json!("other-api");
         v.push(("audience", sign("idp-key.pem", "test-key-1", x)));
         let mut x = c.clone();
         x["iss"] = json!("https://pirate.example");
-        v.push(("émetteur", sign("idp-key.pem", "test-key-1", x)));
+        v.push(("issuer", sign("idp-key.pem", "test-key-1", x)));
         let mut x = c.clone();
         x["exp"] = json!(now() - 3600);
-        v.push(("expiré", sign("idp-key.pem", "test-key-1", x)));
+        v.push(("expired", sign("idp-key.pem", "test-key-1", x)));
         let mut x = c.clone();
         x["nbf"] = json!(now() + 3600);
-        v.push(("pas encore valide", sign("idp-key.pem", "test-key-1", x)));
-        // Clé non publiée présentée sous le kid de la clé publiée.
-        v.push(("mauvaise signature", sign("other-key.pem", "test-key-1", c.clone())));
-        v.push(("kid inconnu", sign("other-key.pem", "inconnu", c.clone())));
-        // Attaque par confusion d'algorithme : HMAC signé avec la clé publique.
+        v.push(("not yet valid", sign("idp-key.pem", "test-key-1", x)));
+        // Unpublished key presented under the published key's kid.
+        v.push(("bad signature", sign("other-key.pem", "test-key-1", c.clone())));
+        v.push(("unknown kid", sign("other-key.pem", "unknown", c.clone())));
+        // Algorithm confusion attack: HMAC signed with the public key.
         let jwks = std::fs::read_to_string(fixtures().join("jwks.json")).unwrap();
         let mut h = Header::new(Algorithm::HS256);
         h.kid = Some("test-key-1".into());
@@ -227,7 +227,7 @@ async fn invalid_tokens_are_rejected() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn discovery_and_key_rotation() {
-    // Fournisseur d'identité simulé : découverte + JWKS modifiable.
+    // Simulated identity provider: discovery + mutable JWKS.
     let jwks = Arc::new(Mutex::new(
         std::fs::read_to_string(fixtures().join("jwks.json")).unwrap(),
     ));
@@ -258,12 +258,12 @@ async fn discovery_and_key_rotation() {
         sign(key, kid, c)
     };
     assert_eq!(me(&app, &mk("idp-key.pem", "test-key-1")).await.0, StatusCode::OK);
-    // Nouvelle clé pas encore publiée : refus.
+    // New key not yet published: rejected.
     assert_eq!(
         me(&app, &mk("other-key.pem", "test-key-2")).await.0,
         StatusCode::UNAUTHORIZED
     );
-    // Rotation côté fournisseur : la clé est rechargée à la première utilisation de son kid.
+    // Provider-side rotation: the key is reloaded the first time its kid is used.
     *jwks.lock().unwrap() = std::fs::read_to_string(fixtures().join("jwks-rotated.json")).unwrap();
     assert_eq!(me(&app, &mk("other-key.pem", "test-key-2")).await.0, StatusCode::OK);
 }

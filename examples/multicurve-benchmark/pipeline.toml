@@ -12,7 +12,7 @@ kind = "json"
 version = "1.0.0"
 path = "trades.json"
 
-# Courbe d'actualisation €STR (swaps OIS)
+# €STR discount curve (OIS swaps)
 [[step]]
 name = "curve_estr"
 kind = "curve_bootstrap"
@@ -20,7 +20,7 @@ version = "1.0.0"
 deps = ["market"]
 params = { curve = "EUR-ESTR", tolerance = 1e-12 }
 
-# Courbe de projection Euribor 6M, actualisée €STR
+# Euribor 6M projection curve, discounted on €STR
 [[step]]
 name = "curve_euribor_6m"
 kind = "curve_bootstrap"

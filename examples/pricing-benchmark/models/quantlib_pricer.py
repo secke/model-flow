@@ -1,5 +1,5 @@
-"""Pricer candidat basé sur QuantLib (bibliothèque de production à valider).
-Protocole ModelFlow : JSON sur stdin -> JSON sur stdout."""
+"""Candidate pricer based on QuantLib (the production library under validation).
+ModelFlow protocol: JSON on stdin -> JSON on stdout."""
 import json, math, sys
 
 import QuantLib as ql
@@ -26,7 +26,7 @@ def european(t):
 def american(t):
     days = round(t["maturity"] * 365)
     if abs(days - t["maturity"] * 365) > 1e-9:
-        raise ValueError(f"{t['id']}: maturité non entière en jours (Act/365)")
+        raise ValueError(f"{t['id']}: maturity is not a whole number of days (Act/365)")
     flat = lambda r: ql.YieldTermStructureHandle(ql.FlatForward(TODAY, r, DC))
     process = ql.BlackScholesMertonProcess(
         ql.QuoteHandle(ql.SimpleQuote(t["spot"])),

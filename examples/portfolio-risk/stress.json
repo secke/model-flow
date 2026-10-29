@@ -1,7 +1,7 @@
 {
   "scenarios": [
     {
-      "name": "Krach actions (type mars 2020)",
+      "name": "Equity crash (March 2020 style)",
       "limit": 3000000,
       "shifts": {
         "SPOT:SX5E": -0.3,
@@ -14,7 +14,7 @@
       }
     },
     {
-      "name": "Choc de taux (type 2022)",
+      "name": "Rates shock (2022 style)",
       "limit": 3000000,
       "shifts": {
         "CURVE:EUR-ESTR": 150,
@@ -25,7 +25,7 @@
       }
     },
     {
-      "name": "Crise souveraine",
+      "name": "Sovereign crisis",
       "limit": 1500000,
       "shifts": {
         "YIELD:OAT": 250,
@@ -36,7 +36,7 @@
       }
     },
     {
-      "name": "Pétrole +60 %",
+      "name": "Oil +60%",
       "limit": 1000000,
       "shifts": {
         "SPOT:BRENT": 0.6,
@@ -46,7 +46,7 @@
       }
     },
     {
-      "name": "Pentification de la courbe",
+      "name": "Curve steepening",
       "limit": 1500000,
       "shifts": {
         "CURVE:EUR-6M:2Y": -40,

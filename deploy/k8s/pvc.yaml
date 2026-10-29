@@ -1,4 +1,4 @@
-# Espace de travail : pipelines, données, historiques SQLite des exécutions et gouvernance.
+# Workspace: pipelines, data, SQLite run histories and governance.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

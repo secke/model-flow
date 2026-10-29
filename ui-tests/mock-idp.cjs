@@ -1,14 +1,14 @@
-// Fournisseur d'identité OIDC simulé pour les tests : découverte, page de choix d'utilisateur,
-// échange du code avec vérification PKCE (S256), JWKS. Clé RSA générée au démarrage.
+// Simulated OIDC identity provider for tests: discovery, user picker page,
+// code exchange with PKCE verification (S256), JWKS. RSA key generated at startup.
 "use strict";
 const http = require("http");
 const crypto = require("crypto");
 
 const USERS = {
-  dana: { groups: ["MF-Owners"], label: "Dana, propriétaire du modèle" },
-  eli: { groups: ["MF-Validators"], label: "Éli, validateur" },
-  carol: { groups: ["MF-Auditors"], label: "Carol, auditrice" },
-  fred: { groups: ["MF-Owners", "MF-Validators"], label: "Fred, rôles incompatibles" },
+  dana: { groups: ["MF-Owners"], label: "Dana, model owner" },
+  eli: { groups: ["MF-Validators"], label: "Eli, validator" },
+  carol: { groups: ["MF-Auditors"], label: "Carol, auditor" },
+  fred: { groups: ["MF-Owners", "MF-Validators"], label: "Fred, incompatible roles" },
 };
 
 function b64url(buf) {
@@ -52,7 +52,7 @@ function start({ port = 0, audience, clientId }) {
       const p = url.searchParams;
       if (p.get("client_id") !== clientId || p.get("code_challenge_method") !== "S256") {
         res.writeHead(400);
-        return res.end("requête d'autorisation invalide");
+        return res.end("invalid authorization request");
       }
       const links = Object.entries(USERS)
         .map(([u, v]) => {
@@ -62,7 +62,7 @@ function start({ port = 0, audience, clientId }) {
         })
         .join("");
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      return res.end(`<!doctype html><meta charset="utf-8"><title>IdP de test</title><h1>Choisir un utilisateur</h1><ul>${links}</ul>`);
+      return res.end(`<!doctype html><meta charset="utf-8"><title>Test IdP</title><h1>Pick a user</h1><ul>${links}</ul>`);
     }
     if (url.pathname === "/pick") {
       const p = url.searchParams;

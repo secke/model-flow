@@ -1,4 +1,4 @@
-"""Génère des rendements synthétiques GARCH(1,1) déterministes."""
+"""Generates deterministic synthetic GARCH(1,1) returns."""
 import math, random
 random.seed(7)
 w, a, b = 2e-6, 0.08, 0.90

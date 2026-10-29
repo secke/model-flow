@@ -3,8 +3,8 @@ use std::path::Path;
 
 const USAGE: &str = "usage:
   mf-server serve --config server.toml
-  mf-server new-token            génère un jeton et son empreinte à placer dans la configuration
-  mf-server hash-token <jeton>   affiche l'empreinte SHA-256 d'un jeton";
+  mf-server new-token            generates a token and the fingerprint to put in the configuration
+  mf-server hash-token <token>   prints the SHA-256 fingerprint of a token";
 
 #[tokio::main]
 async fn main() {
@@ -19,7 +19,7 @@ async fn main() {
                 .unwrap_or("server.toml");
             let cfg = ServerConfig::load(Path::new(cfg_path)).unwrap_or_else(|e| fail(&e));
             if cfg.users.is_empty() && cfg.oidc.is_none() {
-                fail("aucun utilisateur configuré ([[user]] ou [oidc])");
+                fail("no user configured ([[user]] or [oidc])");
             }
             let state = AppState::new(&cfg).unwrap_or_else(|e| fail(&e));
             mf_server::start_scheduler(state.clone());
@@ -37,12 +37,15 @@ async fn main() {
                     let rc = axum_server::tls_rustls::RustlsConfig::from_pem_file(&tls.cert, &tls.key)
                         .await
                         .unwrap_or_else(|e| fail(&format!("TLS: {e}")));
-                    eprintln!("ModelFlow API sur https://{addr} (espace : {})", cfg.workspace.display());
+                    eprintln!(
+                        "ModelFlow API on https://{addr} (workspace: {})",
+                        cfg.workspace.display()
+                    );
                     axum_server::bind_rustls(addr, rc).handle(handle).serve(app).await
                 }
                 None => {
                     eprintln!(
-                        "ModelFlow API sur http://{addr} (espace : {}) — TLS désactivé : placer derrière un proxy HTTPS",
+                        "ModelFlow API on http://{addr} (workspace: {}) — TLS disabled: put it behind an HTTPS proxy",
                         cfg.workspace.display()
                     );
                     axum_server::bind(addr).handle(handle).serve(app).await
@@ -53,7 +56,7 @@ async fn main() {
         Some("new-token") => {
             let t = new_token();
             println!(
-                "jeton (à transmettre à l'utilisateur) : {t}\ntoken_sha256 (configuration)         : {}",
+                "token (give it to the user): {t}\ntoken_sha256 (configuration): {}",
                 hash_token(&t)
             );
         }

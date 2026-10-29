@@ -14,7 +14,7 @@ version = "1.0.0"
 path = "data/current.csv"
 columns = ["grade", "pd", "default"]
 
-# Pouvoir discriminant sur le portefeuille courant
+# Discriminatory power on the current portfolio
 [[step]]
 name = "discrimination"
 kind = "pd_discrimination"
@@ -22,14 +22,14 @@ version = "1.0.0"
 deps = ["current"]
 params = { score = "pd", default = "default", min_gini_pass = 0.40, min_gini_warn = 0.25 }
 
-# Calibration par classe (binomial) + Hosmer-Lemeshow
+# Per-grade calibration (binomial) + Hosmer-Lemeshow
 [[step]]
 name = "calibration"
 kind = "pd_calibration"
 version = "1.0.0"
 deps = ["current"]
 
-# Stabilité de la population : développement vs. courant
+# Population stability: development vs. current
 [[step]]
 name = "stability"
 kind = "psi"
