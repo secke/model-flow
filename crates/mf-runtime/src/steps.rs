@@ -1,8 +1,9 @@
 use mf_core::{hash_bytes, Error, Inputs, Step};
 use quantparity::benchmark::{compare, prices_from_value, reference_prices, trades_from_value, Tolerances};
 use quantparity::curves::Market;
-use quantparity::validation::{calibration, discrimination, historical_var, psi, rolling_backtest, var_backtest};
+use quantparity::validation::{calibration, discrimination, historical_var, psi, traffic_light, var_backtest};
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -38,6 +39,77 @@ fn series(v: &Value, col: Option<&str>, step: &str) -> Result<Vec<f64>, Error> {
 
 fn flags(v: &[f64]) -> Vec<bool> {
     v.iter().map(|x| *x != 0.0).collect()
+}
+
+/// Regulatory backtesting window (Basel: the last 250 business days).
+const BASEL_WINDOW: usize = 250;
+
+/// `20200316` -> `"2020-03-16"`; any other value is kept as is.
+fn date_label(d: f64) -> Value {
+    let n = d as u64;
+    let (y, m, day) = (n / 10_000, n / 100 % 100, n % 100);
+    if d.fract() == 0.0 && (1000..=9999).contains(&y) && (1..=12).contains(&m) && (1..=31).contains(&day) {
+        json!(format!("{y:04}-{m:02}-{day:02}"))
+    } else {
+        json!(d)
+    }
+}
+
+/// Details a validator needs to investigate a VaR backtest, added to the summary statistics:
+/// every exception (dated when `dates` is given), the Basel traffic light on consecutive
+/// 250-day windows ending at the latest observation, and exceptions per calendar year.
+/// `offset` is the index of `realized[0]` in the original return series (and in `dates`).
+fn backtest_details(realized: &[f64], var: &[f64], alpha: f64, offset: usize, dates: Option<&[f64]>) -> Value {
+    let date = |i: usize| dates.and_then(|d| d.get(offset + i)).map(|d| date_label(*d));
+    let hits: Vec<bool> = realized.iter().zip(var).map(|(r, v)| *r < -*v).collect();
+    let exceptions: Vec<Value> = (0..hits.len())
+        .filter(|&i| hits[i])
+        .map(|i| {
+            let mut e = json!({"index": offset + i, "return": realized[i], "var": var[i], "excess_loss": -realized[i] - var[i]});
+            if let Some(d) = date(i) {
+                e["date"] = d;
+            }
+            e
+        })
+        .collect();
+    // Consecutive full windows, the last one ending at the latest observation.
+    let windows: Vec<Value> = (0..hits.len() / BASEL_WINDOW)
+        .rev()
+        .map(|k| hits.len() - (k + 1) * BASEL_WINDOW)
+        .map(|start| {
+            let n = hits[start..start + BASEL_WINDOW].iter().filter(|h| **h).count();
+            let t = traffic_light(BASEL_WINDOW, n, alpha);
+            let mut w = json!({"exceptions": n, "zone": t.zone, "plus_factor": t.plus_factor, "status": t.status});
+            if let (Some(a), Some(b)) = (date(start), date(start + BASEL_WINDOW - 1)) {
+                w["from"] = a;
+                w["to"] = b;
+            } else {
+                w["from"] = json!(offset + start);
+                w["to"] = json!(offset + start + BASEL_WINDOW - 1);
+            }
+            w
+        })
+        .collect();
+    let mut out = json!({"exception_list": exceptions, "basel_windows": windows});
+    if let Some(last) = windows.last() {
+        out["latest_basel_window"] = last.clone();
+    }
+    let years: Option<Vec<u64>> = (0..hits.len())
+        .map(|i| date(i).and_then(|d| d.as_str().and_then(|s| s[..4].parse().ok())))
+        .collect();
+    if let Some(years) = years {
+        let mut by_year: BTreeMap<u64, (usize, usize)> = BTreeMap::new();
+        for (y, h) in years.iter().zip(&hits) {
+            let e = by_year.entry(*y).or_default();
+            e.0 += 1;
+            e.1 += usize::from(*h);
+        }
+        out["by_year"] = json!(by_year
+            .into_iter()
+            .map(|(y, (n, x))| json!({"year": y, "observations": n, "exceptions": x, "rate": x as f64 / n as f64}))
+            .collect::<Vec<_>>());
+    }
+    out
 }
 
 fn param_f64(p: &Value, k: &str, default: f64) -> f64 {
@@ -264,6 +336,33 @@ impl BuiltinStep {
         }
     }
 
+    /// Merges [`backtest_details`] into a backtest result; dates come from the optional `dates`
+    /// dependency (a series, or column `date_column` of a table, aligned with the returns).
+    fn add_details(
+        &self,
+        out: &mut Value,
+        realized: &[f64],
+        var: &[f64],
+        alpha: f64,
+        offset: usize,
+        inputs: &Inputs,
+    ) -> Result<(), Error> {
+        let dates = match self.params.get("dates").and_then(Value::as_str) {
+            Some(_) => Some(series(
+                self.dep(inputs, "dates", usize::MAX)?,
+                self.params.get("date_column").and_then(Value::as_str),
+                &self.name,
+            )?),
+            None => None,
+        };
+        if let (Value::Object(o), Value::Object(d)) =
+            (out, backtest_details(realized, var, alpha, offset, dates.as_deref()))
+        {
+            o.extend(d);
+        }
+        Ok(())
+    }
+
     fn json<T: serde::Serialize>(&self, v: Option<T>, why: &str) -> Result<Value, Error> {
         v.map(|x| serde_json::to_value(x).unwrap())
             .ok_or_else(|| err(&self.name, why))
@@ -294,7 +393,16 @@ impl Step for BuiltinStep {
             "kupiec_backtest" => {
                 let r = series(self.dep(inputs, "series", 0)?, self.column(), &self.name)?;
                 let w = param_f64(&self.params, "window", 250.0) as usize;
-                self.json(rolling_backtest(&r, w, alpha), "series too short")
+                if w == 0 || r.len() <= w {
+                    return Err(err(&self.name, "series too short"));
+                }
+                // Same estimator as quantparity's rolling_backtest, kept to report each forecast.
+                let var: Vec<f64> = (w..r.len())
+                    .map(|t| historical_var(&r[t - w..t], alpha).ok_or_else(|| err(&self.name, "invalid series")))
+                    .collect::<Result<_, _>>()?;
+                let mut out = self.json(var_backtest(&r[w..], &var, alpha), "series too short")?;
+                self.add_details(&mut out, &r[w..], &var, alpha, w, inputs)?;
+                Ok(out)
             }
             // Forecasts from an external model: {"start": i, "var": [...]}, var[j] forecasts returns[start + j].
             "backtest_forecasts" => {
@@ -305,10 +413,10 @@ impl Step for BuiltinStep {
                 if var.is_empty() || start + var.len() > r.len() {
                     return Err(err(&self.name, "forecasts are empty or longer than the series"));
                 }
-                self.json(
-                    var_backtest(&r[start..start + var.len()], &var, alpha),
-                    "backtest not possible",
-                )
+                let realized = &r[start..start + var.len()];
+                let mut out = self.json(var_backtest(realized, &var, alpha), "backtest not possible")?;
+                self.add_details(&mut out, realized, &var, alpha, start, inputs)?;
+                Ok(out)
             }
             "psi" => {
                 let col = self.column();
@@ -919,5 +1027,69 @@ mod tests {
         assert!(d["gini"].as_f64().unwrap() > 0.0);
         let c = builtin("pd_calibration", &["t"], Value::Null).run(&i).unwrap();
         assert_eq!(c["grades"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn date_labels() {
+        assert_eq!(date_label(20200316.0), json!("2020-03-16"));
+        assert_eq!(date_label(20201399.0), json!(20201399.0));
+        assert_eq!(date_label(42.0), json!(42.0));
+    }
+
+    #[test]
+    fn backtest_details_dates_windows_and_years() {
+        // 600 days over 2019-2021 (200 per year), exceptions on days 10, 210, 211 and 599.
+        let dates: Vec<f64> = (0..600)
+            .map(|i| (2019 + i / 200) as f64 * 10_000.0 + 101.0 + (i % 200 / 28 * 100 + i % 200 % 28) as f64)
+            .collect();
+        let mut realized = vec![0.0; 600];
+        for i in [10, 210, 211, 599] {
+            realized[i] = -0.05;
+        }
+        let var = vec![0.02; 600];
+        let d = backtest_details(&realized, &var, 0.99, 0, Some(&dates));
+        let ex = d["exception_list"].as_array().unwrap();
+        assert_eq!(ex.len(), 4);
+        assert_eq!(
+            (ex[1]["index"].clone(), ex[1]["date"].clone()),
+            (json!(210), json!("2020-01-11"))
+        );
+        assert!((ex[0]["excess_loss"].as_f64().unwrap() - 0.03).abs() < 1e-12);
+        // Two full windows, the last one ends at the latest observation: [100, 350) and [350, 600).
+        let w = d["basel_windows"].as_array().unwrap();
+        assert_eq!(w.len(), 2);
+        assert_eq!(
+            (w[0]["exceptions"].clone(), w[1]["exceptions"].clone()),
+            (json!(2), json!(1))
+        );
+        assert_eq!(w[1]["to"], json!("2021-08-04"));
+        assert_eq!(d["latest_basel_window"]["plus_factor"], json!(0.0));
+        let y = d["by_year"].as_array().unwrap();
+        assert_eq!(
+            y.iter().map(|x| x["exceptions"].as_u64().unwrap()).collect::<Vec<_>>(),
+            [1, 2, 1]
+        );
+        // Without dates: indices instead of dates, no yearly breakdown.
+        let d = backtest_details(&realized, &var, 0.99, 7, None);
+        assert_eq!(d["exception_list"][0]["index"], json!(17));
+        assert!(d.get("by_year").is_none());
+    }
+
+    #[test]
+    fn rolling_backtest_summary_is_unchanged() {
+        let r: Vec<f64> = (0..700)
+            .map(|i| ((i * 7919 % 1000) as f64 / 1000.0 - 0.5) * 0.04)
+            .collect();
+        let reference =
+            serde_json::to_value(quantparity::validation::rolling_backtest(&r, 250, 0.99).unwrap()).unwrap();
+        let mut i = Inputs::new();
+        i.insert("r".to_string(), json!(r));
+        let out = builtin("kupiec_backtest", &["r"], json!({"alpha": 0.99, "window": 250}))
+            .run(&i)
+            .unwrap();
+        for (k, v) in reference.as_object().unwrap() {
+            assert_eq!(&out[k], v, "{k}");
+        }
+        assert_eq!(out["basel_windows"].as_array().unwrap().len(), 1);
     }
 }

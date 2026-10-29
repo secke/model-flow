@@ -188,8 +188,8 @@ params = { returns = "returns", forecasts = "ewma_model", alpha = 0.99 }
 | `json` | a JSON document (trades, prices, market data) | `path` |
 | `process` | **external model, any language** | `command`, `code`, `timeout_secs` (300), `env`, `pass_env`, `memory_mb`, `cpu_secs`, `file_size_mb`, `max_output_mb` (256) |
 | `var_historical` | historical VaR | `alpha` |
-| `kupiec_backtest` | rolling backtest of historical VaR | `alpha`, `window` |
-| `backtest_forecasts` | backtest of a model's VaR forecasts | `returns`, `forecasts`, `alpha` |
+| `kupiec_backtest` | rolling backtest of historical VaR | `alpha`, `window`, `dates` (optional) |
+| `backtest_forecasts` | backtest of a model's VaR forecasts | `returns`, `forecasts`, `alpha`, `dates` (optional) |
 | `psi` | Population Stability Index | `baseline`, `current`, `column`, `bins` |
 | `pd_discrimination` | AUC, Gini, KS | `score`, `default`, `min_gini_pass`, `min_gini_warn` |
 | `pd_calibration` | per-grade binomial test, Hosmer-Lemeshow | `grade`, `pd`, `default` |
@@ -201,7 +201,7 @@ params = { returns = "returns", forecasts = "ewma_model", alpha = 0.99 }
 | `stress_test` | named stress scenarios with loss limits | `trades`, `scenarios`, `market` |
 | `pnl_attribution` | FRTB P&L attribution test (Spearman, KS, zones) | `hypothetical`, `risk_theoretical` or `sensitivities` + `scenarios` |
 
-VaR backtests combine **Kupiec** (POF), **Christoffersen** (independence, conditional coverage) and the **Basel traffic light** (with the multiplier add-on over 250 days at 99%). Every test returns `pass`, `warn` or `fail`. A pricing gap up to `abs + rel × |reference|` passes, up to 10 times that warns, beyond fails; a missing candidate price fails.
+VaR backtests combine **Kupiec** (POF), **Christoffersen** (independence, conditional coverage) and the **Basel traffic light** (with the multiplier add-on over 250 days at 99%). Besides the summary statistics, both backtests list every exception (`exception_list`: date, return, VaR, excess loss), apply the traffic light to consecutive regulatory 250-day windows ending at the latest observation (`basel_windows`, `latest_basel_window`, with the multiplier add-on) and, when `dates` points to a step with `YYYYMMDD` dates aligned with the returns, break exceptions down by year (`by_year`). Every test returns `pass`, `warn` or `fail`. A pricing gap up to `abs + rel × |reference|` passes, up to 10 times that warns, beyond fails; a missing candidate price fails.
 
 ### External model protocol and isolation
 
@@ -313,8 +313,8 @@ The schema is created at startup under an advisory lock, so several instances ca
 ## Deployment
 
 ```bash
-docker build -t modelflow:0.11.0 .
-docker run --rm modelflow:0.11.0 new-token          # fill in deploy/server.docker.toml
+docker build -t modelflow:0.12.0 .
+docker run --rm modelflow:0.12.0 new-token          # fill in deploy/server.docker.toml
 docker compose up --build                          # http://127.0.0.1:8080
 kubectl apply -k deploy/k8s                        # after filling in deploy/k8s/secret.yaml
 ```
@@ -333,7 +333,7 @@ MODELFLOW_TEST_DATABASE_URL=postgres://postgres:pw@127.0.0.1:5432/postgres cargo
 
 CI runs formatting, clippy, the tests on SQLite and PostgreSQL 16, the six examples end to end, the CLI against PostgreSQL, the Docker image (read-only, no capabilities), Kubernetes manifest validation and the Playwright UI test (simulated SSO, owner → validator → auditor). See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Further reading: [product vision](docs/VISION.md), [scope and roadmap](docs/SCOPE.md).
+Further reading: [experiments on real market data](experiments/README.md), [product vision](docs/VISION.md), [scope and roadmap](docs/SCOPE.md).
 
 ## License
 

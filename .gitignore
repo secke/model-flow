@@ -6,3 +6,5 @@ manifest.json
 ui-tests/node_modules/
 ui-tests/package-lock.json
 ui-tests/screenshots/
+experiments/*/data/
+experiments/*/report.html

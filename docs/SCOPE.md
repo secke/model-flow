@@ -12,7 +12,7 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 
 > Positioning and roadmap: [VISION.md](VISION.md).
 
-## Status (v0.11)
+## Status (v0.12)
 - `mf-core`: DAG, fingerprints of inputs, outputs and code, manifest, replay verification.
 - [`quantparity`](https://github.com/secke/quantparity) (external dependency, cross-checked against QuantLib): historical VaR; Kupiec, Christoffersen, Basel traffic light; PSI; AUC, Gini, KS; per-grade binomial calibration and Hosmer-Lemeshow; reference pricers (BSM and Greeks, Black-76, American CRR, bonds, implied volatility), yield curves (deposit + swap bootstrap), interest rate swaps and zero-coupons with DV01, pricer benchmark with per-product tolerances.
 - `mf-runtime`: TOML pipelines, CSV steps (series or table), built-in steps, external processes with a timeout, SQLite storage, HTML validation report.

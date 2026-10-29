@@ -56,8 +56,16 @@ pub fn parse(text: &str) -> Result<PipelineSpec, String> {
 /// Loads a pipeline file; relative paths start from its directory.
 pub fn load(path: &Path) -> Result<(PipelineSpec, PathBuf), String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let base = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    Ok((parse(&text)?, base))
+    Ok((parse(&text)?, base_dir(path)))
+}
+
+/// Directory of a pipeline file. A bare file name (`pipeline.toml`) has an empty parent,
+/// which is not a valid working directory for external processes: use `.` instead.
+fn base_dir(path: &Path) -> PathBuf {
+    match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+        _ => PathBuf::from("."),
+    }
 }
 
 pub fn build(spec: &PipelineSpec, base: &Path) -> Result<Pipeline, String> {
@@ -137,6 +145,13 @@ pub fn build(spec: &PipelineSpec, base: &Path) -> Result<Pipeline, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bare_file_name_runs_in_current_directory() {
+        assert_eq!(base_dir(Path::new("pipeline.toml")), PathBuf::from("."));
+        assert_eq!(base_dir(Path::new("cases/p/pipeline.toml")), PathBuf::from("cases/p"));
+        assert_eq!(base_dir(Path::new("/w/pipeline.toml")), PathBuf::from("/w"));
+    }
 
     #[test]
     fn rejects_unknown_kind() {
