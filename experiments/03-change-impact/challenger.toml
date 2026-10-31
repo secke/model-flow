@@ -1,0 +1,56 @@
+# Challenger: identical, except the EWMA model, which uses Student-t innovations (nu = 5).
+name = "sp500-var-challenger"
+
+[[step]]
+name = "returns"
+kind = "csv"
+version = "1.0.0"
+path = "../01-sp500-var-backtest/data/returns.csv"
+column = "ret"
+
+[[step]]
+name = "days"
+kind = "csv"
+version = "1.0.0"
+path = "../01-sp500-var-backtest/data/returns.csv"
+column = "day"
+
+[[step]]
+name = "var_hist_99"
+kind = "var_historical"
+version = "1.0.0"
+deps = ["returns"]
+params = { alpha = 0.99 }
+
+[[step]]
+name = "backtest_hist"
+kind = "kupiec_backtest"
+version = "1.0.0"
+deps = ["returns", "days"]
+params = { series = "returns", alpha = 0.99, window = 250, dates = "days" }
+
+[[step]]
+name = "ewma_model"
+kind = "process"
+version = "1.0.0-t5"
+deps = ["returns"]
+command = ["python3", "models/ewma_t_var.py"]
+code = ["models/ewma_t_var.py"]
+params = { lambda = 0.94, alpha = 0.99, warmup = 30, nu = 5 }
+
+[[step]]
+name = "backtest_ewma"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "ewma_model", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "ewma_model", dates = "days" }
+
+# Tolerances for `mf diff`: a challenger is expected to move the VaR, so the comparison reports
+# every change; the raw input series are not compared again.
+[[tolerance]]
+path = "returns*"
+ignore = true
+
+[[tolerance]]
+path = "days*"
+ignore = true

@@ -1,0 +1,19 @@
+{
+  "dates": 58,
+  "dates_failing_the_gate": 58,
+  "values_compared": 231130,
+  "changes": 12259,
+  "beyond_tolerance": 9758,
+  "pillar_zero_rates_beyond_tol": 1595,
+  "pillar_zero_rates_compared": 1740,
+  "max_pillar_zero_rate_change_bp": 7.5161,
+  "max_on": "2026-09-30",
+  "spot_check_status_changes": [
+    "unchanged"
+  ],
+  "spot_check_failed_left": 20020,
+  "spot_check_failed_right": 2929,
+  "origins": [
+    "market (version 1.0.0 \u2192 2.0.0)"
+  ]
+}

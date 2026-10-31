@@ -1,0 +1,12 @@
+left   pipeline.toml#1  run_hash b999d23818154536
+right  pipeline.toml#fresh  run_hash dba385488f25df22  modelflow 0.13.0
+
+step                   state         compared  changed  within  breaches     max rel  cause
+returns                same output       2511        0       0         0              code or parameters changed without a version bump (engine before 0.13 → modelflow 0.13.0)
+days                   same output       2511        0       0         0              code or parameters changed without a version bump (engine before 0.13 → modelflow 0.13.0)
+var_hist_99            same output          3        0       0         0              code or parameters changed without a version bump (engine before 0.13 → modelflow 0.13.0)
+ewma_model             same output       2484        0       0         0              code or parameters changed without a version bump (engine before 0.13 → modelflow 0.13.0)
+backtest_hist          same output        305        0       0         0              code or parameters changed without a version bump (engine before 0.13 → modelflow 0.13.0)
+backtest_ewma          same output        419        0       0         0              code or parameters changed without a version bump (engine before 0.13 → modelflow 0.13.0)
+
+OK: identical results (code changed in: returns, days, var_hist_99, ewma_model, backtest_hist, backtest_ewma)

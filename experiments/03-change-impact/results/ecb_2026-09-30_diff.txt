@@ -1,0 +1,49 @@
+left   work/2026-09-30/pipeline.toml#1  run_hash ffd3f320f05156c8  modelflow 0.13.0
+right  work/2026-09-30/pipeline.toml#2  run_hash fe7e26aaeb4e07db  modelflow 0.13.0
+
+step                   state         compared  changed  within  breaches     max rel  cause
+ecb                    identical         1433        0       0         0              
+market                 changed            122       30       0        30       1.90%  version 1.0.0 → 2.0.0  ← origin
+ecb_prices             identical          358        0       0         0              
+zero_coupons           identical         1790        0       0         0              
+curve                  changed            275      179      29       150     100.00%  upstream steps changed
+spot_check             changed              7        3       0         3     100.00%  upstream steps changed
+
+market (30 changes, 30 beyond tolerance)
+  field                                                       changed   beyond      max |Δ|   max rel       mean Δ
+  market.curves.EUR-AAA.instruments[*].rate                        30       30      7.38 bp     1.90%     +6.68 bp
+  largest changes:
+  ! market.curves.EUR-AAA.instruments[maturity=23].rate             0.0380894 → 0.0388274      +7.38 bp (1.90%)           0.5 bp
+  ! market.curves.EUR-AAA.instruments[maturity=22].rate             0.0380774 → 0.038815       +7.38 bp (1.90%)           0.5 bp
+  ! market.curves.EUR-AAA.instruments[maturity=24].rate             0.0380833 → 0.0388209      +7.38 bp (1.90%)           0.5 bp
+  ! market.curves.EUR-AAA.instruments[maturity=21].rate             0.0380448 → 0.0387813      +7.36 bp (1.90%)           0.5 bp
+  ! market.curves.EUR-AAA.instruments[maturity=25].rate             0.0380612 → 0.0387978      +7.37 bp (1.90%)           0.5 bp
+  … 25 more
+
+curve (179 changes, 150 beyond tolerance)
+  field                                                       changed   beyond      max |Δ|   max rel       mean Δ
+  curve.pillars[*].model_rate                                      30       30      7.38 bp     1.90%     +6.68 bp
+  curve.pillars[*].quote                                           30       30      7.38 bp     1.90%     +6.68 bp
+  curve.pillars[*].zero_rate                                       30       30      7.52 bp     1.94%     +6.68 bp
+  curve.term_structure[*].forward_rate                             30       30      8.87 bp     2.10%     +7.14 bp
+  curve.term_structure[*].zero_rate                                30       30      7.52 bp     1.94%     +6.68 bp
+  … 2 more fields
+  largest changes:
+  ! curve.term_structure[t=15.0].forward_rate                       0.0413555 → 0.0422419      +8.86 bp (2.10%)           0.5 bp
+  ! curve.term_structure[t=14.0].forward_rate                       0.0414238 → 0.0423109      +8.87 bp (2.10%)           0.5 bp
+  ! curve.term_structure[t=16.0].forward_rate                       0.0411691 → 0.0420492      +8.80 bp (2.09%)           0.5 bp
+  ! curve.term_structure[t=13.0].forward_rate                       0.0413547 → 0.0422361      +8.81 bp (2.09%)           0.5 bp
+  ! curve.term_structure[t=17.0].forward_rate                       0.0408818 → 0.0417505      +8.69 bp (2.08%)           0.5 bp
+  … 174 more
+
+spot_check (3 changes, 3 beyond tolerance)
+  field                                                       changed   beyond      max |Δ|   max rel       mean Δ
+  spot_check.failed                                                 1        1          323    90.22%         -323
+  spot_check.passed                                                 1        1           87   100.00%          +87
+  spot_check.warned                                                 1        1          236   100.00%         +236
+  largest changes:
+  ! spot_check.passed                                                       0 → 87             +87 (100.00%)              exact
+  ! spot_check.warned                                                       0 → 236            +236 (100.00%)             exact
+  ! spot_check.failed                                                     358 → 35             -323 (90.22%)              exact
+
+FAIL: 183 changes beyond tolerance in 3 steps; origin: market (version 1.0.0 → 2.0.0)
