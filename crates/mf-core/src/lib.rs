@@ -1,6 +1,8 @@
 //! Deterministic orchestration engine: DAG of versioned steps,
 //! SHA-256 fingerprints of inputs/outputs, run manifest and verified replay.
 
+pub mod diff;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -104,6 +106,14 @@ pub struct Manifest {
     pub steps: Vec<StepRecord>,
     /// Fingerprint of the whole run (names, versions, inputs, outputs).
     pub run_hash: String,
+    /// Engine that produced the run, e.g. `modelflow 0.13.0` (absent before 0.13).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<String>,
+}
+
+/// Engine name and version recorded in every manifest.
+pub fn engine() -> String {
+    format!("modelflow {}", env!("CARGO_PKG_VERSION"))
 }
 
 #[derive(Debug, PartialEq)]
@@ -194,6 +204,7 @@ impl Pipeline {
         Ok(Manifest {
             steps: records,
             run_hash,
+            engine: Some(engine()),
         })
     }
 
@@ -224,7 +235,7 @@ impl Pipeline {
             if a.code_hash != b.code_hash && a.version == b.version {
                 mm.push(Mismatch {
                     step: a.name.clone(),
-                    reason: "code changed without a version bump".into(),
+                    reason: "code or parameters changed without a version bump".into(),
                 });
             }
             if a.input_hash != b.input_hash {

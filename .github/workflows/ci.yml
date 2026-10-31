@@ -40,6 +40,33 @@ jobs:
             target/release/mf verify "$p"
             target/release/mf report "$p" -o "report-$e.html"
           done
+      - name: Reference manifest for the diff action
+        run: target/release/mf run examples/var-equity/pipeline.toml -o var-equity-baseline.json
+      - name: Diff action, unchanged model (must pass)
+        uses: ./
+        with:
+          pipeline: examples/var-equity/pipeline.toml
+          baseline: var-equity-baseline.json
+          mf: target/release/mf
+      - name: Change the EWMA decay factor
+        run: sed -i 's/lambda = 0.94/lambda = 0.97/; s/version = "0.1.0"/version = "0.2.0"/' examples/var-equity/pipeline.toml
+      - name: Diff action, changed model (must report breaches)
+        id: changed
+        uses: ./
+        with:
+          pipeline: examples/var-equity/pipeline.toml
+          baseline: var-equity-baseline.json
+          mf: target/release/mf
+          fail-on-breach: "false"
+      - name: Check the diff verdict
+        env:
+          OK: ${{ steps.changed.outputs.ok }}
+          VERDICT: ${{ steps.changed.outputs.verdict }}
+        run: |
+          echo "$VERDICT"
+          test "$OK" = false
+          case "$VERDICT" in *"origin: ewma_model (version 0.1.0 → 0.2.0)"*) ;; *) exit 1 ;; esac
+          git checkout examples/var-equity/pipeline.toml
       - name: CLI history in PostgreSQL
         env:
           MODELFLOW_DATABASE_URL: postgres://postgres:ci@127.0.0.1:5432/postgres?sslmode=disable
@@ -53,23 +80,41 @@ jobs:
           name: validation-reports
           path: report-*.html
 
+  python:
+    name: Python SDK (wheel, pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # patchelf: the wheel bundles the OpenSSL libraries of the PostgreSQL client
+      - run: pip install "maturin[patchelf]" pytest numpy pandas
+      - run: maturin build --release --out dist
+      - run: pip install dist/*.whl
+      - run: pytest -q python/tests
+      - name: SDK example (Python pipeline reproduces the TOML pipeline)
+        run: python examples/python-sdk/var_desk.py
+
   docker:
     name: Docker image and Kubernetes manifests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build the image
-        run: docker build -t modelflow:0.12.0 .
+        run: docker build -t modelflow:0.13.0 .
       - name: End-to-end run in the container (read-only, unprivileged)
         run: |
           set -euo pipefail
-          TOKEN=$(docker run --rm modelflow:0.12.0 new-token | sed -n 's/.*: //p' | head -1)
-          HASH=$(docker run --rm modelflow:0.12.0 hash-token "$TOKEN")
+          TOKEN=$(docker run --rm modelflow:0.13.0 new-token | sed -n 's/.*: //p' | head -1)
+          HASH=$(docker run --rm modelflow:0.13.0 hash-token "$TOKEN")
           mkdir -p ci-cfg
           printf 'workspace = "/workspace"\nbind = "0.0.0.0:8080"\n[[user]]\nname = "ci"\nrole = "admin"\ntoken_sha256 = "%s"\n' "$HASH" > ci-cfg/server.toml
           docker run -d --name mf -p 8080:8080 --user "$(id -u):$(id -g)" --read-only --tmpfs /tmp \
             --cap-drop ALL --security-opt no-new-privileges \
-            -v "$PWD/examples:/workspace" -v "$PWD/ci-cfg/server.toml:/etc/modelflow/server.toml:ro" modelflow:0.12.0
+            -v "$PWD/examples:/workspace" -v "$PWD/ci-cfg/server.toml:/etc/modelflow/server.toml:ro" modelflow:0.13.0
           for i in $(seq 1 30); do curl -fs localhost:8080/api/health && break; sleep 1; done
           for p in multicurve-swap-benchmark pricing-library-benchmark; do
             curl -fs -X POST -H "Authorization: Bearer $TOKEN" "localhost:8080/api/pipelines/$p/runs?wait=true" | tee run.json

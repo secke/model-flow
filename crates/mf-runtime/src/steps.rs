@@ -370,8 +370,10 @@ impl BuiltinStep {
 }
 
 impl Step for BuiltinStep {
+    /// The engine version, the step kind and its parameters: a parameter change is a model change.
     fn code_hash(&self) -> Option<String> {
-        engine_hash(&self.kind)
+        let params = serde_json::to_string(&self.params).unwrap();
+        engine_hash(&format!("{} {params}", self.kind))
     }
     fn name(&self) -> &str {
         &self.name
@@ -719,6 +721,8 @@ impl Step for ProcessStep {
         }
         // The explicit environment affects the computation; only the names of passed variables count.
         buf.extend(serde_json::to_vec(&(&self.env, &self.pass_env)).unwrap());
+        // Parameters are part of the model.
+        buf.extend(serde_json::to_vec(&self.params).unwrap());
         Some(hash_bytes(&buf))
     }
 
@@ -910,16 +914,19 @@ mod tests {
     }
 
     #[test]
-    fn builtin_code_hash_tracks_engine() {
-        let b = BuiltinStep {
+    fn builtin_code_hash_tracks_engine_and_params() {
+        let mut b = BuiltinStep {
             name: "b".into(),
             version: "1".into(),
             deps: vec![],
             kind: "psi".into(),
             params: Value::Null,
         };
-        assert_eq!(b.code_hash(), engine_hash("psi"));
-        assert_ne!(engine_hash("psi"), engine_hash("pd_calibration"));
+        assert_eq!(b.code_hash(), engine_hash("psi null"));
+        assert_ne!(engine_hash("psi null"), engine_hash("pd_calibration null"));
+        let before = b.code_hash();
+        b.params = json!({"bins": 10});
+        assert_ne!(b.code_hash(), before);
     }
 
     #[test]

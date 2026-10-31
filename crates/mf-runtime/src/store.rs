@@ -71,6 +71,15 @@ CREATE TABLE IF NOT EXISTS blobs (
     content TEXT NOT NULL);";
 
 impl Store {
+    /// History of a pipeline whose file is in `base`: PostgreSQL when `MODELFLOW_DATABASE_URL` is
+    /// set, otherwise SQLite in `<base>/.modelflow/runs.db`.
+    pub fn for_pipeline(base: &Path) -> Result<Self, String> {
+        match std::env::var("MODELFLOW_DATABASE_URL") {
+            Ok(url) if !url.is_empty() => Store::postgres(&crate::pg::connect_store(&url, 2)?),
+            _ => Store::open(&base.join(".modelflow/runs.db")),
+        }
+    }
+
     pub fn open(path: &Path) -> Result<Self, String> {
         if let Some(d) = path.parent() {
             std::fs::create_dir_all(d).map_err(|e| e.to_string())?;

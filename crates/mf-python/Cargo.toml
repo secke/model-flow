@@ -1,0 +1,24 @@
+[package]
+name = "mf-python"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Python SDK for ModelFlow: pipelines, Python steps, runs, replay and diff, executed by the Rust engine."
+publish = false
+
+[lib]
+name = "_core"
+crate-type = ["cdylib"]
+# A Python extension cannot be linked into a test executable: it is tested from Python (python/tests).
+test = false
+doctest = false
+
+[dependencies]
+mf-core = { path = "../mf-core" }
+mf-runtime = { path = "../mf-runtime" }
+pyo3 = { version = "0.25", features = ["extension-module", "abi3-py39"] }
+pythonize = "0.25"
+serde_json.workspace = true

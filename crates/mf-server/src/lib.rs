@@ -838,6 +838,46 @@ async fn verify(
 }
 
 #[derive(Deserialize)]
+struct DiffQuery {
+    left: i64,
+    right: i64,
+    /// `json` (default) or `md`.
+    #[serde(default)]
+    format: Option<String>,
+}
+
+/// Comparison of two runs of a pipeline, with the pipeline's tolerances.
+async fn diff_runs(
+    State(st): State<AppState>,
+    _auth: Auth,
+    Path(name): Path<String>,
+    Query(q): Query<DiffQuery>,
+) -> ApiResult<Response> {
+    blocking(move || {
+        let toml = locate(&st, &name)?;
+        let (sp, _) = spec::load(&toml).map_err(ApiError::internal)?;
+        let store = st.store_for(&toml)?;
+        let (_, a) = store.get(&name, Some(q.left)).map_err(ApiError::not_found)?;
+        let (_, b) = store.get(&name, Some(q.right)).map_err(ApiError::not_found)?;
+        let d = mf_core::diff::diff(&a, &b, &sp.tolerances);
+        let (l, r) = (format!("{name}#{}", q.left), format!("{name}#{}", q.right));
+        match q.format.as_deref().unwrap_or("json") {
+            "json" => Ok(Json(json!({
+                "left": l, "right": r, "verdict": mf_runtime::diff::verdict(&d), "diff": d,
+            }))
+            .into_response()),
+            "md" => Ok((
+                [(axum::http::header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
+                mf_runtime::diff::render_markdown(&d, &l, &r, 10),
+            )
+                .into_response()),
+            f => Err(ApiError::new(StatusCode::BAD_REQUEST, format!("unknown format `{f}`"))),
+        }
+    })
+    .await
+}
+
+#[derive(Deserialize)]
 struct ReportQuery {
     #[serde(default)]
     no_verify: bool,
@@ -1241,6 +1281,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/pipelines", get(list_pipelines))
         .route("/api/pipelines/:name/runs", get(list_runs).post(create_run))
         .route("/api/pipelines/:name/runs/:id", get(get_run))
+        .route("/api/pipelines/:name/diff", get(diff_runs))
         .route("/api/pipelines/:name/runs/:id/verify", post(verify))
         .route("/api/pipelines/:name/runs/:id/report", get(get_report))
         .route(

@@ -59,7 +59,11 @@ Change a single value of the history (line 201, first SX5E shock), then replay:
 sed -i.bak '201s/^200,[^,]*/200,-0.25/' examples/portfolio-risk/data/factor_history.csv   # macOS: same command
 mf verify examples/portfolio-risk/pipeline.toml
 ```
-The replay reports `MISMATCH [history] non-reproducible result`, then the downstream steps (`different inputs`). Restore the file:
+The replay reports `MISMATCH [history] non-reproducible result`, then the downstream steps (`different inputs`). Ask what exactly changed, by comparing run #1 with a run of the tampered data (`#fresh`: executed now, not recorded):
+```bash
+mf diff examples/portfolio-risk/pipeline.toml#1 examples/portfolio-risk/pipeline.toml#fresh
+```
+The diff finds the origin (`history`, "source data changed": the one value modified, `history["SPOT:SX5E"][199]`), classifies `var_es` and `pnl_attribution` as downstream changes, and lists the values that moved: the expected shortfall rises by 5.19%. It ends with `FAIL: 7 changes beyond tolerance in 3 steps` and exit code 1. Restore the file:
 ```bash
 mv examples/portfolio-risk/data/factor_history.csv.bak examples/portfolio-risk/data/factor_history.csv
 mf verify examples/portfolio-risk/pipeline.toml   # OK again
@@ -69,6 +73,7 @@ mf verify examples/portfolio-risk/pipeline.toml   # OK again
 - Add your own scenario to `examples/portfolio-risk/stress.json`, for example `"SPOT:SX5E": -0.5`, then run `mf run` again.
 - Change a quantity in `trades.json` and watch the VaR, the sensitivities and the stress tests.
 - Run `mf runs examples/portfolio-risk/pipeline.toml` to see the run history and fingerprints.
+- After a change and a new `mf run`, `mf diff examples/portfolio-risk/pipeline.toml` compares the previous and the latest run: which steps moved, by how much, and why.
 
 ## Part B: server, web UI and governance
 
@@ -145,6 +150,11 @@ Sign in with alice's token, then:
    - **Replay the run**, then **Approve** with a comment on the VaR warning;
    - in the inventory, **Approve the model**, accepted this time.
 4. As alice: **Put into use**.
+5. In a terminal, see what the fix changed between alice's two runs (previous vs latest):
+   ```bash
+   mf diff examples/portfolio-risk/pipeline.toml
+   ```
+   The origin is `positions` ("source data changed"); sensitivities, VaR/ES, stress tests and P&L attribution move with it. Under "Verdict changes": `stress.scenarios[name=Sovereign crisis].status  fail → pass`.
 
 Run #2 can no longer be replayed identically, since `trades.json` has changed: the replay says so (`positions: non-reproducible result`). This is the expected behavior. A run is only reproducible with the data that produced it. To keep both versions, version the pipeline directory with Git.
 
@@ -162,7 +172,9 @@ The server rereads the pipelines on every pass: a run triggered by `scheduler` a
 ```bash
 curl -s -H "Authorization: Bearer $(token carol)" http://127.0.0.1:8080/api/models | python3 -m json.tool
 curl -s -H "Authorization: Bearer $(token carol)" "http://127.0.0.1:8080/api/audit?limit=5" | python3 -m json.tool
+curl -s -H "Authorization: Bearer $(token carol)" "http://127.0.0.1:8080/api/pipelines/portfolio-risk-desk/diff?left=2&right=3&format=md"
 ```
+The last call is the comparison of step B5, from the API: run #2 is alice's first run (run #1 is the one of part A, which shares the history), run #3 the run after the fix. `mf runs examples/portfolio-risk/pipeline.toml` lists the ids.
 
 ## Cleanup
 ```bash
@@ -175,4 +187,6 @@ git checkout examples
 - **QuantLib examples**: `pip install QuantLib==1.44`, then `mf run examples/multicurve-benchmark/pipeline.toml`.
 - **PostgreSQL**: `export MODELFLOW_DATABASE_URL=postgres://…` for the CLI, or a `[database]` section for the server.
 - **Docker**: `docker compose up --build`, after filling in `deploy/server.docker.toml`.
+- **Python**: `pip install maturin && maturin develop --release`, then `python examples/python-sdk/var_desk.py` (see the [Python SDK](../README.md#python-sdk)).
+- **CI gate**: the [GitHub Action](../README.md#github-action) runs `mf diff` on every pull request.
 - **SSO**: the `[oidc]` section of the [README](../README.md#single-sign-on-oidc).

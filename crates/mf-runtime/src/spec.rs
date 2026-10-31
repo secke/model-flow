@@ -15,6 +15,9 @@ pub struct PipelineSpec {
     pub schedule: Option<String>,
     #[serde(rename = "step")]
     pub steps: Vec<StepSpec>,
+    /// Tolerances used by `mf diff` (first matching rule wins).
+    #[serde(default, rename = "tolerance")]
+    pub tolerances: Vec<mf_core::diff::Tolerance>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -50,7 +53,11 @@ pub struct StepSpec {
 }
 
 pub fn parse(text: &str) -> Result<PipelineSpec, String> {
-    toml::from_str(text).map_err(|e| format!("invalid pipeline: {e}"))
+    let spec: PipelineSpec = toml::from_str(text).map_err(|e| format!("invalid pipeline: {e}"))?;
+    for t in &spec.tolerances {
+        t.check()?;
+    }
+    Ok(spec)
 }
 
 /// Loads a pipeline file; relative paths start from its directory.
@@ -157,6 +164,19 @@ mod tests {
     fn rejects_unknown_kind() {
         let s = parse("name='x'\n[[step]]\nname='a'\nkind='nope'\nversion='1'\n").unwrap();
         assert!(build(&s, Path::new(".")).is_err());
+    }
+
+    #[test]
+    fn parses_tolerances() {
+        let s = parse(
+            "name='x'\nstep=[]\n[[tolerance]]\npath='curve.*'\nbp=0.5\n[[tolerance]]\npath='*.pnl'\nignore=true\n",
+        )
+        .unwrap();
+        assert_eq!(s.tolerances.len(), 2);
+        assert_eq!(s.tolerances[0].bp, Some(0.5));
+        assert!(s.tolerances[1].ignore);
+        assert!(parse("name='x'\nstep=[]\n[[tolerance]]\nabs=1\nbp=1\n").is_err());
+        assert!(parse("name='x'\nstep=[]\n[[tolerance]]\ntol=1\n").is_err());
     }
 
     #[test]

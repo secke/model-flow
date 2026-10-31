@@ -1,0 +1,31 @@
+[build-system]
+requires = ["maturin>=1.5,<2"]
+build-backend = "maturin"
+
+[project]
+name = "modelflow"
+description = "Reproducible model validation: pipelines, fingerprints, replay and diff, with a Rust engine."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.9"
+keywords = ["quant", "finance", "model-risk", "validation", "reproducibility", "var", "backtesting"]
+classifiers = [
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: Apache Software License",
+  "Topic :: Office/Business :: Financial",
+  "Intended Audience :: Financial and Insurance Industry",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+test = ["pytest>=7", "numpy", "pandas"]
+
+[project.urls]
+Repository = "https://github.com/secke/model-flow"
+
+[tool.maturin]
+manifest-path = "crates/mf-python/Cargo.toml"
+python-source = "python"
+module-name = "modelflow._core"
+features = ["pyo3/extension-module"]

@@ -1,13 +1,19 @@
-use mf_runtime::{report, spec, store::Store};
+use mf_runtime::{diff, report, spec, store::Store};
 use std::{env, path::Path, process::ExitCode};
 
 const USAGE: &str = "usage:
-  mf run    <pipeline.toml>              run and record the execution
+  mf run    <pipeline.toml> [-o run.json] run and record the execution (and write its manifest)
   mf verify <pipeline.toml> [--run ID]   replay and compare (default: latest run)
   mf runs   <pipeline.toml>              list runs
   mf show   <pipeline.toml> [--run ID]   print the JSON manifest
   mf report <pipeline.toml> [--run ID] [-o report.html] [--no-verify]
                                          HTML validation report
+  mf diff   <left> [<right>] [--tolerances file.toml] [--format text|md|json]
+            [--limit N] [-o file]       compare two runs; exit code 1 beyond tolerance
+
+A run for `mf diff` is `pipeline.toml` (latest run), `pipeline.toml#ID`, `pipeline.toml#previous`,
+`pipeline.toml#fresh` (executed now, not recorded) or a manifest file `run.json` (`mf show`).
+With a single pipeline, `mf diff pipeline.toml` compares its previous and latest runs.
 
 History: SQLite in <pipeline directory>/.modelflow, or PostgreSQL when MODELFLOW_DATABASE_URL is set.";
 
@@ -48,21 +54,68 @@ fn run_id(args: &[String]) -> Result<Option<i64>, String> {
     }
 }
 
-/// History: PostgreSQL when `MODELFLOW_DATABASE_URL` is set, otherwise SQLite next to the pipeline.
-fn open_store(base: &Path) -> Result<Store, String> {
-    match std::env::var("MODELFLOW_DATABASE_URL") {
-        Ok(url) if !url.is_empty() => Store::postgres(&mf_runtime::pg::connect_store(&url, 2)?),
-        _ => Store::open(&base.join(".modelflow/runs.db")),
+fn diff_main(args: &[String]) -> Result<bool, String> {
+    const VALUED: [&str; 4] = ["--tolerances", "--format", "--limit", "-o"];
+    let mut refs = vec![];
+    let mut i = 2;
+    while i < args.len() {
+        if VALUED.contains(&args[i].as_str()) {
+            i += 2;
+            continue;
+        }
+        if args[i].starts_with('-') {
+            return Err(format!("unknown option {}\n{USAGE}", args[i]));
+        }
+        refs.push(args[i].as_str());
+        i += 1;
     }
+    let (left, right) = match refs[..] {
+        [one] if !one.contains('#') && !one.ends_with(".json") => (format!("{one}#previous"), format!("{one}#latest")),
+        [l, r] => (l.to_string(), r.to_string()),
+        _ => return Err(USAGE.into()),
+    };
+    let (l, r) = (diff::resolve(&left)?, diff::resolve(&right)?);
+    let (llabel, lm, rlabel, rm) = (l.label, l.manifest, r.label, r.manifest);
+    let mut rules = match flag_value(args, "--tolerances") {
+        Some(f) => diff::load_tolerances(Path::new(f))?,
+        None => vec![],
+    };
+    // The candidate's rules first, then the reference's.
+    rules.extend(r.spec.into_iter().chain(l.spec).flat_map(|s| s.tolerances));
+    let limit = match flag_value(args, "--limit") {
+        Some(n) => n.parse().map_err(|_| "--limit expects an integer".to_string())?,
+        None => 10,
+    };
+    let d = mf_core::diff::diff(&lm, &rm, &rules);
+    let out = match flag_value(args, "--format").unwrap_or("text") {
+        "text" => diff::render_text(&d, &llabel, &rlabel, limit),
+        "md" | "markdown" => diff::render_markdown(&d, &llabel, &rlabel, limit),
+        "json" => serde_json::to_string_pretty(&serde_json::json!({
+            "left": llabel, "right": rlabel, "verdict": diff::verdict(&d), "diff": d,
+        }))
+        .unwrap(),
+        f => return Err(format!("unknown format `{f}` (text, md, json)")),
+    };
+    match flag_value(args, "-o") {
+        Some(f) => {
+            std::fs::write(f, &out).map_err(|e| format!("{f}: {e}"))?;
+            println!("{}", diff::verdict(&d));
+        }
+        None => print!("{out}"),
+    }
+    Ok(d.ok)
 }
 
 fn real_main(args: &[String]) -> Result<bool, String> {
+    if args.get(1).map(String::as_str) == Some("diff") {
+        return diff_main(args);
+    }
     let (cmd, file) = match (args.get(1), args.get(2)) {
         (Some(c), Some(f)) => (c.as_str(), Path::new(f)),
         _ => return Err(USAGE.into()),
     };
     let (sp, base) = spec::load(file)?;
-    let store = open_store(&base)?;
+    let store = Store::for_pipeline(&base)?;
     match cmd {
         "run" => {
             let m = spec::build(&sp, &base)?.execute().map_err(|e| e.to_string())?;
@@ -72,6 +125,10 @@ fn real_main(args: &[String]) -> Result<bool, String> {
             let user = std::env::var("USER").unwrap_or_else(|_| "unknown".into());
             let id = store.save(&sp.name, &m, &format!("cli:{user}"))?;
             println!("\nrun #{id}  run_hash={}", m.run_hash);
+            if let Some(f) = flag_value(args, "-o") {
+                std::fs::write(f, serde_json::to_string_pretty(&m).unwrap()).map_err(|e| format!("{f}: {e}"))?;
+                println!("manifest written: {f}");
+            }
             Ok(true)
         }
         "verify" => {

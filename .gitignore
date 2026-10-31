@@ -8,3 +8,11 @@ ui-tests/package-lock.json
 ui-tests/screenshots/
 experiments/*/data/
 experiments/*/report.html
+experiments/*/work/
+examples/python-sdk/report.html
+# Python SDK build outputs
+dist/
+python/modelflow/*.so
+python/modelflow/*.pyd
+__pycache__/
+.pytest_cache/

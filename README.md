@@ -15,8 +15,9 @@ ModelFlow makes the evidence mechanical:
 
 - **Every run is sealed.** Inputs, outputs and code are hashed; the run manifest ties them together with a single `run_hash`.
 - **Every result can be replayed.** `mf verify` re-runs the pipeline and points to the exact step whose data, code or result changed.
+- **Every change is explained.** `mf diff` compares two runs value by value, finds the step where the change starts, and checks it against tolerances in absolute, relative or basis-point terms. A GitHub Action turns it into a merge gate for model code.
 - **Every decision is governed.** Only a validator can approve, never their own run, and only if the replay is identical. Denials are logged too.
-- **Models stay where they are.** Any executable that reads JSON on stdin and writes JSON on stdout is a model: Python, R, C++, a wrapper around a vendor library.
+- **Models stay where they are.** Any executable that reads JSON on stdin and writes JSON on stdout is a model: Python, R, C++, a wrapper around a vendor library. From Python, the SDK runs plain functions as steps, in-process.
 
 ## 5-minute demo
 
@@ -31,7 +32,7 @@ mf run examples/portfolio-risk/pipeline.toml
 #   var_es               v1.0.0    [WARN]     99% VaR = €483k, 88% of its €550k limit
 #   stress               v1.0.0    [FAIL]     "Sovereign crisis" loses €1.92m, limit €1.5m
 #   pnl_attribution      v1.0.0    [PASS]     Spearman 0.99997, KS 0.013: green zone
-#   run #1  run_hash=52aa1be30914…
+#   run #1  run_hash=192b2a2c6f87…
 
 # 2. Replay it: same data, same code, same result, bit for bit
 mf verify examples/portfolio-risk/pipeline.toml
@@ -46,9 +47,18 @@ mf verify examples/portfolio-risk/pipeline.toml; echo "exit code: $?"
 #   MISMATCH [pnl_attribution] different inputs
 #   MISMATCH [pnl_attribution] non-reproducible result
 #   exit code: 1
+
+# 4. Ask what changed and where it started: run #1 against a run of the tampered data
+mf diff examples/portfolio-risk/pipeline.toml#1 examples/portfolio-risk/pipeline.toml#fresh
+#   history          changed     1 value    source data changed  ← origin
+#   var_es           changed     4 values   upstream steps changed
+#   pnl_attribution  changed     2 values   upstream steps changed
+#   ! history["SPOT:SX5E"][199]   -0.0667063 → -0.25
+#   ! var_es.es                   537,315 → 566,741   (+5.19%)
+#   FAIL: 7 changes beyond tolerance in 3 steps; origin: history (source data changed)
 mv examples/portfolio-risk/data/factor_history.csv.bak examples/portfolio-risk/data/factor_history.csv
 
-# 4. Committee-ready HTML report (verdict, replay status, every test in detail)
+# 5. Committee-ready HTML report (verdict, replay status, every test in detail)
 mf report examples/portfolio-risk/pipeline.toml -o report.html
 ```
 
@@ -72,9 +82,9 @@ The full walkthrough, with the web UI, three roles (model owner, validator, audi
                          │
    content-addressed store (SQLite or PostgreSQL) ◄── integrity check on every read
                          │
-         ┌───────────────┴───────────────┐
-      mf (CLI)                   mf-server (REST API, web UI, OIDC,
-                                 roles, decisions, audit, scheduler, alerts)
+         ┌───────────────┼───────────────────────────┐
+      mf (CLI)     modelflow (Python SDK)     mf-server (REST API, web UI, OIDC,
+      GitHub Action                           roles, decisions, audit, scheduler, alerts)
 ```
 
 | Crate | Role |
@@ -82,7 +92,8 @@ The full walkthrough, with the web UI, three roles (model owner, validator, audi
 | `mf-core` | DAG of versioned steps, fingerprints of inputs, outputs and code, run manifest, verified replay |
 | `mf-runtime` | TOML pipelines, step kinds, external process isolation, run store (SQLite, PostgreSQL), HTML report |
 | `mf-server` | REST API, bearer tokens and OIDC SSO, roles and segregation of duties, validation decisions, append-only audit log, model inventory, scheduler, webhook alerts, web UI |
-| `mf-cli` | the `mf` binary: `run`, `verify`, `runs`, `show`, `report` |
+| `mf-cli` | the `mf` binary: `run`, `verify`, `runs`, `show`, `report`, `diff` |
+| `mf-python` | the `modelflow` Python package (PyO3): pipelines, Python functions as steps, runs, replay, diff, reports |
 | [`quantparity`](https://github.com/secke/quantparity) | external dependency, pinned by git revision: BSM, Black-76, CRR, bonds, single and multi-curve (€STR / Euribor), VaR/ES, stress, FRTB PLA, Kupiec, Christoffersen, Basel traffic light, PSI, AUC/Gini/KS, PD calibration |
 
 ## Results
@@ -113,7 +124,11 @@ Each benchmark example runs QuantLib as an external process and compares it, tra
 | `rates-benchmark`: zero-coupons | 3 | 2.0e-7 | pass |
 | `multicurve-benchmark`: €STR-discounted Euribor 6M swaps, 2–30Y | 8 | 3.6e-6 EUR | pass |
 
-Moving the engine from ModelFlow's former in-house crates to quantparity changed no number: 55,731 values across the six examples are identical bit for bit.
+Moving the engine from ModelFlow's former in-house crates to quantparity changed no number: 55,731 values across the six examples are identical bit for bit. The upgrade to v0.13 was checked with `mf diff` itself: 56,668 values of the six examples and 706,000 values of the real-data experiments are identical.
+
+### Real market data
+
+[Experiments](experiments/README.md) run ModelFlow on public data, with every run fingerprinted and replayed: a 99% VaR backtest of the S&P 500 over ten years, the reconstruction of the ECB AAA yield curve at 58 month ends, and the impact of a challenger model, a methodology fix and an engine upgrade measured with `mf diff`. Each experiment lists what it changed in ModelFlow.
 
 ## Governance
 
@@ -219,7 +234,7 @@ The process receives `{"inputs": {<dep>: <output>}, "params": {...}}` on stdin a
 |---|---|
 | `non-reproducible result` | same inputs and code, different output |
 | `different inputs` | data or an upstream step changed |
-| `code changed without a version bump` | a file listed in `code` changed but `version` did not |
+| `code or parameters changed without a version bump` | a file listed in `code`, the `params` or the engine version changed but `version` did not |
 | `version a -> b` | the step version changed |
 
 ### Examples
@@ -232,8 +247,106 @@ The process receives `{"inputs": {<dep>: <output>}, "params": {...}}` on stdin a
 | `examples/rates-benchmark` | EUR 6M single curve (deposits + swaps), re-pricing, QuantLib validated on 7 swaps and 3 zero-coupons |
 | `examples/multicurve-benchmark` | €STR / Euribor 6M multi-curve with market conventions, QuantLib validated on 8 swaps (2 to 30 years) |
 | `examples/portfolio-risk` | multi-asset portfolio: historical VaR/ES by full revaluation, sensitivities, stress tests with limits, PLA test |
+| `examples/python-sdk` | the `var-equity` desk written in Python with the SDK, checked against the TOML pipeline with `mf.diff`, and a challenger model |
 
 The three benchmark examples need `pip install QuantLib==1.44`.
+
+## Compare runs (`mf diff`)
+
+```bash
+mf diff pipeline.toml                          # previous vs latest run
+mf diff pipeline.toml#12 pipeline.toml#fresh   # recorded run 12 vs the code and data as they are now
+mf diff champion.toml challenger.toml          # two pipelines with the same step names
+mf run pipeline.toml -o baseline.json          # keep a reference manifest...
+mf diff baseline.json pipeline.toml#fresh --format md   # ...and compare against it (text, md, json)
+```
+
+For each step, the diff gives its state (identical, same output, within tolerance, changed, added, removed), its cause (version bump, code or parameter change, upstream change, new source data, engine upgrade) and whether the change **starts** there: a step whose output changed although its inputs did not is the origin. Changes are summarized by field (`curve.pillars[*].zero_rate`: count, largest absolute and relative change, mean change) and changes of verdict (`status`, `zone`) are listed separately. Arrays of objects are matched by identifier (`trades[id=T1]`, `exception_list[date=2020-03-16]`, `pillars[maturity=10.0]`), so one new trade does not shift every following line.
+
+Tolerances are declared in the pipeline (or in a file passed with `--tolerances`); the first rule whose path pattern matches applies:
+
+```toml
+[[tolerance]]
+path = "*=?.0]*rate"   # rates of maturities below 10 years
+bp = 1.0               # basis points (1 bp = 1e-4)
+
+[[tolerance]]
+path = "*rate"
+bp = 0.5
+
+[[tolerance]]
+path = "portfolio.trades*.npv"
+abs = 1.0              # or rel = 1e-6; abs and rel together: within either
+
+[[tolerance]]
+path = "*.pnl"
+ignore = true
+```
+
+The exit code is 0 when every change is within tolerance, 1 otherwise, 2 on error. The server exposes the same comparison: `GET /api/pipelines/{name}/diff?left=1&right=2` (JSON, or Markdown with `&format=md`).
+
+### GitHub Action
+
+Re-run a pipeline on every pull request and fail it when a result moves beyond tolerance; the summary goes to the job page and, optionally, to a pull request comment:
+
+```yaml
+jobs:
+  model-diff:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write        # only for comment: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: secke/model-flow@main
+        with:
+          pipeline: models/var/pipeline.toml
+          baseline: models/var/baseline.json     # mf run models/var/pipeline.toml -o models/var/baseline.json
+          comment: "true"
+```
+
+Inputs: `pipeline`, `baseline`, `tolerances`, `limit`, `fail-on-breach` (default `true`), `comment`, `mf` (a prebuilt binary). Outputs: `ok`, `verdict`, `report`.
+
+## Python SDK
+
+The `modelflow` package exposes the Rust engine to Python: the built-in steps, fingerprints, history, replay, diff and reports run in Rust, and Python functions are steps in their own right, executed in-process and fingerprinted with their source code and parameters.
+
+```bash
+pip install maturin && maturin develop --release      # from the repository root (wheel not on PyPI yet)
+```
+
+```python
+import math
+import modelflow as mf
+
+p = mf.Pipeline("var-desk", workdir="examples/var-equity")
+p.add("returns", "csv", path="data/returns.csv", column="ret")
+p.add("var_99", "var_historical", deps=["returns"], params={"alpha": 0.99})
+
+@p.step(version="1.0.0", params={"lam": 0.94})
+def ewma(returns, lam):                  # dependencies arrive as arguments, params too
+    s2, var = sum(x * x for x in returns[:30]) / 30, []
+    for x in returns[30:]:
+        var.append(2.326 * math.sqrt(s2))
+        s2 = lam * s2 + (1 - lam) * x * x
+    return {"start": 30, "var": var}     # lists, dicts, NumPy arrays, pandas objects
+
+p.add("backtest", "backtest_forecasts", deps=["returns", "ewma"],
+      params={"alpha": 0.99, "returns": "returns", "forecasts": "ewma"})
+
+run = p.run()                            # executed by the engine, recorded in .modelflow/runs.db
+run.outputs["backtest"]["traffic_light"]  # {'zone': 'yellow', ...}
+p.verify()                               # [] : replayed identically
+d = mf.diff(p.get(1), run, tolerances=[{"path": "ewma.var*", "rel": 1e-12}])
+d.ok, d.verdict, d.origins               # also d.summary(), d.changes() (rows for pandas), d.to_markdown()
+p.report("report.html")
+mf.load("examples/var-equity/pipeline.toml").run()   # TOML pipelines too
+```
+
+Changing a function's code or `params` without changing `version` is reported by the replay and the diff, as for any model. A diff renders as Markdown in Jupyter. [`examples/python-sdk/var_desk.py`](examples/python-sdk/var_desk.py) rebuilds the `var-equity` pipeline in Python and checks with `mf.diff` that it reproduces the TOML pipeline to 1e-12, then compares a challenger.
+
+Performance: a Python step returning one million values, its fingerprint and a historical VaR on it run in about 0.4 s; comparing two runs of one million values takes about 0.3 s (0.6 s with tolerances).
 
 ## Server, web UI and API
 
@@ -313,8 +426,8 @@ The schema is created at startup under an advisory lock, so several instances ca
 ## Deployment
 
 ```bash
-docker build -t modelflow:0.12.0 .
-docker run --rm modelflow:0.12.0 new-token          # fill in deploy/server.docker.toml
+docker build -t modelflow:0.13.0 .
+docker run --rm modelflow:0.13.0 new-token          # fill in deploy/server.docker.toml
 docker compose up --build                          # http://127.0.0.1:8080
 kubectl apply -k deploy/k8s                        # after filling in deploy/k8s/secret.yaml
 ```
@@ -329,9 +442,10 @@ kubectl apply -k deploy/k8s                        # after filling in deploy/k8s
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 MODELFLOW_TEST_DATABASE_URL=postgres://postgres:pw@127.0.0.1:5432/postgres cargo test --workspace
+pip install "maturin[patchelf]" pytest numpy pandas && maturin develop --release && pytest python/tests
 ```
 
-CI runs formatting, clippy, the tests on SQLite and PostgreSQL 16, the six examples end to end, the CLI against PostgreSQL, the Docker image (read-only, no capabilities), Kubernetes manifest validation and the Playwright UI test (simulated SSO, owner → validator → auditor). See [CONTRIBUTING.md](CONTRIBUTING.md).
+CI runs formatting, clippy, the tests on SQLite and PostgreSQL 16, the six examples end to end, the CLI against PostgreSQL, the diff action on an unchanged and a changed model, the Python wheel with its tests and the SDK example, the Docker image (read-only, no capabilities), Kubernetes manifest validation and the Playwright UI test (simulated SSO, owner → validator → auditor). See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Further reading: [experiments on real market data](experiments/README.md), [product vision](docs/VISION.md), [scope and roadmap](docs/SCOPE.md).
 

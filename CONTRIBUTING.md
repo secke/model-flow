@@ -7,7 +7,7 @@ Thanks for your interest. ModelFlow is used to produce validation evidence, so c
 - **No silent change to a number.** Pricing, risk and statistical algorithms live in [quantparity](https://github.com/secke/quantparity), where every function is reconciled with QuantLib. Changes to an algorithm go there first, with a parity test; ModelFlow then bumps the pinned revision in `Cargo.toml`.
 - **Determinism.** A step must give the same output for the same inputs and code. No wall-clock time, randomness without a fixed seed, or iteration over unordered maps in outputs.
 - **Governance is code.** Segregation of duties, the append-only audit log and replay-before-decision are enforced in `mf-server` and covered by tests. A change that weakens one of them needs an explicit discussion in an issue first.
-- **Built-in step changes.** The code fingerprint of built-in steps is derived from the `mf-runtime` version: bump the workspace version when a built-in step's behavior changes, so replays of older runs report it.
+- **Built-in step changes.** The code fingerprint of built-in steps is derived from the `mf-runtime` version and the step's parameters: bump the workspace version when a built-in step's behavior changes, so replays of older runs report it. Before releasing, compare recorded runs with the new engine (`mf diff pipeline.toml#ID pipeline.toml#fresh`): results must be identical unless the change is intended.
 - **English** for code, comments, messages, UI text and documentation.
 
 ## Development setup
@@ -29,13 +29,19 @@ for e in var-equity pd-scorecard pricing-benchmark rates-benchmark multicurve-be
   target/release/mf run examples/$e/pipeline.toml && target/release/mf verify examples/$e/pipeline.toml
 done
 
+# Python SDK (in a virtual environment)
+pip install "maturin[patchelf]" pytest numpy pandas
+maturin develop --release
+pytest python/tests
+python examples/python-sdk/var_desk.py
+
 # UI end to end (Playwright, simulated OIDC provider)
 npm install --no-save --prefix ui-tests playwright@1.63.0
 npx --prefix ui-tests playwright install chromium
 NODE_PATH=ui-tests/node_modules node ui-tests/e2e.cjs target/release/mf-server
 ```
 
-CI runs all of the above, plus the Docker image build, an end-to-end run inside the read-only container and Kubernetes manifest validation. A pull request must be green before review.
+CI runs all of the above, plus the GitHub Action of `mf diff` on an unchanged and a changed model, the Python wheel, the Docker image build, an end-to-end run inside the read-only container and Kubernetes manifest validation. A pull request must be green before review.
 
 ## Pull requests
 

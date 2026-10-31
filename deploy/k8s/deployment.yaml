@@ -31,7 +31,7 @@ spec:
         # Demo: copies the examples into the workspace if it is empty.
         # In production, populate /workspace from a Git repository (git-sync) or a CI pipeline.
         - name: seed-examples
-          image: modelflow:0.12.0
+          image: modelflow:0.13.0
           command: ["sh", "-c", "[ -n \"$(ls -A /workspace)\" ] || cp -r /opt/modelflow/examples/. /workspace/"]
           securityContext:
             allowPrivilegeEscalation: false
@@ -43,7 +43,7 @@ spec:
               mountPath: /workspace
       containers:
         - name: modelflow
-          image: modelflow:0.12.0
+          image: modelflow:0.13.0
           args: ["serve", "--config", "/etc/modelflow/server.toml"]
           env:
             - name: MODELFLOW_DATABASE_URL

@@ -266,6 +266,45 @@ async fn full_validation_workflow(db: Option<String>) {
         StatusCode::CONFLICT
     );
 
+    // Diff: a new run on the tampered data, compared with run 1
+    let (s, _, body) = call(
+        &app,
+        "POST",
+        "/api/pipelines/desk-var/runs?wait=true",
+        Some("tok-alice"),
+        None,
+    )
+    .await;
+    assert!(s.is_success(), "{body}");
+    let (s, d, body) = call(
+        &app,
+        "GET",
+        "/api/pipelines/desk-var/diff?left=1&right=2",
+        Some("tok-carol"),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{body}");
+    assert_eq!(d["diff"]["ok"], false, "{d}");
+    assert!(d["verdict"].as_str().unwrap().starts_with("FAIL"), "{d}");
+    let origins = d["diff"]["origins"].as_array().unwrap();
+    assert!(
+        origins
+            .iter()
+            .any(|o| o.as_str().unwrap().contains("source data changed")),
+        "{d}"
+    );
+    let (s, _, md) = call(
+        &app,
+        "GET",
+        "/api/pipelines/desk-var/diff?left=1&right=1&format=md",
+        Some("tok-carol"),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert!(md.contains("OK: identical runs"), "{md}");
+
     // Audit log: auditor only, records denials
     assert_eq!(
         call(&app, "GET", "/api/audit", Some("tok-alice"), None).await.0,
@@ -295,7 +334,7 @@ async fn full_validation_workflow(db: Option<String>) {
     ] {
         assert!(
             outcomes.iter().any(|o| o == expected),
-            "{expected} absent de {outcomes:?}"
+            "{expected} missing from {outcomes:?}"
         );
     }
     assert!(outcomes.iter().any(|o| o.starts_with("bob:run.decide:refused")));

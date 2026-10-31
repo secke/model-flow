@@ -1,0 +1,111 @@
+name: ModelFlow diff
+description: >-
+  Re-run a ModelFlow pipeline on the pull request's code and data, compare it with a reference
+  run manifest, and fail when a result moves beyond its tolerances.
+author: secke
+branding:
+  icon: git-pull-request
+  color: blue
+
+inputs:
+  pipeline:
+    description: Pipeline file, e.g. `models/var/pipeline.toml`.
+    required: true
+  baseline:
+    description: >-
+      Reference run manifest (`mf run pipeline.toml -o baseline.json`, or `mf show`), usually
+      committed next to the pipeline.
+    required: true
+  tolerances:
+    description: Optional TOML file of `[[tolerance]]` rules, applied before the pipeline's own.
+    required: false
+    default: ""
+  limit:
+    description: Changes listed per step in the summary.
+    required: false
+    default: "10"
+  fail-on-breach:
+    description: Fail the job when a change is beyond tolerance or a step is added or removed.
+    required: false
+    default: "true"
+  comment:
+    description: Post the summary as a pull request comment (needs `pull-requests write`).
+    required: false
+    default: "false"
+  github-token:
+    description: Token used to post the comment.
+    required: false
+    default: ${{ github.token }}
+  mf:
+    description: Path to an `mf` binary already built; by default the action builds it.
+    required: false
+    default: ""
+
+outputs:
+  ok:
+    description: "`true` when every change is within tolerance."
+    value: ${{ steps.diff.outputs.ok }}
+  verdict:
+    description: One-line verdict.
+    value: ${{ steps.diff.outputs.verdict }}
+  report:
+    description: Path to the Markdown summary.
+    value: ${{ steps.diff.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build mf
+      if: inputs.mf == ''
+      shell: bash
+      run: |
+        command -v cargo >/dev/null || { echo "::error::Rust is required (dtolnay/rust-toolchain)"; exit 1; }
+        cargo install --locked --path "$GITHUB_ACTION_PATH/crates/mf-cli" --root "$RUNNER_TEMP/modelflow"
+        echo "MF_BIN=$RUNNER_TEMP/modelflow/bin/mf" >> "$GITHUB_ENV"
+    - name: Use the given mf
+      if: inputs.mf != ''
+      shell: bash
+      env:
+        MF: ${{ inputs.mf }}
+      run: echo "MF_BIN=$(realpath "$MF")" >> "$GITHUB_ENV"
+    - name: Compare with the baseline
+      id: diff
+      shell: bash
+      env:
+        PIPELINE: ${{ inputs.pipeline }}
+        BASELINE: ${{ inputs.baseline }}
+        TOLERANCES: ${{ inputs.tolerances }}
+        LIMIT: ${{ inputs.limit }}
+      run: |
+        report="$RUNNER_TEMP/modelflow-diff.md"
+        args=("$BASELINE" "$PIPELINE#fresh" --format md --limit "$LIMIT" -o "$report")
+        [ -n "$TOLERANCES" ] && args+=(--tolerances "$TOLERANCES")
+        set +e
+        verdict=$("$MF_BIN" diff "${args[@]}")
+        code=$?
+        set -e
+        if [ "$code" -ge 2 ]; then
+          echo "::error::mf diff failed: $verdict"
+          exit "$code"
+        fi
+        cat "$report" >> "$GITHUB_STEP_SUMMARY"
+        echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+        echo "report=$report" >> "$GITHUB_OUTPUT"
+        echo "ok=$([ "$code" -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        echo "$verdict"
+    - name: Comment on the pull request
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR: ${{ github.event.pull_request.number }}
+        REPORT: ${{ steps.diff.outputs.report }}
+      run: gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$REPORT" --edit-last --create-if-none
+    - name: Gate
+      if: inputs.fail-on-breach == 'true' && steps.diff.outputs.ok != 'true'
+      shell: bash
+      env:
+        VERDICT: ${{ steps.diff.outputs.verdict }}
+      run: |
+        echo "::error::$VERDICT"
+        exit 1

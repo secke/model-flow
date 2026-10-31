@@ -12,12 +12,15 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 
 > Positioning and roadmap: [VISION.md](VISION.md).
 
-## Status (v0.12)
+## Status (v0.13)
 - `mf-core`: DAG, fingerprints of inputs, outputs and code, manifest, replay verification.
 - [`quantparity`](https://github.com/secke/quantparity) (external dependency, cross-checked against QuantLib): historical VaR; Kupiec, Christoffersen, Basel traffic light; PSI; AUC, Gini, KS; per-grade binomial calibration and Hosmer-Lemeshow; reference pricers (BSM and Greeks, Black-76, American CRR, bonds, implied volatility), yield curves (deposit + swap bootstrap), interest rate swaps and zero-coupons with DV01, pricer benchmark with per-product tolerances.
 - `mf-runtime`: TOML pipelines, CSV steps (series or table), built-in steps, external processes with a timeout, SQLite storage, HTML validation report.
 - `mf-server`: REST API, hashed tokens, roles (model owner, validator, auditor, admin), validation decisions with segregation of duties, append-only audit log.
-- `mf-cli`: `mf run | verify | runs | show | report`.
+- `mf-cli`: `mf run | verify | runs | show | report | diff`.
+- Run comparison (`mf diff`, API, GitHub Action): value-by-value diff of two runs, origin of a change, cause (version, code or parameters, data, engine), arrays matched by identifier, tolerances in abs / rel / bp per path pattern, exit code for CI.
+- Python SDK (`modelflow`, PyO3): pipelines and Python functions as steps, executed and fingerprinted by the Rust engine; runs, replay, diff, reports.
+- Step parameters are part of the code fingerprint; manifests record the engine version.
 - Multi-curve rates: TARGET calendar, market conventions, €STR curve and OIS-discounted Euribor 6M projection, dated swaps.
 - Content-addressed output storage with integrity checks; isolation of external processes; RFC 4180 CSV and Parquet.
 - API: run queue, rate limiting, native TLS, OIDC single sign-on (groups to roles, segregation of duties).
@@ -26,8 +29,9 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 - Validator web UI (SSO PKCE, triggering, report, replay, decisions, audit), tested end to end.
 - PostgreSQL storage for history and governance (audit log protected by a trigger), SQLite kept for local use.
 - Deployment: non-root Docker image, hardened docker-compose, Kubernetes manifests (Pod Security restricted, NetworkPolicy).
-- Six examples: equity desk (VaR), PD scorecard, validation of QuantLib on options and bonds, on a single curve and swaps, in multi-curve, and multi-asset portfolio risk.
-- GitHub CI: format, clippy, tests (including PostgreSQL), example runs and reports as artifacts, Docker image, UI tests.
+- Three experiments on real market data (S&P 500 VaR backtest, ECB AAA curve, change impact with `mf diff`).
+- Seven examples: equity desk (VaR), PD scorecard, validation of QuantLib on options and bonds, on a single curve and swaps, in multi-curve, multi-asset portfolio risk, and the equity desk written with the Python SDK.
+- GitHub CI: format, clippy, tests (including PostgreSQL), example runs and reports as artifacts, diff action, Python wheel and tests, Docker image, UI tests.
 
 Decision 1 settled: existing models are integrated as **external processes** (JSON on stdin/stdout).
 
