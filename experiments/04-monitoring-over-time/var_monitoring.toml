@@ -1,0 +1,67 @@
+# Ongoing monitoring of a VaR model frozen at the end of 2019: RiskMetrics EWMA (lambda = 0.94,
+# normal quantile), checked at every month end on the history known at that date.
+name = "sp500-var-monitoring"
+
+[[step]]
+name = "returns"
+kind = "csv"
+version = "1.0.0"
+path = "data/${as_of}/returns.csv"
+column = "ret"
+
+[[step]]
+name = "days"
+kind = "csv"
+version = "1.0.0"
+path = "data/${as_of}/returns.csv"
+column = "day"
+
+# Calibration sample of the frozen model, 2016-11 to 2019-12
+[[step]]
+name = "reference"
+kind = "csv"
+version = "1.0.0"
+path = "data/reference.csv"
+column = "ret"
+
+[[step]]
+name = "ewma_model"
+kind = "process"
+version = "0.1.0"
+deps = ["returns"]
+command = ["python3", "../../examples/var-equity/models/ewma_var.py"]
+code = ["../../examples/var-equity/models/ewma_var.py"]
+params = { lambda = 0.94, alpha = 0.99, warmup = 30 }
+
+# Regulatory backtest: the latest 250-day window gives the traffic light and the capital add-on
+[[step]]
+name = "backtest"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "ewma_model", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "ewma_model", dates = "days" }
+
+# Drift of the return distribution: the last 250 days against the calibration sample
+[[step]]
+name = "recent"
+kind = "process"
+version = "1.0.0"
+deps = ["returns"]
+command = ["python3", "models/last_window.py"]
+code = ["models/last_window.py"]
+params = { n = 250 }
+
+[[step]]
+name = "drift"
+kind = "psi"
+version = "1.0.0"
+deps = ["reference", "recent"]
+params = { baseline = "reference", current = "recent", bins = 10 }
+
+# Current 99% VaR on the last 250 days, for scale
+[[step]]
+name = "var_250d"
+kind = "var_historical"
+version = "1.0.0"
+deps = ["recent"]
+params = { alpha = 0.99 }

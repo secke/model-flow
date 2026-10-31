@@ -1,0 +1,160 @@
+left   ecb.toml@2023-05-31#99  run_hash 6906e1e3554686cd  as of 2023-05-31  modelflow 0.14.0
+right  ecb.toml@2023-06-30#100  run_hash bb102441d192b012  as of 2023-06-30  modelflow 0.14.0
+
+step                   state         compared  changed  within  breaches     max rel  cause
+ecb                    changed           1433      717       0       717      15.34%  source data changed, as of 2023-05-31 → 2023-06-30  ← origin
+market                 changed            243       61       0        61      15.42%  upstream steps changed
+ecb_prices             changed            358      358       0       358       1.45%  upstream steps changed
+zero_coupons           same output       1790        0       0         0              upstream steps changed
+zero_coupons_naive     same output       1790        0       0         0              upstream steps changed
+curve                  changed            335      236       0       236     100.00%  upstream steps changed
+curve_naive            changed            335      237       0       237     100.00%  upstream steps changed
+spot_check             changed           2873     1489       0      1489     100.00%  upstream steps changed
+spot_check_naive       changed           2873     1437       0      1437     100.00%  upstream steps changed
+
+Verdict changes:
+  spot_check.trades[id=ZC-4M].status                           fail → warn
+  spot_check.trades[id=ZC-5M].status                           fail → warn
+  spot_check.trades[id=ZC-2Y1M].status                         warn → fail
+  spot_check.trades[id=ZC-2Y2M].status                         warn → fail
+  spot_check.trades[id=ZC-2Y3M].status                         warn → fail
+  spot_check.trades[id=ZC-2Y4M].status                         warn → fail
+  spot_check.trades[id=ZC-2Y5M].status                         warn → fail
+  spot_check.trades[id=ZC-2Y6M].status                         warn → fail
+  spot_check.trades[id=ZC-2Y7M].status                         warn → fail
+  spot_check.trades[id=ZC-2Y8M].status                         warn → fail
+  spot_check.trades[id=ZC-2Y9M].status                         warn → fail
+  spot_check.trades[id=ZC-2Y10M].status                        warn → fail
+  spot_check.trades[id=ZC-2Y11M].status                        pass → warn
+  spot_check.trades[id=ZC-3Y1M].status                         warn → pass
+  spot_check.trades[id=ZC-3Y3M].status                         fail → warn
+  spot_check.trades[id=ZC-3Y4M].status                         fail → pass
+  spot_check.trades[id=ZC-3Y5M].status                         fail → pass
+  spot_check.trades[id=ZC-3Y6M].status                         fail → pass
+  spot_check.trades[id=ZC-3Y7M].status                         fail → pass
+  spot_check.trades[id=ZC-3Y8M].status                         fail → pass
+  spot_check.trades[id=ZC-3Y9M].status                         fail → pass
+  spot_check.trades[id=ZC-3Y10M].status                        warn → pass
+  spot_check.trades[id=ZC-3Y11M].status                        warn → pass
+  spot_check.trades[id=ZC-4Y3M].status                         fail → warn
+  spot_check.trades[id=ZC-4Y4M].status                         fail → warn
+  spot_check.trades[id=ZC-4Y5M].status                         fail → warn
+  spot_check.trades[id=ZC-4Y6M].status                         fail → warn
+  spot_check.trades[id=ZC-4Y7M].status                         fail → warn
+  spot_check.trades[id=ZC-4Y8M].status                         fail → warn
+  spot_check.trades[id=ZC-4Y9M].status                         fail → warn
+  spot_check.trades[id=ZC-5Y3M].status                         fail → warn
+  spot_check.trades[id=ZC-5Y4M].status                         fail → warn
+  spot_check.trades[id=ZC-5Y5M].status                         fail → warn
+  spot_check.trades[id=ZC-5Y7M].status                         fail → warn
+  spot_check.trades[id=ZC-5Y8M].status                         fail → warn
+  spot_check.trades[id=ZC-5Y9M].status                         fail → warn
+  spot_check.trades[id=ZC-6Y4M].status                         fail → warn
+  spot_check.trades[id=ZC-6Y5M].status                         fail → warn
+  spot_check.trades[id=ZC-6Y6M].status                         fail → warn
+  spot_check.trades[id=ZC-6Y7M].status                         fail → warn
+  spot_check.trades[id=ZC-9Y1M].status                         warn → pass
+  spot_check.trades[id=ZC-9Y11M].status                        warn → pass
+  spot_check.trades[id=ZC-10Y2M].status                        warn → pass
+  spot_check.trades[id=ZC-10Y10M].status                       warn → pass
+  spot_check.trades[id=ZC-11Y3M].status                        warn → pass
+  spot_check.trades[id=ZC-11Y4M].status                        warn → pass
+  spot_check.trades[id=ZC-11Y5M].status                        warn → pass
+  spot_check.trades[id=ZC-11Y6M].status                        warn → pass
+  spot_check.trades[id=ZC-11Y7M].status                        warn → pass
+  spot_check.trades[id=ZC-11Y8M].status                        warn → pass
+  spot_check.trades[id=ZC-11Y9M].status                        warn → pass
+  spot_check.trades[id=ZC-13Y5M].status                        pass → warn
+  spot_check.trades[id=ZC-13Y6M].status                        pass → warn
+  spot_check.trades[id=ZC-13Y7M].status                        pass → warn
+  spot_check.trades[id=ZC-13Y8M].status                        pass → warn
+  spot_check.trades[id=ZC-14Y3M].status                        pass → warn
+  spot_check.trades[id=ZC-14Y9M].status                        pass → warn
+  spot_check.trades[id=ZC-15Y2M].status                        pass → warn
+  spot_check.trades[id=ZC-22Y1M].status                        warn → pass
+  spot_check_naive.trades[id=ZC-3M].status                     fail → warn
+
+ecb (717 changes, 717 beyond tolerance)
+  field                                                       changed   beyond      max |Δ|   max rel       mean Δ
+  ecb.date                                                          1        1                                    
+  ecb.par_yields.10M.rate                                           1        1   0.00412352    11.83%  +0.00412352
+  ecb.par_yields.10Y.rate                                           1        1     0.001373     5.45%    +0.001373
+  … 714 more fields
+  largest changes:
+  ! ecb.date                                                       2023-05-31 → 2023-06-30     changed                    exact
+  ! ecb.spot_rates.2Y3M.rate                                        0.0257214 → 0.0303815      +0.00466007 (15.34%)       exact
+  ! ecb.spot_rates.2Y4M.rate                                        0.0255059 → 0.0301255      +0.00461967 (15.33%)       exact
+  … 714 more
+
+market (61 changes, 61 beyond tolerance)
+  field                                                       changed   beyond      max |Δ|   max rel       mean Δ
+  market.curves.EUR-AAA-NAIVE.instruments[*].rate                  30       30    0.0047556    15.21%  +0.00118684
+  market.curves.EUR-AAA.instruments[*].rate                        30       30   0.00489506    15.42%  +0.00121812
+  market.as_of                                                      1        1                                    
+  largest changes:
+  ! market.as_of                                                   2023-05-31 → 2023-06-30     changed                    exact
+  ! market.curves.EUR-AAA.instruments[maturity=2].rate              0.0268441 → 0.0317392      +0.00489506 (15.42%)       exact
+  ! market.curves.EUR-AAA-NAIVE.instruments[maturity=2].rate        0.0265015 → 0.0312571      +0.0047556 (15.21%)        exact
+  … 58 more
+
+ecb_prices (358 changes, 358 beyond tolerance)
+  field                                                       changed   beyond      max |Δ|   max rel       mean Δ
+  ecb_prices.ZC-10M                                                 1        1     0.334874     0.34%    -0.334874
+  ecb_prices.ZC-10Y                                                 1        1     0.965791     1.23%    -0.965791
+  ecb_prices.ZC-10Y10M                                              1        1     0.885442     1.15%    -0.885442
+  … 355 more fields
+  largest changes:
+  ! ecb_prices.ZC-5Y7M                                                88.0317 → 86.7575        -1.27414 (1.45%)           exact
+  ! ecb_prices.ZC-5Y6M                                                88.2006 → 86.924         -1.27653 (1.45%)           exact
+  ! ecb_prices.ZC-5Y8M                                                87.8624 → 86.5908        -1.27155 (1.45%)           exact
+  … 355 more
+
+curve (236 changes, 236 beyond tolerance)
+  field                                                       changed   beyond      max |Δ|   max rel       mean Δ
+  curve.pillars[*].discount_factor                                 30       30    0.0128584     1.44%  -0.00371553
+  curve.pillars[*].model_rate                                      30       30   0.00489506    15.42%  +0.00121812
+  curve.pillars[*].quote                                           30       30   0.00489506    15.42%  +0.00121812
+  … 5 more fields
+  largest changes:
+  ! curve.pillars[maturity=6.0].repricing_error                             0 → 2.082e-17      +2.082e-17 (100.00%)       exact
+  ! curve.pillars[maturity=7.0].repricing_error                             0 → 2.082e-17      +2.082e-17 (100.00%)       exact
+  ! curve.pillars[maturity=11.0].repricing_error                    2.776e-17 → 0              -2.776e-17 (100.00%)       exact
+  … 233 more
+
+curve_naive (237 changes, 237 beyond tolerance)
+  field                                                       changed   beyond      max |Δ|   max rel       mean Δ
+  curve_naive.pillars[*].discount_factor                           30       30    0.0125828     1.41%  -0.00365765
+  curve_naive.pillars[*].model_rate                                30       30    0.0047556    15.21%  +0.00118684
+  curve_naive.pillars[*].quote                                     30       30    0.0047556    15.21%  +0.00118684
+  … 6 more fields
+  largest changes:
+  ! curve_naive.pillars[maturity=1.0].repricing_error               9.714e-17 → 0              -9.714e-17 (100.00%)       exact
+  ! curve_naive.pillars[maturity=9.0].repricing_error               3.123e-17 → 0              -3.123e-17 (100.00%)       exact
+  ! curve_naive.pillars[maturity=29.0].repricing_error              1.041e-17 → 0              -1.041e-17 (100.00%)       exact
+  … 234 more
+
+spot_check (1489 changes, 1489 beyond tolerance)
+  field                                                       changed   beyond      max |Δ|   max rel       mean Δ
+  spot_check.trades[*].candidate                                  358      358      1.28674     1.45%     -0.38328
+  spot_check.trades[*].reference                                  358      358      1.28584     1.44%    -0.382321
+  spot_check.trades[*].rel_diff                                   357      357     4.029e-4   100.00%    -5.713e-6
+  … 7 more fields
+  largest changes:
+  ! spot_check.trades[id=ZC-4M].status                                   fail → warn           changed                    exact
+  ! spot_check.trades[id=ZC-5M].status                                   fail → warn           changed                    exact
+  ! spot_check.trades[id=ZC-2Y1M].status                                 warn → fail           changed                    exact
+  … 1486 more
+
+spot_check_naive (1437 changes, 1437 beyond tolerance)
+  field                                                       changed   beyond      max |Δ|   max rel       mean Δ
+  spot_check_naive.trades[*].abs_diff                             358      358    0.0509483    95.64%  +0.00699708
+  spot_check_naive.trades[*].candidate                            358      358      1.28674     1.45%     -0.38328
+  spot_check_naive.trades[*].reference                            358      358      1.25828     1.41%    -0.376289
+  … 6 more fields
+  largest changes:
+  ! spot_check_naive.trades[id=ZC-3M].status                             fail → warn           changed                    exact
+  ! spot_check_naive.warned                                                 0 → 1              +1 (100.00%)               exact
+  ! spot_check_naive.trades[id=ZC-3M].abs_diff                      0.0254663 → 0.00110958     -0.0243567 (95.64%)        exact
+  … 1434 more
+
+FAIL: 4535 changes beyond tolerance in 7 steps; origin: ecb (source data changed, as of 2023-05-31 → 2023-06-30)
