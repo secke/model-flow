@@ -446,9 +446,7 @@ fn mismatches_json(mm: &[mf_core::Mismatch]) -> Value {
 fn verify_run(st: &AppState, toml: &FsPath, name: &str, id: i64) -> ApiResult<Vec<mf_core::Mismatch>> {
     let (sp, base) = spec::load(toml).map_err(ApiError::internal)?;
     let (_, m) = st.store_for(toml)?.get(name, Some(id)).map_err(ApiError::not_found)?;
-    let p = spec::build(&sp, &base).map_err(|e| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e))?;
-    p.verify(&m)
-        .map_err(|e| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e.to_string()))
+    spec::verify(&sp, &base, &m).map_err(|e| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e))
 }
 
 // ---------- Handlers ----------
@@ -598,7 +596,7 @@ async fn list_runs(State(st): State<AppState>, _auth: Auth, Path(name): Path<Str
                     .ok()
                     .and_then(|d| d.last().map(|x| x.decision.clone()));
                 json!({"id": r.id, "run_hash": r.run_hash, "created_at": r.created_at,
-                       "triggered_by": r.triggered_by, "status": r.status, "decision": last})
+                       "triggered_by": r.triggered_by, "status": r.status, "as_of": r.as_of, "decision": last})
             })
             .collect();
         Ok(Json(json!(out)))
@@ -611,16 +609,35 @@ struct RunQuery {
     /// Wait for the run to finish instead of returning immediately (202).
     #[serde(default)]
     wait: bool,
+    /// As-of date of a dated pipeline (default: the latest date whose data exists).
+    #[serde(default)]
+    as_of: Option<String>,
 }
 
 /// Runs a pipeline for an already recorded job (blocking thread), then alerts if needed.
-fn execute_job(st: &AppState, job: i64, name: &str, auth: &Auth) -> Result<(i64, Value), String> {
+fn execute_job(
+    st: &AppState,
+    job: i64,
+    name: &str,
+    auth: &Auth,
+    as_of: Option<String>,
+) -> Result<(i64, Value), String> {
     let gov = st.gov().map_err(|e| e.1)?;
     gov.job_started(job)?;
     let result = (|| -> Result<(i64, Value, Option<String>), String> {
         let toml = locate(st, name).map_err(|e| e.1)?;
         let (sp, base) = spec::load(&toml)?;
-        let m = spec::build(&sp, &base)?.execute().map_err(|e| e.to_string())?;
+        // A dated pipeline runs for the given date, by default the latest one with data.
+        let as_of = match as_of {
+            Some(d) => Some(d),
+            None if sp.dated() => Some(
+                spec::available_dates(&sp, &base)?
+                    .pop()
+                    .ok_or_else(|| format!("{name}: no as-of date with data"))?,
+            ),
+            None => None,
+        };
+        let m = spec::run(&sp, &base, as_of.as_deref())?;
         let id = st.store_for(&toml).map_err(|e| e.1)?.save(name, &m, &auth.name)?;
         let steps: Vec<Value> = m
             .steps
@@ -630,7 +647,7 @@ fn execute_job(st: &AppState, job: i64, name: &str, auth: &Auth) -> Result<(i64,
         let status = mf_runtime::store::overall_status(&m);
         Ok((
             id,
-            json!({"id": id, "run_hash": m.run_hash, "status": status, "steps": steps}),
+            json!({"id": id, "run_hash": m.run_hash, "status": status, "as_of": m.as_of, "steps": steps}),
             status,
         ))
     })();
@@ -679,6 +696,7 @@ async fn enqueue(
     st: &AppState,
     name: &str,
     auth: &Auth,
+    as_of: Option<String>,
 ) -> ApiResult<(i64, tokio::task::JoinHandle<Result<(i64, Value), String>>)> {
     let (st2, name2, user) = (st.clone(), name.to_string(), auth.name.clone());
     let job = blocking(move || {
@@ -690,7 +708,7 @@ async fn enqueue(
     let sem = st.0.runs.clone();
     let task = tokio::spawn(async move {
         let _permit = sem.acquire_owned().await.expect("semaphore");
-        tokio::task::spawn_blocking(move || execute_job(&st3, job, &name3, &auth3))
+        tokio::task::spawn_blocking(move || execute_job(&st3, job, &name3, &auth3, as_of))
             .await
             .unwrap_or_else(|e| Err(e.to_string()))
     });
@@ -744,7 +762,7 @@ pub async fn scheduler_tick(st: &AppState, now: i64) -> Result<Vec<i64>, String>
     };
     let mut jobs = vec![];
     for name in due {
-        jobs.push(enqueue(st, &name, &system).await.map_err(|e| e.1)?.0);
+        jobs.push(enqueue(st, &name, &system, None).await.map_err(|e| e.1)?.0);
     }
     Ok(jobs)
 }
@@ -773,7 +791,10 @@ async fn create_run(
     Query(q): Query<RunQuery>,
 ) -> ApiResult<Response> {
     authorize(&st, &auth, &[Role::ModelOwner, Role::Admin], "run.create", &name).await?;
-    let (job, task) = enqueue(&st, &name, &auth).await?;
+    if let Some(d) = &q.as_of {
+        spec::check_as_of(d).map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e))?;
+    }
+    let (job, task) = enqueue(&st, &name, &auth, q.as_of.clone()).await?;
     if !q.wait {
         let body = json!({"job_id": job, "status": "queued", "href": format!("/api/jobs/{job}")});
         return Ok((StatusCode::ACCEPTED, Json(body)).into_response());
@@ -871,6 +892,55 @@ async fn diff_runs(
                 mf_runtime::diff::render_markdown(&d, &l, &r, 10),
             )
                 .into_response()),
+            f => Err(ApiError::new(StatusCode::BAD_REQUEST, format!("unknown format `{f}`"))),
+        }
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+struct SeriesQuery {
+    /// Comma-separated paths (diff notation, `*` and `?` wildcards); default: check statuses.
+    #[serde(default)]
+    path: Option<String>,
+    /// `json` (default), `csv` or `md`.
+    #[serde(default)]
+    format: Option<String>,
+}
+
+/// Values of a dated pipeline, date by date (latest run of every as-of date).
+async fn series_runs(
+    State(st): State<AppState>,
+    _auth: Auth,
+    Path(name): Path<String>,
+    Query(q): Query<SeriesQuery>,
+) -> ApiResult<Response> {
+    blocking(move || {
+        let toml = locate(&st, &name)?;
+        let paths: Vec<String> = q
+            .path
+            .as_deref()
+            .unwrap_or("")
+            .split(',')
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .map(String::from)
+            .collect();
+        let s = mf_runtime::dated::series(&st.store_for(&toml)?, &name, &paths).map_err(ApiError::internal)?;
+        let text = |ct: &'static str, body: String| ([(axum::http::header::CONTENT_TYPE, ct)], body).into_response();
+        match q.format.as_deref().unwrap_or("json") {
+            "json" => Ok(Json(json!({
+                "series": s,
+                "changes": mf_runtime::dated::transitions(&s).into_iter()
+                    .map(|(c, d, a, b)| json!({"path": c, "as_of": d, "from": a, "to": b}))
+                    .collect::<Vec<_>>(),
+            }))
+            .into_response()),
+            "csv" => Ok(text("text/csv; charset=utf-8", mf_runtime::dated::render_csv(&s))),
+            "md" => Ok(text(
+                "text/markdown; charset=utf-8",
+                mf_runtime::dated::render_markdown(&s),
+            )),
             f => Err(ApiError::new(StatusCode::BAD_REQUEST, format!("unknown format `{f}`"))),
         }
     })
@@ -1282,6 +1352,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/pipelines/:name/runs", get(list_runs).post(create_run))
         .route("/api/pipelines/:name/runs/:id", get(get_run))
         .route("/api/pipelines/:name/diff", get(diff_runs))
+        .route("/api/pipelines/:name/series", get(series_runs))
         .route("/api/pipelines/:name/runs/:id/verify", post(verify))
         .route("/api/pipelines/:name/runs/:id/report", get(get_report))
         .route(

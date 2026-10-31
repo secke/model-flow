@@ -245,9 +245,11 @@ async function viewPipeline(name) {
       }
     },
   }, "Trigger a run");
+  const dated = runs.some((r) => r.as_of);
   const rows = runs.slice().reverse().map((r) => el("tr", { class: "link", tabindex: 0, onclick: () => (location.hash = `#/p/${enc(name)}/r/${r.id}`), onkeydown: (e) => e.key === "Enter" && (location.hash = `#/p/${enc(name)}/r/${r.id}`) },
     el("td", { class: "num" }, el("a", { href: `#/p/${enc(name)}/r/${r.id}` }, `#${r.id}`)),
     el("td", {}, when(r.created_at)),
+    dated && el("td", {}, r.as_of || ""),
     el("td", {}, r.triggered_by),
     el("td", {}, state(r.status)),
     el("td", {}, r.decision ? state(r.decision) : el("span", { class: "muted" }, "Pending")),
@@ -264,7 +266,7 @@ async function viewPipeline(name) {
     status,
     el("h2", {}, "Runs"),
     el("div", { class: "table-wrap" }, runs.length
-      ? el("table", {}, el("thead", {}, el("tr", {}, ["No.", "Date", "Triggered by", "Result", "Decision", "Fingerprint"].map((h) => el("th", { scope: "col" }, h)))), el("tbody", {}, rows))
+      ? el("table", {}, el("thead", {}, el("tr", {}, ["No.", "Date", dated && "As of", "Triggered by", "Result", "Decision", "Fingerprint"].filter(Boolean).map((h) => el("th", { scope: "col" }, h)))), el("tbody", {}, rows))
       : el("p", { class: "empty" }, can("model_owner", "admin") ? "No runs yet. Trigger the first one with the button above." : "No runs yet.")),
   );
 }
@@ -341,6 +343,7 @@ async function viewRun(name, id) {
         el("dl", { class: "facts" },
           el("div", {}, el("dt", {}, "Triggered on"), el("dd", {}, when(run.created_at))),
           el("div", {}, el("dt", {}, "By"), el("dd", {}, run.triggered_by)),
+          run.as_of && el("div", {}, el("dt", {}, "As of"), el("dd", {}, run.as_of)),
           el("div", {}, el("dt", {}, "Decision"), el("dd", {}, run.decision ? state(run.decision) : "Pending")),
           el("div", {}, el("dt", {}, "Run fingerprint"), el("dd", { class: "hash", title: run.run_hash }, short(run.run_hash))),
         ),

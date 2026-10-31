@@ -643,6 +643,8 @@ pub struct ProcessStep {
     pub code: Vec<PathBuf>,
     pub params: Value,
     pub cwd: PathBuf,
+    /// As-of date of a dated pipeline, sent to the process with its inputs.
+    pub as_of: Option<String>,
     pub timeout: Duration,
     pub env: std::collections::BTreeMap<String, String>,
     pub pass_env: Vec<String>,
@@ -730,7 +732,11 @@ impl Step for ProcessStep {
         use std::sync::atomic::{AtomicBool, Ordering};
         use std::sync::Arc;
 
-        let payload = serde_json::to_vec(&json!({ "inputs": inputs, "params": self.params })).unwrap();
+        let mut payload = json!({ "inputs": inputs, "params": self.params });
+        if let Some(d) = &self.as_of {
+            payload["as_of"] = json!(d);
+        }
+        let payload = serde_json::to_vec(&payload).unwrap();
         let mut cmd = Command::new(&self.command[0]);
         cmd.args(&self.command[1..])
             .current_dir(&self.cwd)
@@ -838,6 +844,7 @@ mod tests {
             code: vec![],
             params: json!({"k": 1}),
             cwd: ".".into(),
+            as_of: None,
             timeout: Duration::from_millis(timeout_ms),
             env: Default::default(),
             pass_env: vec![],

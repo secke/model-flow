@@ -125,6 +125,8 @@ struct PyStepDef {
     params: Value,
     /// Fingerprint of the function's source code and parameters.
     code_hash: String,
+    /// The function takes an `as_of` argument.
+    wants_as_of: bool,
 }
 
 struct PyFnStep {
@@ -134,6 +136,7 @@ struct PyFnStep {
     func: Py<PyAny>,
     params: Value,
     code_hash: String,
+    as_of: Option<Option<String>>,
 }
 
 impl Step for PyFnStep {
@@ -159,6 +162,9 @@ impl Step for PyFnStep {
                 for (k, v) in p {
                     kwargs.set_item(k, pythonize(py, v).map_err(mf_err)?)?;
                 }
+            }
+            if let Some(d) = &self.as_of {
+                kwargs.set_item("as_of", d.as_deref())?;
             }
             let out = self.func.bind(py).call((), Some(&kwargs))?;
             to_value(&out, &self.name)
@@ -197,8 +203,8 @@ impl PyPipeline {
         }
     }
 
-    fn engine(&self, py: Python<'_>) -> PyResult<mf_core::Pipeline> {
-        let mut p = spec::build(&self.spec(), &self.workdir).map_err(mf_err)?;
+    fn engine(&self, py: Python<'_>, as_of: Option<&str>) -> PyResult<mf_core::Pipeline> {
+        let mut p = spec::build_at(&self.spec(), &self.workdir, as_of).map_err(mf_err)?;
         for f in &self.functions {
             p = p.step(PyFnStep {
                 name: f.name.clone(),
@@ -207,9 +213,27 @@ impl PyPipeline {
                 func: f.func.clone_ref(py),
                 params: f.params.clone(),
                 code_hash: f.code_hash.clone(),
+                as_of: f.wants_as_of.then(|| as_of.map(str::to_string)),
             });
         }
         Ok(p)
+    }
+
+    /// One run, recorded or not. Python functions can make a pipeline dated without data paths.
+    fn execute(&self, py: Python<'_>, as_of: Option<&str>, record: bool, who: Option<String>) -> PyResult<PyRun> {
+        let mut manifest = self.engine(py, as_of)?.execute().map_err(exec_error)?;
+        manifest.as_of = as_of.map(str::to_string);
+        let id = if record {
+            let who = who.unwrap_or_else(default_user);
+            Some(self.store()?.save(&self.name, &manifest, &who).map_err(mf_err)?)
+        } else {
+            None
+        };
+        Ok(PyRun {
+            pipeline: self.name.clone(),
+            id,
+            manifest,
+        })
     }
 
     fn store(&self) -> PyResult<Store> {
@@ -231,6 +255,10 @@ impl PyPipeline {
             manifest,
         })
     }
+}
+
+fn default_user() -> String {
+    format!("python:{}", std::env::var("USER").unwrap_or_else(|_| "unknown".into()))
 }
 
 fn exec_error(e: mf_core::Error) -> PyErr {
@@ -329,14 +357,17 @@ impl PyPipeline {
             steps: vec![s.clone()],
             tolerances: vec![],
         };
-        spec::build(&probe, &self.workdir).map_err(PyValueError::new_err)?;
+        let probe_date = probe.dated().then_some("2000-01-01");
+        spec::build_at(&probe, &self.workdir, probe_date).map_err(PyValueError::new_err)?;
         self.steps.push(s);
         Ok(())
     }
 
     /// Registers a Python function as a step (use the `Pipeline.step` decorator). `source` is the
     /// function's source code: with `params` and `version`, it is the step's code fingerprint.
-    #[pyo3(signature = (func, name, version, deps, params = None, source = ""))]
+    /// With `as_of=True`, the function receives the run's as-of date as an `as_of` argument.
+    #[pyo3(signature = (func, name, version, deps, params = None, source = "", as_of = false))]
+    #[allow(clippy::too_many_arguments)]
     fn add_function(
         &mut self,
         func: Py<PyAny>,
@@ -345,6 +376,7 @@ impl PyPipeline {
         deps: Vec<String>,
         params: Option<&Bound<'_, PyAny>>,
         source: &str,
+        as_of: bool,
     ) -> PyResult<()> {
         self.check_new(name)?;
         let params = opt_value(params, "params")?;
@@ -362,6 +394,7 @@ impl PyPipeline {
             func,
             params,
             code_hash: hash_bytes(&buf),
+            wants_as_of: as_of,
         });
         Ok(())
     }
@@ -390,27 +423,121 @@ impl PyPipeline {
     }
 
     /// Executes the pipeline. With `record=True` (default) the run is stored in the history.
-    #[pyo3(signature = (record = true, triggered_by = None))]
-    fn run(&self, py: Python<'_>, record: bool, triggered_by: Option<String>) -> PyResult<PyRun> {
-        let manifest = self.engine(py)?.execute().map_err(exec_error)?;
-        let id = if record {
-            let who = triggered_by
-                .unwrap_or_else(|| format!("python:{}", std::env::var("USER").unwrap_or_else(|_| "unknown".into())));
-            Some(self.store()?.save(&self.name, &manifest, &who).map_err(mf_err)?)
-        } else {
-            None
-        };
-        Ok(PyRun {
-            pipeline: self.name.clone(),
-            id,
-            manifest,
-        })
+    /// `as_of`: the date of a dated pipeline (`${as_of}` in its data paths).
+    #[pyo3(signature = (record = true, triggered_by = None, as_of = None))]
+    fn run(
+        &self,
+        py: Python<'_>,
+        record: bool,
+        triggered_by: Option<String>,
+        as_of: Option<String>,
+    ) -> PyResult<PyRun> {
+        if let Some(d) = &as_of {
+            spec::check_as_of(d).map_err(PyValueError::new_err)?;
+        }
+        self.execute(py, as_of.as_deref(), record, triggered_by)
     }
 
-    /// Recorded run `run_id`, or the latest one.
-    #[pyo3(signature = (run_id = None))]
-    fn get(&self, run_id: Option<i64>) -> PyResult<PyRun> {
-        self.get_run(run_id)
+    /// Runs the pipeline for several as-of dates: a list, `"all"` (every date whose data exists)
+    /// or `"new"` (those without a recorded run). Without Python functions, dates run in parallel
+    /// on `workers` threads (0: one per CPU). Returns the runs in date order.
+    #[pyo3(signature = (dates = None, workers = 0, record = true, triggered_by = None))]
+    fn run_dates(
+        &self,
+        py: Python<'_>,
+        dates: Option<&Bound<'_, PyAny>>,
+        workers: usize,
+        record: bool,
+        triggered_by: Option<String>,
+    ) -> PyResult<Vec<PyRun>> {
+        let sp = self.spec();
+        let store = self.store()?;
+        let sel = match dates {
+            None => "all".to_string(),
+            Some(d) => match d.extract::<String>() {
+                Ok(s) => s,
+                Err(_) => d.extract::<Vec<String>>()?.join(","),
+            },
+        };
+        let dates = mf_runtime::dated::select_dates(&sp, &self.workdir, &store, &sel).map_err(mf_err)?;
+        let who = triggered_by.unwrap_or_else(default_user);
+        if !self.functions.is_empty() {
+            // Python steps need the interpreter: one date after the other.
+            return dates
+                .iter()
+                .map(|d| self.execute(py, Some(d), record, Some(who.clone())))
+                .collect();
+        }
+        let base = self.workdir.clone();
+        let results = py.allow_threads(|| mf_runtime::dated::run_dates(&sp, &base, &dates, workers));
+        let mut runs = vec![];
+        for (d, r) in results {
+            let manifest = r.map_err(|e| StepError::new_err(format!("as of {d}: {e}")))?;
+            let id = if record {
+                Some(store.save(&self.name, &manifest, &who).map_err(mf_err)?)
+            } else {
+                None
+            };
+            runs.push(PyRun {
+                pipeline: self.name.clone(),
+                id,
+                manifest,
+            });
+        }
+        Ok(runs)
+    }
+
+    /// As-of dates for which every dated data path exists.
+    fn available_dates(&self) -> PyResult<Vec<String>> {
+        spec::available_dates(&self.spec(), &self.workdir).map_err(mf_err)
+    }
+
+    /// Recorded run `run_id`, the latest run of `as_of`, or the latest run.
+    #[pyo3(signature = (run_id = None, as_of = None))]
+    fn get(&self, run_id: Option<i64>, as_of: Option<String>) -> PyResult<PyRun> {
+        match as_of {
+            Some(d) => {
+                let (id, manifest) = self.store()?.get_as_of(&self.name, &d).map_err(mf_err)?;
+                Ok(PyRun {
+                    pipeline: self.name.clone(),
+                    id: Some(id),
+                    manifest,
+                })
+            }
+            None => self.get_run(run_id),
+        }
+    }
+
+    /// Values at `paths` (diff notation, `*` and `?` wildcards) in the latest run of every as-of
+    /// date, one dict per date (`as_of`, `run_id`, `status`, then one key per path): ready for
+    /// `pandas.DataFrame`. Without paths: the status of every check.
+    #[pyo3(signature = (paths = None))]
+    fn series(&self, py: Python<'_>, paths: Option<Vec<String>>) -> PyResult<PyObject> {
+        let s = mf_runtime::dated::series(&self.store()?, &self.name, &paths.unwrap_or_default()).map_err(mf_err)?;
+        // Dicts built in Python keep the column order: as_of, run_id, status, then the paths.
+        let rows = PyList::empty(py);
+        for r in &s.rows {
+            let d = PyDict::new(py);
+            d.set_item("as_of", &r.as_of)?;
+            d.set_item("run_id", r.run_id)?;
+            d.set_item("status", r.status.as_deref())?;
+            for (c, v) in s.columns.iter().zip(&r.values) {
+                d.set_item(c, to_py(py, v.as_ref().unwrap_or(&Value::Null))?)?;
+            }
+            rows.append(d)?;
+        }
+        Ok(rows.into_any().unbind())
+    }
+
+    /// Verdict changes over time in the series of `paths`: `as_of`, `path`, `from`, `to`.
+    #[pyo3(signature = (paths = None))]
+    fn changes_over_time(&self, py: Python<'_>, paths: Option<Vec<String>>) -> PyResult<PyObject> {
+        let s = mf_runtime::dated::series(&self.store()?, &self.name, &paths.unwrap_or_default()).map_err(mf_err)?;
+        let rows: Vec<Value> = mf_runtime::dated::transitions(&s)
+            .into_iter()
+            .map(|(c, d, a, b)| serde_json::json!({"as_of": d, "path": c, "from": a, "to": b}))
+            .collect();
+        to_py(py, &Value::Array(rows))
     }
 
     /// Recorded runs, oldest first: id, run_hash, created_at, triggered_by, status.
@@ -424,7 +551,10 @@ impl PyPipeline {
     #[pyo3(signature = (run_id = None))]
     fn verify(&self, py: Python<'_>, run_id: Option<i64>) -> PyResult<PyObject> {
         let reference = self.get_run(run_id)?.manifest;
-        let mm = self.engine(py)?.verify(&reference).map_err(exec_error)?;
+        let mm = self
+            .engine(py, reference.as_of.as_deref())?
+            .verify(&reference)
+            .map_err(exec_error)?;
         let v: Vec<Value> = mm
             .iter()
             .map(|m| serde_json::json!({"step": m.step, "reason": m.reason}))
@@ -462,7 +592,11 @@ impl PyPipeline {
         let run = self.get_run(run_id)?;
         let id = run.id.unwrap();
         let replay = if verify {
-            Some(self.engine(py)?.verify(&run.manifest).map_err(exec_error)?)
+            Some(
+                self.engine(py, run.manifest.as_of.as_deref())?
+                    .verify(&run.manifest)
+                    .map_err(exec_error)?,
+            )
         } else {
             None
         };
@@ -523,6 +657,12 @@ impl PyRun {
     #[getter]
     fn engine(&self) -> Option<String> {
         self.manifest.engine.clone()
+    }
+
+    /// As-of date of a dated run.
+    #[getter]
+    fn as_of(&self) -> Option<String> {
+        self.manifest.as_of.clone()
     }
 
     /// Worst status of the check steps (`pass`, `warn`, `fail`), `None` if there are none.

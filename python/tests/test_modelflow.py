@@ -168,3 +168,40 @@ def test_toml_pipeline_and_command_line_interop(tmp_path):
     assert d.ok and d.changes() == []
     manifest = json.loads(json.dumps(run.manifest))
     assert manifest["run_hash"] == run.run_hash
+
+
+def test_dated_pipeline_over_time(tmp_path):
+    for i, d in enumerate(["2024-01-31", "2024-02-29", "2024-03-29"]):
+        (tmp_path / "data" / d).mkdir(parents=True)
+        rows = "".join(f"{-0.01 * (i + 1) if k % 60 == 0 else 0.001}\n" for k in range(300))
+        (tmp_path / "data" / d / "r.csv").write_text("ret\n" + rows)
+    p = mf.Pipeline("mon", workdir=tmp_path)
+    p.add("r", "csv", path="data/${as_of}/r.csv", column="ret")
+    p.add("var", "var_historical", deps=["r"], params={"alpha": 0.99})
+    assert p.available_dates() == ["2024-01-31", "2024-02-29", "2024-03-29"]
+    runs = p.run_dates(["2024-01-31", "2024-02-29"])   # built-in steps only: in parallel
+    assert [r.as_of for r in runs] == ["2024-01-31", "2024-02-29"]
+    assert [r.as_of for r in p.run_dates("new")] == ["2024-03-29"]
+    assert p.run_dates("new") == []
+    assert p.verify() == []
+    frame = pd.DataFrame(p.series(["var.var"]))
+    assert list(frame["as_of"]) == ["2024-01-31", "2024-02-29", "2024-03-29"]
+    assert frame["var.var"].is_monotonic_increasing
+    assert p.get(as_of="2024-02-29").as_of == "2024-02-29"
+    d = mf.diff(p.get(as_of="2024-01-31"), p.get(as_of="2024-03-29"))
+    assert d.origins == ["r (source data changed, as of 2024-01-31 → 2024-03-29)"]
+    with pytest.raises(mf.ModelFlowError, match="dated"):
+        p.run()
+
+    # A Python step can take the date itself
+    q = mf.Pipeline("dated-fn", workdir=tmp_path)
+
+    @q.step(deps=[])
+    def snapshot(as_of):
+        return {"as_of": as_of, "month": int(as_of[5:7])}
+
+    run = q.run(as_of="2024-02-29")
+    assert run.outputs["snapshot"] == {"as_of": "2024-02-29", "month": 2}
+    assert q.verify() == []
+    assert [r.output("snapshot")["month"] for r in q.run_dates(["2024-01-31", "2024-03-29"])] == [1, 3]
+    assert q.changes_over_time(["snapshot.as_of"])[0]["to"] == "2024-02-29"

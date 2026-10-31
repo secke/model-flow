@@ -189,4 +189,5 @@ git checkout examples
 - **Docker**: `docker compose up --build`, after filling in `deploy/server.docker.toml`.
 - **Python**: `pip install maturin && maturin develop --release`, then `python examples/python-sdk/var_desk.py` (see the [Python SDK](../README.md#python-sdk)).
 - **CI gate**: the [GitHub Action](../README.md#github-action) runs `mf diff` on every pull request.
+- **Monitoring over time**: put `${as_of}` in a data path, then `mf run pipeline.toml --as-of all` and `mf series pipeline.toml` (see [Validation over time](../README.md#validation-over-time)).
 - **SSO**: the `[oidc]` section of the [README](../README.md#single-sign-on-oidc).

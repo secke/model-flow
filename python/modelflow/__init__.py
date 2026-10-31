@@ -19,6 +19,11 @@ fingerprinted with their source code and parameters, like any other model.
     run = p.run()                 # executed and recorded (.modelflow/runs.db)
     p.verify()                    # [] : replayed identically
     mf.diff(reference, run)       # what changed, where it started, beyond which tolerance
+
+Dated pipelines (`${as_of}` in a data path) are monitored over time:
+
+    p.run_dates("all")            # one run per as-of date, in parallel
+    pandas.DataFrame(p.series(["backtest.latest_basel_window.zone", "drift.psi"]))
 """
 
 import inspect
@@ -68,21 +73,26 @@ class Pipeline(_core.Pipeline):
         function's parameters that are not in `params`. The function returns JSON-compatible data:
         numbers, strings, lists, dicts, NumPy arrays or pandas objects.
 
+        A parameter named `as_of` receives the run's as-of date (`run(as_of=...)`, `run_dates`).
+
         The step's fingerprint covers the function's source code and `params`: changing either
         without changing `version` is reported by the replay and by the diff.
         """
         params = dict(params or {})
 
         def register(f):
+            sig = inspect.signature(f)
+            wants_as_of = "as_of" in sig.parameters
             d = deps
             if d is None:
-                sig = inspect.signature(f)
                 d = [
                     n
                     for n, p in sig.parameters.items()
-                    if n not in params and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
+                    if n not in params
+                    and n != "as_of"
+                    and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
                 ]
-            self.add_function(f, name or f.__name__, version, list(d), params, _source(f))
+            self.add_function(f, name or f.__name__, version, list(d), params, _source(f), wants_as_of)
             return f
 
         return register(func) if func is not None else register

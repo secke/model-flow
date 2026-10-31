@@ -16,9 +16,14 @@ pub struct Resolved {
 
 /// Resolves `pipeline.toml` (latest run), `pipeline.toml#ID`, `#latest`, `#previous`, `#fresh`
 /// (executed now, not recorded) or a manifest file `run.json` (`mf show`, `mf run -o`, or a run
-/// returned by the API).
+/// returned by the API). For a dated pipeline, `pipeline.toml@2024-01-31` selects the runs of that
+/// as-of date (`@2024-01-31#fresh` executes it).
 pub fn resolve(reference: &str) -> Result<Resolved, String> {
-    let (path, sel) = reference.split_once('#').unwrap_or((reference, "latest"));
+    let (head, sel) = reference.split_once('#').unwrap_or((reference, "latest"));
+    let (path, as_of) = match head.rsplit_once('@') {
+        Some((p, d)) if !d.contains('/') => (p, Some(d)),
+        _ => (head, None),
+    };
     if path.ends_with(".json") {
         let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
         let v: Value = serde_json::from_str(&text).map_err(|e| format!("{path}: {e}"))?;
@@ -29,32 +34,35 @@ pub fn resolve(reference: &str) -> Result<Resolved, String> {
         });
     }
     let (sp, base) = spec::load(Path::new(path))?;
+    let at = as_of.map(|d| format!("@{d}")).unwrap_or_default();
     if sel == "fresh" {
-        let manifest = spec::build(&sp, &base)?.execute().map_err(|e| e.to_string())?;
+        let manifest = spec::run(&sp, &base, as_of)?;
         return Ok(Resolved {
-            label: format!("{path}#fresh"),
+            label: format!("{path}{at}#fresh"),
             manifest,
             spec: Some(sp),
         });
     }
     let store = Store::for_pipeline(&base)?;
+    let ids: Vec<i64> = store
+        .list(&sp.name)?
+        .into_iter()
+        .filter(|r| as_of.is_none() || r.as_of.as_deref() == as_of)
+        .map(|r| r.id)
+        .collect();
     let id = match sel {
-        "latest" => None,
-        "previous" => {
-            let runs = store.list(&sp.name)?;
-            match runs.len() {
-                n if n >= 2 => Some(runs[n - 2].id),
-                _ => return Err(format!("{path}: fewer than two runs recorded")),
-            }
-        }
-        n => Some(
-            n.parse()
-                .map_err(|_| format!("{reference}: expected #ID, #previous, #latest or #fresh"))?,
-        ),
+        "latest" => *ids.last().ok_or_else(|| format!("{path}{at}: no run recorded"))?,
+        "previous" => match ids.len() {
+            n if n >= 2 => ids[n - 2],
+            _ => return Err(format!("{path}{at}: fewer than two runs recorded")),
+        },
+        n => n
+            .parse()
+            .map_err(|_| format!("{reference}: expected #ID, #previous, #latest or #fresh"))?,
     };
-    let (id, manifest) = store.get(&sp.name, id)?;
+    let (id, manifest) = store.get(&sp.name, Some(id))?;
     Ok(Resolved {
-        label: format!("{path}#{id}"),
+        label: format!("{path}{at}#{id}"),
         manifest,
         spec: Some(sp),
     })
@@ -246,16 +254,20 @@ fn short_hash(h: &str) -> &str {
 /// Terminal rendering. `limit`: changes listed per step.
 pub fn render_text(d: &DiffReport, left: &str, right: &str, limit: usize) -> String {
     let mut o = String::new();
-    let engine = |e: &Option<String>| e.as_deref().map(|e| format!("  {e}")).unwrap_or_default();
+    let extra = |e: &Option<String>, a: &Option<String>| {
+        let mut x = a.as_deref().map(|a| format!("  as of {a}")).unwrap_or_default();
+        x += &e.as_deref().map(|e| format!("  {e}")).unwrap_or_default();
+        x
+    };
     o += &format!(
         "left   {left}  run_hash {}{}\n",
         short_hash(&d.left_run_hash),
-        engine(&d.left_engine)
+        extra(&d.left_engine, &d.left_as_of)
     );
     o += &format!(
         "right  {right}  run_hash {}{}\n\n",
         short_hash(&d.right_run_hash),
-        engine(&d.right_engine)
+        extra(&d.right_engine, &d.right_as_of)
     );
     o += &format!(
         "{:<22} {:<12} {:>9} {:>8} {:>7} {:>9} {:>11}  {}\n",

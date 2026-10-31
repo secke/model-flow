@@ -109,6 +109,9 @@ pub struct Manifest {
     /// Engine that produced the run, e.g. `modelflow 0.13.0` (absent before 0.13).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub engine: Option<String>,
+    /// As-of date of a dated pipeline (`${as_of}` in its data paths).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub as_of: Option<String>,
 }
 
 /// Engine name and version recorded in every manifest.
@@ -205,6 +208,7 @@ impl Pipeline {
             steps: records,
             run_hash,
             engine: Some(engine()),
+            as_of: None,
         })
     }
 

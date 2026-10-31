@@ -458,3 +458,98 @@ fn rejects_bad_config() {
     )
     .is_err());
 }
+
+#[tokio::test]
+async fn dated_pipeline_runs_series_and_diff() {
+    let ws = std::env::temp_dir().join(format!("mf-api-dated-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&ws);
+    let dir = ws.join("mon");
+    for (i, d) in ["2024-01-31", "2024-02-29", "2024-03-29"].iter().enumerate() {
+        std::fs::create_dir_all(dir.join("data").join(d)).unwrap();
+        let rows: String = (0..300)
+            .map(|k| format!("{}\n", if k % 60 == 0 { -0.01 * (i + 1) as f64 } else { 0.001 }))
+            .collect();
+        std::fs::write(dir.join("data").join(d).join("r.csv"), format!("ret\n{rows}")).unwrap();
+    }
+    std::fs::write(
+        dir.join("pipeline.toml"),
+        "name = \"mon\"\n[[step]]\nname = \"r\"\nkind = \"csv\"\nversion = \"1\"\npath = \"data/${as_of}/r.csv\"\ncolumn = \"ret\"\n\
+         [[step]]\nname = \"var\"\nkind = \"var_historical\"\nversion = \"1\"\ndeps = [\"r\"]\nparams = { alpha = 0.99 }\n",
+    )
+    .unwrap();
+    let app = app(&ws, None);
+    // Explicit date, then the default: the latest date with data
+    let (s, r1, body) = call(
+        &app,
+        "POST",
+        "/api/pipelines/mon/runs?wait=true&as_of=2024-01-31",
+        Some("tok-alice"),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::CREATED, "{body}");
+    assert_eq!(r1["as_of"], "2024-01-31");
+    let (_, r2, _) = call(
+        &app,
+        "POST",
+        "/api/pipelines/mon/runs?wait=true",
+        Some("tok-alice"),
+        None,
+    )
+    .await;
+    assert_eq!(r2["as_of"], "2024-03-29");
+    let (s, _, _) = call(
+        &app,
+        "POST",
+        "/api/pipelines/mon/runs?wait=true&as_of=../x",
+        Some("tok-alice"),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (_, runs, _) = call(&app, "GET", "/api/pipelines/mon/runs", Some("tok-carol"), None).await;
+    assert_eq!(runs[1]["as_of"], "2024-03-29");
+    // Replay uses the run's own date
+    let (_, v, _) = call(&app, "POST", "/api/pipelines/mon/runs/1/verify", Some("tok-bob"), None).await;
+    assert_eq!(v["reproducible"], true, "{v}");
+    // Series: one row per date
+    let (s, series, body) = call(
+        &app,
+        "GET",
+        "/api/pipelines/mon/series?path=var.var,var.observations",
+        Some("tok-carol"),
+        None,
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{body}");
+    assert_eq!(series["series"]["columns"], json!(["var.var", "var.observations"]));
+    let rows = series["series"]["rows"].as_array().unwrap();
+    assert_eq!(
+        (rows[0]["as_of"].as_str(), rows[1]["as_of"].as_str()),
+        (Some("2024-01-31"), Some("2024-03-29"))
+    );
+    assert!(rows[1]["values"][0].as_f64() > rows[0]["values"][0].as_f64());
+    let (_, _, csv) = call(
+        &app,
+        "GET",
+        "/api/pipelines/mon/series?path=var.var&format=csv",
+        Some("tok-carol"),
+        None,
+    )
+    .await;
+    assert!(csv.starts_with("as_of,run_id,status,var.var\n2024-01-31,1,"), "{csv}");
+    // Diff between two dates names the as-of change
+    let (_, d, _) = call(
+        &app,
+        "GET",
+        "/api/pipelines/mon/diff?left=1&right=2",
+        Some("tok-carol"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        d["diff"]["origins"][0], "r (source data changed, as of 2024-01-31 → 2024-03-29)",
+        "{d}"
+    );
+    std::fs::remove_dir_all(&ws).unwrap();
+}

@@ -219,7 +219,7 @@ footer{{margin-top:40px;color:var(--muted);font-size:12px;overflow-wrap:anywhere
 <div class="muted">Model validation report · ModelFlow</div><h1>{p}</h1>
 <div class="verdict">{b} {verdict}</div>
 <div class="cards">
-<div class="card"><div class="k">Run</div><div class="v">#{id}</div><div class="muted">{created}</div></div>
+<div class="card"><div class="k">Run</div><div class="v">#{id}</div><div class="muted">{created}{as_of}</div></div>
 <div class="card"><div class="k">Passed tests</div><div class="v" style="color:var(--ok)">{pass}</div></div>
 <div class="card"><div class="k">Warnings</div><div class="v" style="color:var(--warn)">{warn}</div></div>
 <div class="card"><div class="k">Failed tests</div><div class="v" style="color:var(--bad)">{fail}</div></div>
@@ -229,6 +229,11 @@ footer{{margin-top:40px;color:var(--muted);font-size:12px;overflow-wrap:anywhere
         b = badge(overall),
         id = meta.run_id,
         created = utc(meta.created_at),
+        as_of = m
+            .as_of
+            .as_deref()
+            .map(|d| format!("<br>as of {}", esc(d)))
+            .unwrap_or_default(),
         replay = match replay_ok {
             Some(true) => badge("pass"),
             Some(false) => badge("fail"),

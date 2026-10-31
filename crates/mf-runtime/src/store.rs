@@ -22,6 +22,8 @@ pub struct RunRow {
     pub triggered_by: String,
     /// Worst status of the check steps (`pass`, `warn`, `fail`), absent if there are none.
     pub status: Option<String>,
+    /// As-of date of a dated pipeline.
+    pub as_of: Option<String>,
 }
 
 /// Worst status (`fail` > `warn` > `pass`) among the step outputs.
@@ -65,6 +67,7 @@ CREATE TABLE IF NOT EXISTS runs (
     triggered_by TEXT NOT NULL DEFAULT 'cli');
 CREATE INDEX IF NOT EXISTS runs_pipeline ON runs(pipeline);
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS status TEXT;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS as_of TEXT;
 CREATE TABLE IF NOT EXISTS blobs (
     hash TEXT PRIMARY KEY,
     size BIGINT NOT NULL,
@@ -118,6 +121,15 @@ impl Store {
             c.execute_batch("ALTER TABLE runs ADD COLUMN status TEXT")
                 .map_err(|e| e.to_string())?;
         }
+        // v0.14 migration: as-of date of dated pipelines.
+        let has_as_of: bool = c
+            .prepare("SELECT 1 FROM pragma_table_info('runs') WHERE name = 'as_of'")
+            .and_then(|mut s| s.exists([]))
+            .map_err(|e| e.to_string())?;
+        if !has_as_of {
+            c.execute_batch("ALTER TABLE runs ADD COLUMN as_of TEXT")
+                .map_err(|e| e.to_string())?;
+        }
         Ok(Store::Sqlite(c))
     }
 
@@ -151,8 +163,8 @@ impl Store {
                     .map_err(|e| e.to_string())?;
                 }
                 tx.execute(
-                    "INSERT INTO runs (pipeline, run_hash, created_at, manifest, triggered_by, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    params![pipeline, m.run_hash, now(), manifest, triggered_by, status],
+                    "INSERT INTO runs (pipeline, run_hash, created_at, manifest, triggered_by, status, as_of) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![pipeline, m.run_hash, now(), manifest, triggered_by, status, m.as_of],
                 )
                 .map_err(|e| e.to_string())?;
                 let id = tx.last_insert_rowid();
@@ -171,9 +183,17 @@ impl Store {
                 }
                 let id: i64 = tx
                     .query_one(
-                        "INSERT INTO runs (pipeline, run_hash, created_at, manifest, triggered_by, status)
-                         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-                        &[&pipeline, &m.run_hash, &now(), &manifest, &triggered_by, &status],
+                        "INSERT INTO runs (pipeline, run_hash, created_at, manifest, triggered_by, status, as_of)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+                        &[
+                            &pipeline,
+                            &m.run_hash,
+                            &now(),
+                            &manifest,
+                            &triggered_by,
+                            &status,
+                            &m.as_of,
+                        ],
                     )
                     .map_err(pg_err)?
                     .get(0);
@@ -280,7 +300,7 @@ impl Store {
 
     pub fn info(&self, pipeline: &str, id: i64) -> Result<Option<RunRow>, String> {
         let q =
-            "SELECT id, pipeline, run_hash, created_at, triggered_by, status FROM runs WHERE id = %1 AND pipeline = %2";
+            "SELECT id, pipeline, run_hash, created_at, triggered_by, status, as_of FROM runs WHERE id = %1 AND pipeline = %2";
         match self {
             Store::Sqlite(c) => c
                 .query_row(&q.replace("%1", "?1").replace("%2", "?2"), params![id, pipeline], row)
@@ -294,9 +314,32 @@ impl Store {
         }
     }
 
+    /// Latest run recorded for `as_of`.
+    pub fn get_as_of(&self, pipeline: &str, as_of: &str) -> Result<(i64, Manifest), String> {
+        let id = self
+            .list(pipeline)?
+            .into_iter()
+            .filter(|r| r.as_of.as_deref() == Some(as_of))
+            .map(|r| r.id)
+            .max()
+            .ok_or_else(|| format!("no run recorded as of {as_of}"))?;
+        self.get(pipeline, Some(id))
+    }
+
+    /// Latest run of every as-of date, in date order.
+    pub fn latest_by_as_of(&self, pipeline: &str) -> Result<Vec<RunRow>, String> {
+        let mut latest: std::collections::BTreeMap<String, RunRow> = Default::default();
+        for r in self.list(pipeline)? {
+            if let Some(d) = r.as_of.clone() {
+                latest.insert(d, r); // ordered by id: the last one wins
+            }
+        }
+        Ok(latest.into_values().collect())
+    }
+
     pub fn list(&self, pipeline: &str) -> Result<Vec<RunRow>, String> {
         let q =
-            "SELECT id, pipeline, run_hash, created_at, triggered_by, status FROM runs WHERE pipeline = %1 ORDER BY id";
+            "SELECT id, pipeline, run_hash, created_at, triggered_by, status, as_of FROM runs WHERE pipeline = %1 ORDER BY id";
         match self {
             Store::Sqlite(c) => {
                 let mut st = c.prepare(&q.replace("%1", "?1")).map_err(|e| e.to_string())?;
@@ -322,6 +365,7 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<RunRow> {
         created_at: r.get(3)?,
         triggered_by: r.get(4)?,
         status: r.get(5)?,
+        as_of: r.get(6)?,
     })
 }
 
@@ -333,6 +377,7 @@ fn pg_row(r: &postgres::Row) -> RunRow {
         created_at: r.get(3),
         triggered_by: r.get(4),
         status: r.get(5),
+        as_of: r.get(6),
     }
 }
 

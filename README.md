@@ -15,6 +15,7 @@ ModelFlow makes the evidence mechanical:
 
 - **Every run is sealed.** Inputs, outputs and code are hashed; the run manifest ties them together with a single `run_hash`.
 - **Every result can be replayed.** `mf verify` re-runs the pipeline and points to the exact step whose data, code or result changed.
+- **Every date is monitored.** A dated pipeline (`${as_of}` in its data paths) runs for every date of a history, in parallel, each run replayable on its own; `mf series` shows how every result and verdict evolves.
 - **Every change is explained.** `mf diff` compares two runs value by value, finds the step where the change starts, and checks it against tolerances in absolute, relative or basis-point terms. A GitHub Action turns it into a merge gate for model code.
 - **Every decision is governed.** Only a validator can approve, never their own run, and only if the replay is identical. Denials are logged too.
 - **Models stay where they are.** Any executable that reads JSON on stdin and writes JSON on stdout is a model: Python, R, C++, a wrapper around a vendor library. From Python, the SDK runs plain functions as steps, in-process.
@@ -92,7 +93,7 @@ The full walkthrough, with the web UI, three roles (model owner, validator, audi
 | `mf-core` | DAG of versioned steps, fingerprints of inputs, outputs and code, run manifest, verified replay |
 | `mf-runtime` | TOML pipelines, step kinds, external process isolation, run store (SQLite, PostgreSQL), HTML report |
 | `mf-server` | REST API, bearer tokens and OIDC SSO, roles and segregation of duties, validation decisions, append-only audit log, model inventory, scheduler, webhook alerts, web UI |
-| `mf-cli` | the `mf` binary: `run`, `verify`, `runs`, `show`, `report`, `diff` |
+| `mf-cli` | the `mf` binary: `run`, `verify`, `runs`, `show`, `report`, `diff`, `series` |
 | `mf-python` | the `modelflow` Python package (PyO3): pipelines, Python functions as steps, runs, replay, diff, reports |
 | [`quantparity`](https://github.com/secke/quantparity) | external dependency, pinned by git revision: BSM, Black-76, CRR, bonds, single and multi-curve (€STR / Euribor), VaR/ES, stress, FRTB PLA, Kupiec, Christoffersen, Basel traffic light, PSI, AUC/Gini/KS, PD calibration |
 
@@ -128,7 +129,7 @@ Moving the engine from ModelFlow's former in-house crates to quantparity changed
 
 ### Real market data
 
-[Experiments](experiments/README.md) run ModelFlow on public data, with every run fingerprinted and replayed: a 99% VaR backtest of the S&P 500 over ten years, the reconstruction of the ECB AAA yield curve at 58 month ends, and the impact of a challenger model, a methodology fix and an engine upgrade measured with `mf diff`. Each experiment lists what it changed in ModelFlow.
+[Experiments](experiments/README.md) run ModelFlow on public data, with every run fingerprinted and replayed: a 99% VaR backtest of the S&P 500 over ten years, the reconstruction of the ECB AAA yield curve at 58 month ends, the impact of a challenger model, a methodology fix and an engine upgrade measured with `mf diff`, and the monthly monitoring of a VaR model frozen in 2019, on point-in-time data until 2026. Each experiment lists what it changed in ModelFlow.
 
 ## Governance
 
@@ -308,6 +309,23 @@ jobs:
 
 Inputs: `pipeline`, `baseline`, `tolerances`, `limit`, `fail-on-breach` (default `true`), `comment`, `mf` (a prebuilt binary). Outputs: `ok`, `verdict`, `report`.
 
+## Validation over time
+
+A pipeline is dated when `${as_of}` appears in a data path, for example `path = "data/${as_of}/returns.csv"`. Each run is then for one as-of date, recorded with it:
+
+```bash
+mf run pipeline.toml --as-of 2024-01-31        # one date
+mf run pipeline.toml --as-of all --jobs 8      # every date whose data exists, in parallel
+mf run pipeline.toml --as-of new               # only dates without a run: the daily job
+mf verify pipeline.toml --as-of 2024-01-31     # replay with that date
+mf diff pipeline.toml@2024-01-31 pipeline.toml@2024-02-29
+mf series pipeline.toml backtest.latest_basel_window.zone drift.psi --format csv
+```
+
+`mf series` gives, for the latest run of every date, the values at the given paths (diff notation, `*` and `?` wildcards) or, without paths, the status of every check, followed by the changes of verdict in date order. External models receive the date (`"as_of"` in their input), Python steps get it as an `as_of` argument. The server runs a dated pipeline for its latest date with data (scheduler, or `POST /api/pipelines/{name}/runs?as_of=…`) and serves `GET /api/pipelines/{name}/series?path=a,b&format=json|csv|md`.
+
+On real data ([experiment 04](experiments/04-monitoring-over-time/README.md)): 82 monthly checks of a VaR model frozen in 2019 run in 2 s. They show 11 red months after Covid and a full year in which the backtest is green while the calibration data fails the drift test.
+
 ## Python SDK
 
 The `modelflow` package exposes the Rust engine to Python: the built-in steps, fingerprints, history, replay, diff and reports run in Rust, and Python functions are steps in their own right, executed in-process and fingerprinted with their source code and parameters.
@@ -318,6 +336,7 @@ pip install maturin && maturin develop --release      # from the repository root
 
 ```python
 import math
+import pandas as pd
 import modelflow as mf
 
 p = mf.Pipeline("var-desk", workdir="examples/var-equity")
@@ -342,6 +361,11 @@ d = mf.diff(p.get(1), run, tolerances=[{"path": "ewma.var*", "rel": 1e-12}])
 d.ok, d.verdict, d.origins               # also d.summary(), d.changes() (rows for pandas), d.to_markdown()
 p.report("report.html")
 mf.load("examples/var-equity/pipeline.toml").run()   # TOML pipelines too
+
+# Dated pipelines: one run per date (in parallel without Python steps), then a time series
+mon = mf.load("experiments/04-monitoring-over-time/var_monitoring.toml")
+mon.run_dates("new")
+pd.DataFrame(mon.series(["backtest.latest_basel_window.zone", "drift.psi"]))
 ```
 
 Changing a function's code or `params` without changing `version` is reported by the replay and the diff, as for any model. A diff renders as Markdown in Jupyter. [`examples/python-sdk/var_desk.py`](examples/python-sdk/var_desk.py) rebuilds the `var-equity` pipeline in Python and checks with `mf.diff` that it reproduces the TOML pipeline to 1e-12, then compares a challenger.
@@ -426,8 +450,8 @@ The schema is created at startup under an advisory lock, so several instances ca
 ## Deployment
 
 ```bash
-docker build -t modelflow:0.13.0 .
-docker run --rm modelflow:0.13.0 new-token          # fill in deploy/server.docker.toml
+docker build -t modelflow:0.14.0 .
+docker run --rm modelflow:0.14.0 new-token          # fill in deploy/server.docker.toml
 docker compose up --build                          # http://127.0.0.1:8080
 kubectl apply -k deploy/k8s                        # after filling in deploy/k8s/secret.yaml
 ```

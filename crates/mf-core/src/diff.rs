@@ -256,6 +256,10 @@ pub struct DiffReport {
     pub left_engine: Option<String>,
     #[serde(default)]
     pub right_engine: Option<String>,
+    #[serde(default)]
+    pub left_as_of: Option<String>,
+    #[serde(default)]
+    pub right_as_of: Option<String>,
     pub identical: bool,
     pub steps: Vec<StepDiff>,
     pub status_changes: Vec<StatusChange>,
@@ -399,6 +403,31 @@ impl Walker<'_> {
     }
 }
 
+/// Every leaf of a step output with its path, in the notation of the diff
+/// (`step.trades[id=T1].npv`); empty arrays and objects have no leaf.
+pub fn leaves(path: &str, v: &Value, out: &mut Vec<(String, Value)>) {
+    match v {
+        Value::Object(m) => {
+            for (k, x) in m {
+                leaves(&join_key(path, k), x, out);
+            }
+        }
+        Value::Array(a) => match key_field(a, a) {
+            Some(f) => {
+                for e in a {
+                    leaves(&format!("{path}[{f}={}]", key_text(&e[f])), e, out);
+                }
+            }
+            None => {
+                for (i, e) in a.iter().enumerate() {
+                    leaves(&format!("{path}[{i}]"), e, out);
+                }
+            }
+        },
+        other => out.push((path.to_string(), other.clone())),
+    }
+}
+
 fn join_key(path: &str, k: &str) -> String {
     let plain = !k.is_empty() && k.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-');
     if plain {
@@ -430,7 +459,14 @@ fn key_field(x: &[Value], y: &[Value]) -> Option<&'static str> {
     })
 }
 
-fn record_cause(a: &StepRecord, b: &StepRecord, origin: bool, is_source: bool, engines: Option<&str>) -> String {
+/// What differs between the two runs as a whole: engine and as-of date.
+struct RunContext {
+    engines: Option<String>,
+    as_of: Option<String>,
+}
+
+fn record_cause(a: &StepRecord, b: &StepRecord, origin: bool, is_source: bool, ctx: &RunContext) -> String {
+    let engines = ctx.engines.as_deref();
     let mut causes = vec![];
     if a.version != b.version {
         causes.push(format!("version {} → {}", a.version, b.version));
@@ -449,10 +485,12 @@ fn record_cause(a: &StepRecord, b: &StepRecord, origin: bool, is_source: bool, e
         });
     }
     if origin && causes.is_empty() {
-        causes.push(if is_source {
-            "source data changed".into()
-        } else {
-            "non-reproducible: same code and inputs".into()
+        causes.push(match (is_source, &ctx.as_of) {
+            (true, None) => "source data changed".into(),
+            (true, Some(d)) => format!("source data changed, as of {d}"),
+            // An external model receives the as-of date: it may legitimately depend on it.
+            (false, Some(d)) => format!("as-of date changed, {d}"),
+            (false, None) => "non-reproducible: same code and inputs".into(),
         });
     }
     causes.join(", ")
@@ -464,6 +502,11 @@ pub fn diff(left: &Manifest, right: &Manifest, rules: &[Tolerance]) -> DiffRepor
         let name = |e: &Option<String>| e.clone().unwrap_or_else(|| "before 0.13".into());
         format!("{} → {}", name(&left.engine), name(&right.engine))
     });
+    let as_of = (left.as_of != right.as_of).then(|| {
+        let name = |d: &Option<String>| d.clone().unwrap_or_else(|| "undated".into());
+        format!("{} → {}", name(&left.as_of), name(&right.as_of))
+    });
+    let ctx = RunContext { engines, as_of };
     let rindex: BTreeMap<&str, &StepRecord> = right.steps.iter().map(|s| (s.name.as_str(), s)).collect();
     let lnames: BTreeSet<&str> = left.steps.iter().map(|s| s.name.as_str()).collect();
     let mut steps = vec![];
@@ -495,7 +538,7 @@ pub fn diff(left: &Manifest, right: &Manifest, rules: &[Tolerance]) -> DiffRepor
         let cause = if state == StepState::Identical {
             String::new()
         } else {
-            record_cause(a, b, origin, is_source, engines.as_deref())
+            record_cause(a, b, origin, is_source, &ctx)
         };
         let numeric = w.changes.iter().filter(|c| c.kind == ChangeKind::Number);
         let max_abs = numeric.clone().filter_map(|c| c.delta.map(f64::abs)).reduce(f64::max);
@@ -551,6 +594,8 @@ pub fn diff(left: &Manifest, right: &Manifest, rules: &[Tolerance]) -> DiffRepor
         right_run_hash: right.run_hash.clone(),
         left_engine: left.engine.clone(),
         right_engine: right.engine.clone(),
+        left_as_of: left.as_of.clone(),
+        right_as_of: right.as_of.clone(),
         identical: left.run_hash == right.run_hash,
         leaves_compared: steps.iter().map(|s| s.leaves_compared).sum(),
         changes: steps.iter().map(|s| s.changes.len()).sum(),
@@ -737,6 +782,33 @@ mod tests {
         assert_eq!(f.len(), 2);
         assert_eq!((f[0].field.as_str(), f[0].changes), ("book.trades[*].npv", 1));
         assert!((f[0].mean_delta.unwrap() - 1.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn leaves_use_the_diff_paths() {
+        let mut out = vec![];
+        let v = serde_json::json!({"trades": [{"id": "T1", "npv": 1.5}], "x": [1, 2], "e": []});
+        leaves("book", &v, &mut out);
+        let paths: Vec<&str> = out.iter().map(|(p, _)| p.as_str()).collect();
+        assert_eq!(
+            paths,
+            [
+                "book.trades[id=T1].id",
+                "book.trades[id=T1].npv",
+                "book.x[0]",
+                "book.x[1]"
+            ]
+        );
+    }
+
+    #[test]
+    fn as_of_change_is_named() {
+        let (mut a, mut b) = (run(0.02, "1", false), run(0.03, "1", false));
+        a.as_of = Some("2024-01-31".into());
+        b.as_of = Some("2024-02-29".into());
+        let d = diff(&a, &b, &[]);
+        assert_eq!(d.steps[0].cause, "source data changed, as of 2024-01-31 → 2024-02-29");
+        assert_eq!(d.right_as_of.as_deref(), Some("2024-02-29"));
     }
 
     #[test]
