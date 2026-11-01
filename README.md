@@ -15,7 +15,7 @@ ModelFlow makes the evidence mechanical:
 
 - **Every run is sealed.** Inputs, outputs and code are hashed; the run manifest ties them together with a single `run_hash`.
 - **Every result can be replayed.** `mf verify` re-runs the pipeline and points to the exact step whose data, code or result changed.
-- **Every date is monitored.** A dated pipeline (`${as_of}` in its data paths) runs for every date of a history, in parallel, each run replayable on its own; `mf series` shows how every result and verdict evolves.
+- **Every date is monitored.** A dated pipeline (`${as_of}` in its data paths) runs for every date of a history, in parallel, each run replayable on its own; `mf series` shows how every result and verdict evolves, and alert rules (`[[alert]]`) raise the signals a monitoring team acts on: a red zone, a drift lasting three months.
 - **Every change is explained.** `mf diff` compares two runs value by value, finds the step where the change starts, and checks it against tolerances in absolute, relative or basis-point terms. A GitHub Action turns it into a merge gate for model code.
 - **Every decision is governed.** Only a validator can approve, never their own run, and only if the replay is identical. Denials are logged too.
 - **Models stay where they are.** Any executable that reads JSON on stdin and writes JSON on stdout is a model: Python, R, C++, a wrapper around a vendor library. From Python, the SDK runs plain functions as steps, in-process.
@@ -93,7 +93,7 @@ The full walkthrough, with the web UI, three roles (model owner, validator, audi
 | `mf-core` | DAG of versioned steps, fingerprints of inputs, outputs and code, run manifest, verified replay |
 | `mf-runtime` | TOML pipelines, step kinds, external process isolation, run store (SQLite, PostgreSQL), HTML report |
 | `mf-server` | REST API, bearer tokens and OIDC SSO, roles and segregation of duties, validation decisions, append-only audit log, model inventory, scheduler, webhook alerts, web UI |
-| `mf-cli` | the `mf` binary: `run`, `verify`, `runs`, `show`, `report`, `diff`, `series` |
+| `mf-cli` | the `mf` binary: `run`, `verify`, `runs`, `show`, `report`, `diff`, `series`, `alerts` |
 | `mf-python` | the `modelflow` Python package (PyO3): pipelines, Python functions as steps, runs, replay, diff, reports |
 | [`quantparity`](https://github.com/secke/quantparity) | external dependency, pinned by git revision: BSM, Black-76, CRR, bonds, single and multi-curve (€STR / Euribor), VaR/ES, stress, FRTB PLA, Kupiec, Christoffersen, Basel traffic light, PSI, AUC/Gini/KS, PD calibration |
 
@@ -326,6 +326,37 @@ mf series pipeline.toml backtest.latest_basel_window.zone drift.psi --format csv
 
 On real data ([experiment 04](experiments/04-monitoring-over-time/README.md)): 82 monthly checks of a VaR model frozen in 2019 run in 2 s. They show 11 red months after Covid and a full year in which the backtest is green while the calibration data fails the drift test.
 
+### Run status and alert rules
+
+By default the status of a run is the worst status of its checks. A pipeline can choose the outputs that make it instead, for example the latest regulatory window rather than the backtest over the whole history. Traffic lights count as verdicts (green = pass, yellow = warn, red = fail), and a chosen output that is missing counts as `fail`. Alert rules are evaluated on the series of results, date by date (or run by run for an undated pipeline):
+
+```toml
+name = "sp500-var-monitoring"
+status_from = ["backtest.latest_basel_window.zone", "drift.status"]   # before the [[step]] tables
+
+[[alert]]
+name = "backtest-red"
+path = "backtest.latest_basel_window.zone"
+one_of = ["red"]
+message = "Basel red zone: capital multiplier 4, model review required"
+
+[[alert]]
+name = "drift-persistent"
+path = "drift.psi"
+above = 0.25                # or below = …, one_of = […], changes = true
+consecutive = 3             # raised on the third date in a row
+```
+
+```bash
+mf run pipeline.toml --as-of new     # prints the alerts raised on the new dates
+mf alerts pipeline.toml              # episodes of every rule; exit code 1 while an alert is active
+#   ok     drift-persistent  drift.psi > 0.25, 3 dates in a row  (2 episodes)
+#          2020-06-30 → 2021-05-28 (12 dates, raised 2020-08-31)  0.285554
+#          2022-04-29 → 2023-10-31 (19 dates, raised 2022-06-30)  0.423868
+```
+
+The server sends each raised alert to its webhook, once, on the date it is raised (`status: "alert"`, `alert`, `condition`, `date`, `since`, `value`), and serves `GET /api/pipelines/{name}/alerts?format=json|md`. In Python: `p.status_from = [...]`, `p.alert(name, path, above=0.25, consecutive=3)`, `p.alerts()`. On experiment 04, the 32 months in which the drift test fails become 2 alerts, and 21 of the 29 green months no longer count as `pass`.
+
 ## Python SDK
 
 The `modelflow` package exposes the Rust engine to Python: the built-in steps, fingerprints, history, replay, diff and reports run in Rust, and Python functions are steps in their own right, executed in-process and fingerprinted with their source code and parameters.
@@ -433,7 +464,7 @@ webhook_url_env = "MODELFLOW_ALERT_WEBHOOK"    # or webhook_url = "…"
 on = ["fail", "error"]                         # add "warn" for warnings
 ```
 
-Scheduled runs are triggered as user `scheduler`. Each slot is claimed in the database, so with several instances on PostgreSQL exactly one runs it; after an outage only the latest missed slot is caught up. Alerts are JSON (`text`, `pipeline`, `run_id`, `status`, `link`) accepted by Slack, Mattermost and Teams Workflows, and every send is audited.
+The `[[alert]]` rules of a pipeline ([Run status and alert rules](#run-status-and-alert-rules)) are sent to the same webhook whatever `on` lists. Scheduled runs are triggered as user `scheduler`. Each slot is claimed in the database, so with several instances on PostgreSQL exactly one runs it; after an outage only the latest missed slot is caught up. Alerts are JSON (`text`, `pipeline`, `run_id`, `status`, `link`) accepted by Slack, Mattermost and Teams Workflows, and every send is audited.
 
 ### Database
 
@@ -450,8 +481,8 @@ The schema is created at startup under an advisory lock, so several instances ca
 ## Deployment
 
 ```bash
-docker build -t modelflow:0.14.0 .
-docker run --rm modelflow:0.14.0 new-token          # fill in deploy/server.docker.toml
+docker build -t modelflow:0.15.0 .
+docker run --rm modelflow:0.15.0 new-token          # fill in deploy/server.docker.toml
 docker compose up --build                          # http://127.0.0.1:8080
 kubectl apply -k deploy/k8s                        # after filling in deploy/k8s/secret.yaml
 ```

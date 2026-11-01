@@ -88,10 +88,22 @@ pub struct Series {
     pub rows: Vec<SeriesRow>,
 }
 
+/// Date of a row: its as-of date, or `#ID` for the runs of an undated pipeline.
+pub fn label(r: &SeriesRow) -> String {
+    if r.as_of.is_empty() {
+        format!("#{}", r.run_id)
+    } else {
+        r.as_of.clone()
+    }
+}
+
 /// The values at `paths` (diff notation, `*` and `?` wildcards) in the latest run of every as-of
-/// date. Without paths: the status of every check step.
+/// date, or in every run of an undated pipeline. Without paths: the status of every check step.
 pub fn series(store: &Store, pipeline: &str, paths: &[String]) -> Result<Series, String> {
-    let runs = store.latest_by_as_of(pipeline)?;
+    let mut runs = store.latest_by_as_of(pipeline)?;
+    if runs.is_empty() {
+        runs = store.list(pipeline)?;
+    }
     let mut columns: Vec<String> = vec![];
     let mut tables = vec![];
     for r in &runs {
@@ -153,18 +165,19 @@ pub fn transitions(s: &Series) -> Vec<(String, String, String, String)> {
     let mut out = vec![];
     for (j, c) in s.columns.iter().enumerate() {
         let mut prev: Option<&str> = None;
-        for r in &s.rows {
+        for (i, r) in s.rows.iter().enumerate() {
             let Some(Value::String(v)) = &r.values[j] else { continue };
             if let Some(p) = prev {
                 if p != v {
-                    out.push((c.clone(), r.as_of.clone(), p.to_string(), v.clone()));
+                    out.push((i, j, (c.clone(), label(r), p.to_string(), v.clone())));
                 }
             }
             prev = Some(v);
         }
     }
-    out.sort_by(|a, b| (&a.1, &a.0).cmp(&(&b.1, &b.0)));
-    out
+    // Rows are in date (or run) order.
+    out.sort_by_key(|(i, j, _)| (*i, *j));
+    out.into_iter().map(|(_, _, t)| t).collect()
 }
 
 pub fn render_csv(s: &Series) -> String {
@@ -218,7 +231,7 @@ pub fn render_text(s: &Series) -> String {
     for (r, row) in s.rows.iter().zip(&cells) {
         o += &format!(
             "{:<12} {:>6} {:<7}",
-            r.as_of,
+            label(r),
             format!("#{}", r.run_id),
             r.status.as_deref().unwrap_or("-")
         );

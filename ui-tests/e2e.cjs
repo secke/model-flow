@@ -37,7 +37,8 @@ async function main() {
   fs.cpSync(path.join(ROOT, "examples/pd-scorecard"), path.join(ws, "pd-scorecard"), { recursive: true });
   fs.rmSync(path.join(ws, "pd-scorecard/.modelflow"), { recursive: true, force: true });
   const toml = path.join(ws, "pd-scorecard/pipeline.toml");
-  fs.writeFileSync(toml, fs.readFileSync(toml, "utf8").replace(/^(name = .*)$/m, '$1\nmodel = "PD-RETAIL-01"\nschedule = "0 6 * * 1-5"'));
+  fs.writeFileSync(toml, fs.readFileSync(toml, "utf8").replace(/^(name = .*)$/m, '$1\nmodel = "PD-RETAIL-01"\nschedule = "0 6 * * 1-5"')
+    + '\n[[alert]]\nname = "calibration-fail"\npath = "calibration.status"\none_of = ["fail"]\n');
   const port = await freePort();
   const cfg = path.join(ws, "server.toml");
   fs.writeFileSync(cfg, `workspace = "${ws}"
@@ -119,6 +120,13 @@ roles_claim = "groups"
     await page.waitForURL(/#\/p\/.+\/r\/1$/, { timeout: 60000 });
     await page.waitForSelector(".seal");
     check((await page.textContent(".seal .verdict")) === "Fail", "the seal shows the run verdict");
+    await page.goto(origin + "/#/p/pd-retail-scorecard");
+    await page.waitForSelector("#alerts");
+    const alertRow = await page.textContent("#alerts tbody tr");
+    check(alertRow.includes("calibration-fail") && alertRow.includes("Active"), "the pipeline page shows the active alert");
+    await page.screenshot({ path: path.join(SHOTS, "pipeline-alerts.png"), fullPage: true });
+    await page.goto(origin + "/#/p/pd-retail-scorecard/r/1");
+    await page.waitForSelector(".seal");
     check((await page.$("#approve")) === null, "an owner cannot decide");
     const frame = page.frameLocator("iframe.report");
     await frame.locator("text=Non-compliant — action required").waitFor();

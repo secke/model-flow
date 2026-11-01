@@ -62,12 +62,42 @@ pub fn notify(cfg: &AlertsConfig, e: &Event) -> Result<bool, String> {
     }
     let body = json!({"text": text, "pipeline": e.pipeline, "run_id": e.run_id, "status": e.kind,
                       "triggered_by": e.triggered_by, "link": e.link});
+    post(&url, &body)?;
+    Ok(true)
+}
+
+/// Sends an alert raised by a monitoring rule (`[[alert]]` in the pipeline): the rules are chosen
+/// in the pipeline, so they are sent whatever `on` lists. Returns `Ok(false)` without a URL.
+pub fn notify_rule(
+    cfg: &AlertsConfig,
+    pipeline: &str,
+    run_id: i64,
+    state: &mf_runtime::monitor::AlertState,
+    episode: &mf_runtime::monitor::Episode,
+    link: Option<String>,
+) -> Result<bool, String> {
+    let Some(url) = cfg.url() else { return Ok(false) };
+    let mut text = format!(
+        "ModelFlow — {pipeline} #{run_id}: {}",
+        mf_runtime::monitor::line(state, episode)
+    );
+    if let Some(l) = &link {
+        text.push_str(&format!(" {l}"));
+    }
+    let body = json!({"text": text, "pipeline": pipeline, "run_id": run_id, "status": "alert",
+                      "alert": state.rule.name, "condition": state.condition, "date": episode.raised,
+                      "since": episode.start, "value": episode.value, "link": link});
+    post(&url, &body)?;
+    Ok(true)
+}
+
+fn post(url: &str, body: &serde_json::Value) -> Result<(), String> {
     ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(10))
         .build()
-        .post(&url)
+        .post(url)
         .set("Content-Type", "application/json")
         .send_string(&body.to_string())
         .map_err(|err| format!("webhook: {err}"))?;
-    Ok(true)
+    Ok(())
 }

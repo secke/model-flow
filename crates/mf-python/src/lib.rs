@@ -4,6 +4,7 @@
 
 use mf_core::diff::{DiffReport, Tolerance};
 use mf_core::{hash_bytes, Error as StepFailure, Inputs, Manifest, Step};
+use mf_runtime::monitor::{self, AlertRule};
 use mf_runtime::spec::{self, PipelineSpec, StepSpec};
 use mf_runtime::store::{overall_status, Store};
 use mf_runtime::{diff as rdiff, report, steps::BuiltinStep};
@@ -190,6 +191,8 @@ struct PyPipeline {
     steps: Vec<StepSpec>,
     functions: Vec<PyStepDef>,
     tolerances: Vec<Tolerance>,
+    status_from: Vec<String>,
+    alerts: Vec<AlertRule>,
 }
 
 impl PyPipeline {
@@ -200,6 +203,8 @@ impl PyPipeline {
             schedule: None,
             steps: self.steps.clone(),
             tolerances: self.tolerances.clone(),
+            status_from: self.status_from.clone(),
+            alerts: self.alerts.clone(),
         }
     }
 
@@ -223,6 +228,7 @@ impl PyPipeline {
     fn execute(&self, py: Python<'_>, as_of: Option<&str>, record: bool, who: Option<String>) -> PyResult<PyRun> {
         let mut manifest = self.engine(py, as_of)?.execute().map_err(exec_error)?;
         manifest.as_of = as_of.map(str::to_string);
+        manifest.status_from = self.status_from.clone();
         let id = if record {
             let who = who.unwrap_or_else(default_user);
             Some(self.store()?.save(&self.name, &manifest, &who).map_err(mf_err)?)
@@ -280,6 +286,8 @@ impl PyPipeline {
             steps: vec![],
             functions: vec![],
             tolerances: vec![],
+            status_from: vec![],
+            alerts: vec![],
         }
     }
 
@@ -292,6 +300,8 @@ impl PyPipeline {
             let mut p = obj.downcast::<PyPipeline>()?.borrow_mut();
             p.steps = sp.steps;
             p.tolerances = sp.tolerances;
+            p.status_from = sp.status_from;
+            p.alerts = sp.alerts;
         }
         Ok(obj)
     }
@@ -320,6 +330,61 @@ impl PyPipeline {
     #[getter]
     fn tolerances(&self, py: Python<'_>) -> PyResult<PyObject> {
         to_py(py, &serde_json::to_value(&self.tolerances).unwrap())
+    }
+
+    /// Outputs that make the run status (`["backtest.latest_basel_window.zone", "drift.status"]`,
+    /// wildcards `*` `?`); empty: the worst status of every check. Traffic lights count as
+    /// verdicts; a chosen output that is missing counts as `fail`.
+    #[getter]
+    fn get_status_from(&self) -> Vec<String> {
+        self.status_from.clone()
+    }
+
+    #[setter]
+    fn set_status_from(&mut self, paths: Vec<String>) {
+        self.status_from = paths;
+    }
+
+    /// Adds a monitoring rule on the series of results: the value at `path` is one of `one_of`,
+    /// above `above`, below `below`, or `changes`; it is raised after `consecutive` dates in a row.
+    #[pyo3(signature = (name, path, one_of = None, above = None, below = None, changes = false, consecutive = 1, message = None))]
+    #[allow(clippy::too_many_arguments)]
+    fn alert(
+        &mut self,
+        name: &str,
+        path: &str,
+        one_of: Option<Vec<String>>,
+        above: Option<f64>,
+        below: Option<f64>,
+        changes: bool,
+        consecutive: usize,
+        message: Option<String>,
+    ) -> PyResult<()> {
+        let mut rules = self.alerts.clone();
+        rules.push(AlertRule {
+            name: name.to_string(),
+            path: path.to_string(),
+            one_of: one_of.unwrap_or_default(),
+            above,
+            below,
+            changes,
+            consecutive,
+            message,
+        });
+        monitor::check_rules(&rules).map_err(PyValueError::new_err)?;
+        self.alerts = rules;
+        Ok(())
+    }
+
+    /// The alert rules evaluated on the recorded runs: `active` (number of alerts active at the
+    /// latest date) and, per rule, its condition, state and episodes (`start`, `raised`, `last`).
+    fn alerts(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let s = mf_runtime::dated::series(&self.store()?, &self.name, &monitor::paths(&self.alerts)).map_err(mf_err)?;
+        let r = monitor::evaluate(&self.alerts, &s);
+        to_py(
+            py,
+            &serde_json::json!({"active": r.active(), "latest": r.latest, "alerts": r.alerts}),
+        )
     }
 
     /// Adds a step declared as in a TOML `[[step]]` table: `kind` is `csv`, `parquet`, `json`,
@@ -356,6 +421,8 @@ impl PyPipeline {
             schedule: None,
             steps: vec![s.clone()],
             tolerances: vec![],
+            status_from: vec![],
+            alerts: vec![],
         };
         let probe_date = probe.dated().then_some("2000-01-01");
         spec::build_at(&probe, &self.workdir, probe_date).map_err(PyValueError::new_err)?;
@@ -513,7 +580,10 @@ impl PyPipeline {
     /// `pandas.DataFrame`. Without paths: the status of every check.
     #[pyo3(signature = (paths = None))]
     fn series(&self, py: Python<'_>, paths: Option<Vec<String>>) -> PyResult<PyObject> {
-        let s = mf_runtime::dated::series(&self.store()?, &self.name, &paths.unwrap_or_default()).map_err(mf_err)?;
+        let paths = paths
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| self.status_from.clone());
+        let s = mf_runtime::dated::series(&self.store()?, &self.name, &paths).map_err(mf_err)?;
         // Dicts built in Python keep the column order: as_of, run_id, status, then the paths.
         let rows = PyList::empty(py);
         for r in &s.rows {

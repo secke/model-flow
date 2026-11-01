@@ -1,4 +1,4 @@
-use mf_runtime::{dated, diff, report, spec, store::Store};
+use mf_runtime::{dated, diff, monitor, report, spec, store::Store};
 use std::{env, path::Path, process::ExitCode};
 
 const USAGE: &str = "usage:
@@ -14,7 +14,11 @@ const USAGE: &str = "usage:
                                          HTML validation report
   mf series <pipeline.toml> [PATH...] [--format text|csv|md|json] [-o file]
                                          values at PATH (wildcards * ?) for every as-of date;
-                                         without PATH, the status of every check
+                                         without PATH, the outputs of `status_from`, or the
+                                         status of every check
+  mf alerts <pipeline.toml> [--format text|md|json] [-o file]
+                                         evaluate the [[alert]] rules on the series of results;
+                                         exit code 1 when an alert is active at the latest date
   mf diff   <left> [<right>] [--tolerances file.toml] [--format text|md|json]
             [--limit N] [-o file]       compare two runs; exit code 1 beyond tolerance
 
@@ -72,6 +76,32 @@ fn selected(store: &Store, pipeline: &str, args: &[String]) -> Result<(i64, mf_c
     }
 }
 
+/// The pipeline's alert rules evaluated on its recorded runs (`None` without rules).
+fn alert_report(sp: &spec::PipelineSpec, store: &Store) -> Result<Option<monitor::AlertReport>, String> {
+    if sp.alerts.is_empty() {
+        return Ok(None);
+    }
+    let s = dated::series(store, &sp.name, &monitor::paths(&sp.alerts))?;
+    Ok(Some(monitor::evaluate(&sp.alerts, &s)))
+}
+
+/// Prints the alerts raised on the dates just run.
+fn print_raised(sp: &spec::PipelineSpec, store: &Store, dates: &[String]) -> Result<(), String> {
+    if let Some(r) = alert_report(sp, store)? {
+        let lines: Vec<String> = dates
+            .iter()
+            .flat_map(|d| r.raised_on(d).map(|(a, e)| monitor::line(a, e)).collect::<Vec<_>>())
+            .collect();
+        if !lines.is_empty() {
+            println!();
+            for l in lines {
+                println!("{l}");
+            }
+        }
+    }
+    Ok(())
+}
+
 fn run_dated(sp: &spec::PipelineSpec, base: &Path, store: &Store, args: &[String], who: &str) -> Result<bool, String> {
     let sel = flag_value(args, "--as-of").ok_or_else(|| {
         format!(
@@ -105,6 +135,12 @@ fn run_dated(sp: &spec::PipelineSpec, base: &Path, store: &Store, args: &[String
             }
         }
     }
+    let done: Vec<String> = results
+        .iter()
+        .filter(|(_, r)| r.is_ok())
+        .map(|(d, _)| d.clone())
+        .collect();
+    print_raised(sp, store, &done)?;
     let failed = results.iter().filter(|(_, r)| r.is_err()).count();
     println!(
         "\n{} date{} run in {:.1} s{}",
@@ -138,12 +174,12 @@ fn series_main(args: &[String]) -> Result<bool, String> {
         paths.push(args[i].clone());
         i += 1;
     }
+    if paths.is_empty() {
+        paths = sp.status_from.clone();
+    }
     let s = dated::series(&store, &sp.name, &paths)?;
     if s.rows.is_empty() {
-        return Err(format!(
-            "no dated run recorded for {} (mf run {file} --as-of all)",
-            sp.name
-        ));
+        return Err(format!("no run recorded for {} (mf run {file})", sp.name));
     }
     let out = match flag_value(args, "--format").unwrap_or("text") {
         "text" => dated::render_text(&s),
@@ -164,6 +200,27 @@ fn series_main(args: &[String]) -> Result<bool, String> {
         None => print!("{out}"),
     }
     Ok(true)
+}
+
+fn alerts_main(args: &[String]) -> Result<bool, String> {
+    let file = args.get(2).ok_or(USAGE)?;
+    let (sp, base) = spec::load(Path::new(file))?;
+    let store = Store::for_pipeline(&base)?;
+    let r = alert_report(&sp, &store)?.ok_or_else(|| format!("no [[alert]] rule in {file}"))?;
+    let out = match flag_value(args, "--format").unwrap_or("text") {
+        "text" => monitor::render_text(&r),
+        "md" | "markdown" => monitor::render_markdown(&r),
+        "json" => serde_json::to_string_pretty(&r).unwrap(),
+        f => return Err(format!("unknown format `{f}` (text, md, json)")),
+    };
+    match flag_value(args, "-o") {
+        Some(f) => {
+            std::fs::write(f, &out).map_err(|e| format!("{f}: {e}"))?;
+            println!("alerts written: {f} ({} active)", r.active());
+        }
+        None => print!("{out}"),
+    }
+    Ok(r.active() == 0)
 }
 
 fn diff_main(args: &[String]) -> Result<bool, String> {
@@ -222,6 +279,7 @@ fn real_main(args: &[String]) -> Result<bool, String> {
     match args.get(1).map(String::as_str) {
         Some("diff") => return diff_main(args),
         Some("series") => return series_main(args),
+        Some("alerts") => return alerts_main(args),
         _ => {}
     }
     let (cmd, file) = match (args.get(1), args.get(2)) {
@@ -245,6 +303,7 @@ fn real_main(args: &[String]) -> Result<bool, String> {
             let id = store.save(&sp.name, &m, &who)?;
             let at = m.as_of.as_deref().map(|d| format!("  as_of={d}")).unwrap_or_default();
             println!("\nrun #{id}{at}  run_hash={}", m.run_hash);
+            print_raised(&sp, &store, &[m.as_of.clone().unwrap_or_else(|| format!("#{id}"))])?;
             if let Some(f) = flag_value(args, "-o") {
                 std::fs::write(f, serde_json::to_string_pretty(&m).unwrap()).map_err(|e| format!("{f}: {e}"))?;
                 println!("manifest written: {f}");

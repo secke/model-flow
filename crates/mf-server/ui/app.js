@@ -203,6 +203,7 @@ function failure(err) {
 
 // ---------- Pipelines ----------
 async function viewPipelines() {
+  const at = location.hash;
   const list = await api("/api/pipelines");
   const rows = list.map((p) => el("tr", { class: "link", tabindex: 0, onclick: () => (location.hash = `#/p/${enc(p.name)}`), onkeydown: (e) => e.key === "Enter" && (location.hash = `#/p/${enc(p.name)}`) },
     el("td", {}, el("a", { href: `#/p/${enc(p.name)}` }, p.name)),
@@ -212,6 +213,7 @@ async function viewPipelines() {
     el("td", {}, p.last_run ? state(p.last_run.status) : ""),
     el("td", {}, p.last_run && p.last_run.decision ? state(p.last_run.decision) : el("span", { class: "muted" }, p.last_run ? "Pending" : "")),
   ));
+  if (location.hash !== at) return; // the user has moved on: do not render over the new page
   show("pipelines",
     el("h1", {}, "Pipelines"),
     el("p", { class: "lead" }, "Each pipeline chains data, models and validation tests. Open one to trigger a run or decide on the latest one."),
@@ -222,7 +224,12 @@ async function viewPipelines() {
 }
 
 async function viewPipeline(name) {
-  const [runs, pipelines] = await Promise.all([api(`/api/pipelines/${enc(name)}/runs`), api("/api/pipelines")]);
+  const at = location.hash;
+  const [runs, pipelines, alerts] = await Promise.all([
+    api(`/api/pipelines/${enc(name)}/runs`),
+    api("/api/pipelines"),
+    api(`/api/pipelines/${enc(name)}/alerts`).catch(() => null),
+  ]);
   const p = pipelines.find((x) => x.name === name);
   const status = el("div", { id: "launch-status" });
   const launch = can("model_owner", "admin") && el("button", {
@@ -255,6 +262,17 @@ async function viewPipeline(name) {
     el("td", {}, r.decision ? state(r.decision) : el("span", { class: "muted" }, "Pending")),
     el("td", { class: "hash" }, short(r.run_hash)),
   ));
+  // Alert rules of the pipeline ([[alert]]): state at the latest date and latest episode.
+  const rules = (alerts && alerts.report.alerts) || [];
+  const period = (e) => e ? `${e.start} → ${e.ongoing ? "ongoing" : e.last} (${e.dates} ${e.dates === 1 ? "date" : "dates"})` : "Never raised";
+  const alertRows = rules.map((a) => el("tr", {},
+    el("td", {}, a.rule.name),
+    el("td", { class: "hash" }, a.condition),
+    el("td", {}, a.active ? el("span", { class: "state fail" }, "Active") : el("span", { class: "state pass" }, "Clear")),
+    el("td", {}, String(a.episodes.length)),
+    el("td", {}, period(a.episodes[a.episodes.length - 1])),
+  ));
+  if (location.hash !== at) return; // the user has moved on: do not render over the new page
   show("pipelines",
     el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Pipelines")),
     el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, name), el("p", { class: "lead" }, p ? `${p.steps.length} steps: ${p.steps.map((s) => s.name).join(", ")}.` : "")), launch),
@@ -264,6 +282,10 @@ async function viewPipeline(name) {
       p.next_run && el("div", {}, el("dt", {}, "Next run"), el("dd", {}, when(p.next_run))),
     ),
     status,
+    rules.length > 0 && el("h2", {}, "Alerts"),
+    rules.length > 0 && el("div", { class: "table-wrap" }, el("table", { id: "alerts" },
+      el("thead", {}, el("tr", {}, ["Alert", "Condition", "State", "Episodes", "Latest episode"].map((h) => el("th", { scope: "col" }, h)))),
+      el("tbody", {}, alertRows))),
     el("h2", {}, "Runs"),
     el("div", { class: "table-wrap" }, runs.length
       ? el("table", {}, el("thead", {}, el("tr", {}, ["No.", "Date", dated && "As of", "Triggered by", "Result", "Decision", "Fingerprint"].filter(Boolean).map((h) => el("th", { scope: "col" }, h)))), el("tbody", {}, rows))
@@ -273,6 +295,7 @@ async function viewPipeline(name) {
 
 // ---------- Run ----------
 async function viewRun(name, id) {
+  const at = location.hash;
   const base = `/api/pipelines/${enc(name)}/runs/${id}`;
   const [runs, decisions, report] = await Promise.all([
     api(`/api/pipelines/${enc(name)}/runs`),
@@ -332,6 +355,7 @@ async function viewRun(name, id) {
   const frame = el("iframe", { class: "report", title: `Validation report ${name} #${id}`, sandbox: "" });
   frame.srcdoc = report || "<p>Report unavailable.</p>";
 
+  if (location.hash !== at) return; // the user has moved on: do not render over the new page
   show("pipelines",
     el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Pipelines"), " / ", el("a", { href: `#/p/${enc(name)}` }, name)),
     el("div", { class: "run-head" },
@@ -410,6 +434,7 @@ function modelForm(initial, onSave, submitLabel) {
 }
 
 async function viewModels() {
+  const at = location.hash;
   const data = await api("/api/models");
   const createBox = el("div");
   const add = can("model_owner", "admin") && el("button", {
@@ -432,6 +457,7 @@ async function viewModels() {
       el("td", {}, last ? state(last.status) : el("span", { class: "muted" }, "Never run")),
     );
   });
+  if (location.hash !== at) return; // the user has moved on: do not render over the new page
   show("models",
     el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, "Model inventory"), el("p", { class: "lead" }, "Every model, its owner, risk tier, status and next review. Only a validator can approve a model.")), add),
     createBox,
@@ -443,6 +469,7 @@ async function viewModels() {
 }
 
 async function viewModel(id) {
+  const at = location.hash;
   const data = await api("/api/models");
   const m = data.models.find((x) => x.id === id);
   if (!m) throw new Error(`Model ${id} is not in the inventory.`);
@@ -469,6 +496,7 @@ async function viewModel(id) {
     if (m.status !== "retired") actions.push(btn("retired", "Retire the model", "btn reject"));
   }
   const editBox = el("div");
+  if (location.hash !== at) return; // the user has moved on: do not render over the new page
   show("models",
     el("div", { class: "crumbs" }, el("a", { href: "#/models" }, "Model inventory")),
     el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, `${m.id} · ${m.name}`), el("p", { class: "lead" }, m.purpose || "")),
@@ -510,6 +538,7 @@ function outcomeClass(o) {
 }
 
 async function viewAudit() {
+  const at = location.hash;
   const log = await api("/api/audit?limit=500");
   const tbody = el("tbody");
   const fill = (q) => {
@@ -527,6 +556,7 @@ async function viewAudit() {
   };
   const search = el("input", { type: "search", id: "filter", placeholder: "Filter: user, action, target…", "aria-label": "Filter the log", oninput: (e) => fill(e.target.value) });
   fill("");
+  if (location.hash !== at) return; // the user has moved on: do not render over the new page
   show("audit",
     el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, "Audit log"), el("p", { class: "lead" }, "Every action, including denials. The log is append-only: the database rejects any modification.")), search),
     el("div", { class: "table-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, ["Date", "User", "Role", "Action", "Target", "Outcome"].map((h) => el("th", { scope: "col" }, h)))), tbody)),

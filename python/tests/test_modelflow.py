@@ -205,3 +205,33 @@ def test_dated_pipeline_over_time(tmp_path):
     assert q.verify() == []
     assert [r.output("snapshot")["month"] for r in q.run_dates(["2024-01-31", "2024-03-29"])] == [1, 3]
     assert q.changes_over_time(["snapshot.as_of"])[0]["to"] == "2024-02-29"
+
+
+def test_status_from_and_alert_rules(tmp_path):
+    p = mf.Pipeline("desk", workdir=tmp_path)
+    level = {"v": 0}
+
+    @p.step(deps=[])
+    def check():
+        level["v"] += 1
+        zone = ["green", "yellow", "yellow", "red"][level["v"] - 1]
+        return {"status": "fail", "window": {"zone": zone}, "psi": 0.1 * level["v"]}
+
+    p.status_from = ["check.window.zone"]
+    p.alert("zone-change", "check.window.zone", changes=True)
+    p.alert("psi-high", "check.psi", above=0.15, consecutive=2, message="drift")
+    with pytest.raises(ValueError, match="exactly one"):
+        p.alert("bad", "check.psi")
+    with pytest.raises(ValueError, match="duplicate"):
+        p.alert("psi-high", "check.psi", below=0.0)
+    statuses = [p.run().status for _ in range(4)]
+    # The traffic light makes the status, not the check's own `fail`
+    assert statuses == ["pass", "warn", "warn", "fail"]
+    assert [r["status"] for r in p.runs()] == statuses
+    assert [r["check.window.zone"] for r in p.series()] == ["green", "yellow", "yellow", "red"]
+    a = p.alerts()
+    assert a["active"] == 2
+    by_name = {x["rule"]["name"]: x for x in a["alerts"]}
+    assert [e["raised"] for e in by_name["zone-change"]["episodes"]] == ["#2", "#4"]
+    psi = by_name["psi-high"]["episodes"]
+    assert (psi[0]["start"], psi[0]["raised"], psi[0]["ongoing"]) == ("#2", "#3", True)

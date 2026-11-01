@@ -553,3 +553,109 @@ async fn dated_pipeline_runs_series_and_diff() {
     );
     std::fs::remove_dir_all(&ws).unwrap();
 }
+
+/// Receives one webhook call on a local port and returns its JSON body.
+fn webhook_receiver() -> (String, std::sync::mpsc::Receiver<Value>) {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/hook", listener.local_addr().unwrap());
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let mut s = stream.unwrap();
+            let mut buf = vec![];
+            let mut chunk = [0u8; 4096];
+            // Headers, then a body of Content-Length bytes.
+            let body = loop {
+                let n = s.read(&mut chunk).unwrap();
+                buf.extend_from_slice(&chunk[..n]);
+                let text = String::from_utf8_lossy(&buf).to_string();
+                if let Some(i) = text.find("\r\n\r\n") {
+                    let len: usize = text[..i]
+                        .lines()
+                        .find_map(|l| {
+                            l.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .map(|v| v.trim().parse().unwrap())
+                        })
+                        .unwrap_or(0);
+                    if buf.len() >= i + 4 + len {
+                        break String::from_utf8_lossy(&buf[i + 4..i + 4 + len]).to_string();
+                    }
+                }
+            };
+            s.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok").unwrap();
+            tx.send(serde_json::from_str(&body).unwrap()).unwrap();
+        }
+    });
+    (url, rx)
+}
+
+#[tokio::test]
+async fn alert_rules_raise_webhooks() {
+    let ws = std::env::temp_dir().join(format!("mf-api-alerts-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&ws);
+    let dir = ws.join("mon");
+    let dates = ["2024-01-31", "2024-02-29", "2024-03-29"];
+    for (i, d) in dates.iter().enumerate() {
+        std::fs::create_dir_all(dir.join("data").join(d)).unwrap();
+        let rows: String = (0..300)
+            .map(|k| format!("{}\n", if k % 60 == 0 { -0.01 * (i + 1) as f64 } else { 0.001 }))
+            .collect();
+        std::fs::write(dir.join("data").join(d).join("r.csv"), format!("ret\n{rows}")).unwrap();
+    }
+    std::fs::write(
+        dir.join("pipeline.toml"),
+        "name = \"mon\"\n[[step]]\nname = \"r\"\nkind = \"csv\"\nversion = \"1\"\npath = \"data/${as_of}/r.csv\"\ncolumn = \"ret\"\n\
+         [[step]]\nname = \"var\"\nkind = \"var_historical\"\nversion = \"1\"\ndeps = [\"r\"]\nparams = { alpha = 0.99 }\n\
+         [[alert]]\nname = \"var-high\"\npath = \"var.var\"\nabove = 0.015\nconsecutive = 2\nmessage = \"VaR above limit\"\n",
+    )
+    .unwrap();
+    let (url, hooks) = webhook_receiver();
+    let cfg = format!(
+        "workspace = \"{}\"\n[[user]]\nname = \"alice\"\nrole = \"model_owner\"\ntoken_sha256 = \"{}\"\n\
+         [alerts]\nwebhook_url = \"{url}\"\n",
+        ws.display(),
+        hash_token("tok-alice")
+    );
+    let app = router(AppState::new(&ServerConfig::parse(&cfg, &ws).unwrap()).unwrap());
+    let mut runs = vec![];
+    for d in dates {
+        let uri = format!("/api/pipelines/mon/runs?wait=true&as_of={d}");
+        let (s, r, body) = call(&app, "POST", &uri, Some("tok-alice"), None).await;
+        assert_eq!(s, StatusCode::CREATED, "{body}");
+        runs.push(r);
+    }
+    // Above the limit on the second date, raised on the third (two dates in a row).
+    assert_eq!(runs[1]["alerts"], json!([]));
+    let line = runs[2]["alerts"][0].as_str().unwrap();
+    assert!(
+        line.starts_with("ALERT var-high on 2024-03-29: var.var > 0.015, 2 dates in a row"),
+        "{line}"
+    );
+    let hook = hooks.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+    assert_eq!(
+        (hook["status"].as_str(), hook["alert"].as_str()),
+        (Some("alert"), Some("var-high"))
+    );
+    assert_eq!(
+        (hook["date"].as_str(), hook["since"].as_str()),
+        (Some("2024-03-29"), Some("2024-02-29"))
+    );
+    assert!(hook["text"].as_str().unwrap().contains("VaR above limit"));
+    assert!(hooks.try_recv().is_err(), "a single alert is sent");
+    let (s, a, body) = call(&app, "GET", "/api/pipelines/mon/alerts", Some("tok-alice"), None).await;
+    assert_eq!(s, StatusCode::OK, "{body}");
+    assert_eq!(a["active"], 1);
+    assert_eq!(a["report"]["alerts"][0]["episodes"][0]["start"], "2024-02-29");
+    let (_, _, md) = call(
+        &app,
+        "GET",
+        "/api/pipelines/mon/alerts?format=md",
+        Some("tok-alice"),
+        None,
+    )
+    .await;
+    assert!(md.contains("| var-high |"), "{md}");
+    std::fs::remove_dir_all(&ws).unwrap();
+}

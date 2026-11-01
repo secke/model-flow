@@ -24,6 +24,12 @@ Dated pipelines (`${as_of}` in a data path) are monitored over time:
 
     p.run_dates("all")            # one run per as-of date, in parallel
     pandas.DataFrame(p.series(["backtest.latest_basel_window.zone", "drift.psi"]))
+
+and watched with a run status and alert rules of their own:
+
+    p.status_from = ["backtest.latest_basel_window.zone", "drift.status"]
+    p.alert("drift-persistent", "drift.psi", above=0.25, consecutive=3)
+    p.alerts()["active"]          # alerts active at the latest date
 """
 
 import inspect

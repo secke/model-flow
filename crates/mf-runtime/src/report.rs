@@ -181,12 +181,12 @@ pub fn render_html(meta: &ReportMeta, m: &Manifest) -> String {
     let count = |k: &str| statuses.iter().filter(|s| **s == k).count();
     let (pass, warn, fail) = (count("pass"), count("warn"), count("fail"));
     let replay_ok = meta.replay.map(<[Mismatch]>::is_empty);
-    let overall = if fail > 0 || replay_ok == Some(false) {
+    // The run status (the pipeline's `status_from`, or every check), and a failed replay.
+    let status = crate::store::overall_status(m).unwrap_or_else(|| "pass".into());
+    let overall = if replay_ok == Some(false) {
         "fail"
-    } else if warn > 0 {
-        "warn"
     } else {
-        "pass"
+        status.as_str()
     };
     let verdict = match overall {
         "fail" => "Non-compliant — action required",
@@ -217,7 +217,7 @@ details>div{{padding:0 16px 16px;overflow-x:auto}}.verdict{{font-size:16px;font-
 footer{{margin-top:40px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}}@media print{{details{{break-inside:avoid}}details>div{{display:block}}}}
 </style></head><body><main>
 <div class="muted">Model validation report · ModelFlow</div><h1>{p}</h1>
-<div class="verdict">{b} {verdict}</div>
+<div class="verdict">{b} {verdict}</div>{basis}
 <div class="cards">
 <div class="card"><div class="k">Run</div><div class="v">#{id}</div><div class="muted">{created}{as_of}</div></div>
 <div class="card"><div class="k">Passed tests</div><div class="v" style="color:var(--ok)">{pass}</div></div>
@@ -227,6 +227,18 @@ footer{{margin-top:40px;color:var(--muted);font-size:12px;overflow-wrap:anywhere
 </div>"#,
         p = esc(meta.pipeline),
         b = badge(overall),
+        basis = if m.status_from.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "<div class=\"muted\">Status from {}</div>",
+                m.status_from
+                    .iter()
+                    .map(|p| format!("<code>{}</code>", esc(p)))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        },
         id = meta.run_id,
         created = utc(meta.created_at),
         as_of = m

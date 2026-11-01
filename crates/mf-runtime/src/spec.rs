@@ -18,6 +18,12 @@ pub struct PipelineSpec {
     /// Tolerances used by `mf diff` (first matching rule wins).
     #[serde(default, rename = "tolerance")]
     pub tolerances: Vec<mf_core::diff::Tolerance>,
+    /// Outputs that make the run status (default: every check's status).
+    #[serde(default)]
+    pub status_from: Vec<String>,
+    /// Alert rules on the series of results (`[[alert]]`).
+    #[serde(default, rename = "alert")]
+    pub alerts: Vec<crate::monitor::AlertRule>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -57,6 +63,7 @@ pub fn parse(text: &str) -> Result<PipelineSpec, String> {
     for t in &spec.tolerances {
         t.check()?;
     }
+    crate::monitor::check_rules(&spec.alerts)?;
     Ok(spec)
 }
 
@@ -121,6 +128,7 @@ pub fn run(spec: &PipelineSpec, base: &Path, as_of: Option<&str>) -> Result<Mani
     }
     let mut m = build_at(spec, base, as_of)?.execute().map_err(|e| e.to_string())?;
     m.as_of = as_of.map(str::to_string);
+    m.status_from = spec.status_from.clone();
     Ok(m)
 }
 
@@ -310,6 +318,18 @@ mod tests {
         assert!(s.tolerances[1].ignore);
         assert!(parse("name='x'\nstep=[]\n[[tolerance]]\nabs=1\nbp=1\n").is_err());
         assert!(parse("name='x'\nstep=[]\n[[tolerance]]\ntol=1\n").is_err());
+    }
+
+    #[test]
+    fn parses_status_and_alerts() {
+        let s = parse(
+            "name='x'\nstatus_from=['b.zone']\nstep=[]\n[[alert]]\nname='red'\npath='b.zone'\none_of=['red']\n\
+             [[alert]]\nname='psi'\npath='d.psi'\nabove=0.25\nconsecutive=3\n",
+        )
+        .unwrap();
+        assert_eq!(s.status_from, ["b.zone"]);
+        assert_eq!(s.alerts[1].consecutive, 3);
+        assert!(parse("name='x'\nstep=[]\n[[alert]]\nname='a'\npath='b'\n").is_err());
     }
 
     #[test]

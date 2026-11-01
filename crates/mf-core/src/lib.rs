@@ -112,6 +112,10 @@ pub struct Manifest {
     /// As-of date of a dated pipeline (`${as_of}` in its data paths).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub as_of: Option<String>,
+    /// Outputs that make the run status (`backtest.latest_basel_window.zone`, `drift.status`);
+    /// empty: the worst status of every check. Not part of the run fingerprint.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub status_from: Vec<String>,
 }
 
 /// Engine name and version recorded in every manifest.
@@ -209,6 +213,7 @@ impl Pipeline {
             run_hash,
             engine: Some(engine()),
             as_of: None,
+            status_from: vec![],
         })
     }
 

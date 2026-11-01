@@ -15,7 +15,7 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use governance::Gov;
-use mf_runtime::{report, spec, store::Store};
+use mf_runtime::{monitor, report, spec, store::Store};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -624,7 +624,8 @@ fn execute_job(
 ) -> Result<(i64, Value), String> {
     let gov = st.gov().map_err(|e| e.1)?;
     gov.job_started(job)?;
-    let result = (|| -> Result<(i64, Value, Option<String>), String> {
+    type Raised = Vec<(monitor::AlertState, monitor::Episode)>;
+    let result = (|| -> Result<(i64, Value, Option<String>, Raised), String> {
         let toml = locate(st, name).map_err(|e| e.1)?;
         let (sp, base) = spec::load(&toml)?;
         // A dated pipeline runs for the given date, by default the latest one with data.
@@ -638,17 +639,30 @@ fn execute_job(
             None => None,
         };
         let m = spec::run(&sp, &base, as_of.as_deref())?;
-        let id = st.store_for(&toml).map_err(|e| e.1)?.save(name, &m, &auth.name)?;
+        let store = st.store_for(&toml).map_err(|e| e.1)?;
+        let id = store.save(name, &m, &auth.name)?;
+        // Monitoring rules raised by this run (on its as-of date, or on the run for an undated pipeline).
+        let raised: Raised = if sp.alerts.is_empty() {
+            vec![]
+        } else {
+            let s = mf_runtime::dated::series(&store, name, &monitor::paths(&sp.alerts))?;
+            let r = monitor::evaluate(&sp.alerts, &s);
+            let date = m.as_of.clone().unwrap_or_else(|| format!("#{id}"));
+            r.raised_on(&date).map(|(a, e)| (a.clone(), e.clone())).collect()
+        };
         let steps: Vec<Value> = m
             .steps
             .iter()
             .map(|s| json!({"name": s.name, "version": s.version, "status": s.output.get("status")}))
             .collect();
         let status = mf_runtime::store::overall_status(&m);
+        let lines: Vec<String> = raised.iter().map(|(a, e)| monitor::line(a, e)).collect();
         Ok((
             id,
-            json!({"id": id, "run_hash": m.run_hash, "status": status, "as_of": m.as_of, "steps": steps}),
+            json!({"id": id, "run_hash": m.run_hash, "status": status, "as_of": m.as_of, "steps": steps,
+                   "alerts": lines}),
             status,
+            raised,
         ))
     })();
     let link = |id: Option<i64>| {
@@ -658,7 +672,7 @@ fn execute_job(
         })
     };
     let (event_kind, run_id, detail) = match &result {
-        Ok((id, _, status)) => {
+        Ok((id, _, status, _)) => {
             gov.job_finished(job, Some(*id), None)?;
             gov.audit(&auth.name, auth.role, "run.create", &format!("{name}#{id}"), "ok")?;
             (
@@ -687,8 +701,24 @@ fn execute_job(
             Ok(false) => {}
             Err(e) => gov.audit("system", Role::Admin, "alert.send", name, &format!("error: {e}"))?,
         }
+        if let Ok((id, _, _, raised)) = &result {
+            for (a, e) in raised {
+                let target = format!("{name}#{id}");
+                match alerts::notify_rule(cfg, name, *id, a, e, link(Some(*id))) {
+                    Ok(true) => gov.audit("system", Role::Admin, "alert.send", &target, &a.rule.name)?,
+                    Ok(false) => {}
+                    Err(err) => gov.audit(
+                        "system",
+                        Role::Admin,
+                        "alert.send",
+                        &target,
+                        &format!("{}: error: {err}", a.rule.name),
+                    )?,
+                }
+            }
+        }
     }
-    result.map(|(id, v, _)| (id, v))
+    result.map(|(id, v, _, _)| (id, v))
 }
 
 /// Records a job and queues it (execution bounded by the semaphore).
@@ -926,6 +956,11 @@ async fn series_runs(
             .filter(|p| !p.is_empty())
             .map(String::from)
             .collect();
+        let paths = if paths.is_empty() {
+            spec::load(&toml).map_err(ApiError::internal)?.0.status_from
+        } else {
+            paths
+        };
         let s = mf_runtime::dated::series(&st.store_for(&toml)?, &name, &paths).map_err(ApiError::internal)?;
         let text = |ct: &'static str, body: String| ([(axum::http::header::CONTENT_TYPE, ct)], body).into_response();
         match q.format.as_deref().unwrap_or("json") {
@@ -941,6 +976,39 @@ async fn series_runs(
                 "text/markdown; charset=utf-8",
                 mf_runtime::dated::render_markdown(&s),
             )),
+            f => Err(ApiError::new(StatusCode::BAD_REQUEST, format!("unknown format `{f}`"))),
+        }
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+struct FormatQuery {
+    /// `json` (default) or `md`.
+    #[serde(default)]
+    format: Option<String>,
+}
+
+/// The pipeline's alert rules evaluated on its recorded runs: active alerts and past episodes.
+async fn pipeline_alerts(
+    State(st): State<AppState>,
+    _auth: Auth,
+    Path(name): Path<String>,
+    Query(q): Query<FormatQuery>,
+) -> ApiResult<Response> {
+    blocking(move || {
+        let toml = locate(&st, &name)?;
+        let (sp, _) = spec::load(&toml).map_err(ApiError::internal)?;
+        let s = mf_runtime::dated::series(&st.store_for(&toml)?, &name, &monitor::paths(&sp.alerts))
+            .map_err(ApiError::internal)?;
+        let r = monitor::evaluate(&sp.alerts, &s);
+        match q.format.as_deref().unwrap_or("json") {
+            "json" => Ok(Json(json!({"active": r.active(), "report": r})).into_response()),
+            "md" => Ok((
+                [(axum::http::header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
+                monitor::render_markdown(&r),
+            )
+                .into_response()),
             f => Err(ApiError::new(StatusCode::BAD_REQUEST, format!("unknown format `{f}`"))),
         }
     })
@@ -1353,6 +1421,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/pipelines/:name/runs/:id", get(get_run))
         .route("/api/pipelines/:name/diff", get(diff_runs))
         .route("/api/pipelines/:name/series", get(series_runs))
+        .route("/api/pipelines/:name/alerts", get(pipeline_alerts))
         .route("/api/pipelines/:name/runs/:id/verify", post(verify))
         .route("/api/pipelines/:name/runs/:id/report", get(get_report))
         .route(

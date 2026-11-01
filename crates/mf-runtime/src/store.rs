@@ -27,19 +27,60 @@ pub struct RunRow {
 }
 
 /// Worst status (`fail` > `warn` > `pass`) among the step outputs.
-pub fn overall_status(m: &Manifest) -> Option<String> {
-    let rank = |s: &str| match s {
+/// A check verdict as `pass`, `warn` or `fail`; traffic lights count as verdicts.
+pub fn verdict(v: &str) -> Option<&'static str> {
+    match v.to_ascii_lowercase().as_str() {
+        "pass" | "green" => Some("pass"),
+        "warn" | "yellow" | "amber" => Some("warn"),
+        "fail" | "red" => Some("fail"),
+        _ => None,
+    }
+}
+
+fn rank(s: &str) -> u8 {
+    match s {
         "fail" => 3,
         "warn" => 2,
         "pass" => 1,
         _ => 0,
-    };
-    m.steps
-        .iter()
-        .filter_map(|s| s.output.get("status").and_then(Value::as_str))
-        .max_by_key(|s| rank(s))
-        .filter(|s| rank(s) > 0)
-        .map(str::to_string)
+    }
+}
+
+/// Status of a run: the worst verdict among the outputs of `status_from` (wildcards `*` `?`), or
+/// among the statuses of every check when the pipeline does not choose. A chosen output that is
+/// missing or is not a verdict counts as `fail`.
+pub fn overall_status(m: &Manifest) -> Option<String> {
+    if m.status_from.is_empty() {
+        return m
+            .steps
+            .iter()
+            .filter_map(|s| s.output.get("status").and_then(Value::as_str))
+            .max_by_key(|s| rank(s))
+            .filter(|s| rank(s) > 0)
+            .map(str::to_string);
+    }
+    let mut worst = "pass";
+    for path in &m.status_from {
+        let mut flat = vec![];
+        for s in m
+            .steps
+            .iter()
+            .filter(|s| path.starts_with(&format!("{}.", s.name)) || path.starts_with('*'))
+        {
+            mf_core::diff::leaves(&s.name, &s.output, &mut flat);
+        }
+        let found: Vec<&'static str> = flat
+            .iter()
+            .filter(|(p, _)| mf_core::diff::glob_match(path, p))
+            .map(|(_, v)| v.as_str().and_then(verdict).unwrap_or("fail"))
+            .collect();
+        for v in if found.is_empty() { vec!["fail"] } else { found } {
+            if rank(v) > rank(worst) {
+                worst = v;
+            }
+        }
+    }
+    Some(worst.to_string())
 }
 
 fn now() -> i64 {
@@ -392,6 +433,39 @@ mod tests {
                 Store::Postgres(_) => panic!("SQLite expected"),
             }
         }
+    }
+
+    #[test]
+    fn status_from_chosen_outputs() {
+        let step = |name: &str, output: Value| mf_core::StepRecord {
+            name: name.into(),
+            version: "1".into(),
+            input_hash: String::new(),
+            output_hash: String::new(),
+            code_hash: None,
+            output,
+        };
+        let mut m = Manifest {
+            steps: vec![
+                step(
+                    "backtest",
+                    serde_json::json!({"status": "fail", "latest_basel_window": {"zone": "yellow"}}),
+                ),
+                step("drift", serde_json::json!({"status": "pass"})),
+            ],
+            run_hash: String::new(),
+            engine: None,
+            as_of: None,
+            status_from: vec![],
+        };
+        assert_eq!(overall_status(&m).as_deref(), Some("fail"));
+        m.status_from = vec!["backtest.latest_basel_window.zone".into(), "drift.status".into()];
+        assert_eq!(overall_status(&m).as_deref(), Some("warn"));
+        m.status_from = vec!["drift.*".into()];
+        assert_eq!(overall_status(&m).as_deref(), Some("pass"));
+        // A chosen output that is missing fails the run.
+        m.status_from = vec!["drift.status".into(), "drift.psi".into()];
+        assert_eq!(overall_status(&m).as_deref(), Some("fail"));
     }
 
     /// Test PostgreSQL database (MODELFLOW_TEST_DATABASE_URL variable), otherwise `None`.
