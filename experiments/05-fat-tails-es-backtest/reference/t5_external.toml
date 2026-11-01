@@ -1,0 +1,18 @@
+# The Student-t challenger of experiment 03: external Python model with tabulated quantiles
+name = "t5-external"
+
+[[step]]
+name = "returns"
+kind = "csv"
+version = "1.0.0"
+path = "../../01-sp500-var-backtest/data/returns.csv"
+column = "ret"
+
+[[step]]
+name = "model"
+kind = "process"
+version = "1.0.0-t5"
+deps = ["returns"]
+command = ["python3", "../../03-change-impact/models/ewma_t_var.py"]
+code = ["../../03-change-impact/models/ewma_t_var.py"]
+params = { lambda = 0.94, alpha = 0.99, warmup = 30, nu = 5 }

@@ -1,0 +1,25 @@
+# The same model, as the built-in `var_model` step (quantparity). `mf diff` against the external
+# model must find the same 99% VaR forecasts.
+name = "champion-builtin"
+
+[[step]]
+name = "returns"
+kind = "csv"
+version = "1.0.0"
+path = "../../01-sp500-var-backtest/data/returns.csv"
+column = "ret"
+
+[[step]]
+name = "model"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns"]
+params = { distribution = "normal", lambda = 0.94, alpha = 0.99, warmup = 30 }
+
+[[tolerance]]
+path = "model.var[*]"
+rel = 1e-12
+
+[[tolerance]]             # fields that only one of the two models reports
+path = "model.*"
+ignore = true

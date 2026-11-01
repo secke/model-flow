@@ -1,0 +1,18 @@
+# The champion of experiment 01: the external Python model (examples/var-equity/models/ewma_var.py)
+name = "champion-external"
+
+[[step]]
+name = "returns"
+kind = "csv"
+version = "1.0.0"
+path = "../../01-sp500-var-backtest/data/returns.csv"
+column = "ret"
+
+[[step]]
+name = "model"
+kind = "process"
+version = "0.1.0"
+deps = ["returns"]
+command = ["python3", "../../../examples/var-equity/models/ewma_var.py"]
+code = ["../../../examples/var-equity/models/ewma_var.py"]
+params = { lambda = 0.94, alpha = 0.99, warmup = 30 }

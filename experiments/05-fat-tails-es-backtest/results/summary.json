@@ -1,0 +1,181 @@
+{
+  "run_hash": "ba61765b896ba1a53c1341fafb2da203e884a08a94022dfa15a2a897b42e0cb3",
+  "kurtosis": 3.790435890974165,
+  "nu_moments": 5.582931402239852,
+  "models": [
+    {
+      "model": "ewma_normal",
+      "label": "EWMA, normal (champion)",
+      "observations": 2231,
+      "exceptions": 53,
+      "rate": 0.023756163155535633,
+      "kupiec_p": 2.911444384813331e-08,
+      "independence_p": 0.1742687917575555,
+      "basel": {
+        "red": 1,
+        "yellow": 4,
+        "green": 3
+      },
+      "var_status": "fail",
+      "es_exceptions": 90,
+      "es_expected": 55.77500000000005,
+      "severity": 1.227223883033852,
+      "z2": -0.9802805822150888,
+      "es_zone": "yellow",
+      "es_windows": {
+        "red": 1,
+        "yellow": 4,
+        "green": 3
+      },
+      "latest_var_zone": "green",
+      "latest_es_zone": "green",
+      "mean_var": 0.024042870267901358,
+      "mean_es": 0.02416125716709954
+    },
+    {
+      "model": "ewma_t5",
+      "label": "EWMA, Student-t 5",
+      "observations": 2231,
+      "exceptions": 43,
+      "rate": 0.01927386822052891,
+      "kupiec_p": 9.44453174444521e-05,
+      "independence_p": 0.05764962932688307,
+      "basel": {
+        "red": 1,
+        "yellow": 3,
+        "green": 4
+      },
+      "var_status": "fail",
+      "es_exceptions": 87,
+      "es_expected": 55.77500000000005,
+      "severity": 1.0630802407424107,
+      "z2": -0.65823363414773,
+      "es_zone": "green",
+      "es_windows": {
+        "red": 0,
+        "yellow": 3,
+        "green": 5
+      },
+      "latest_var_zone": "green",
+      "latest_es_zone": "green",
+      "mean_var": 0.026937873804688418,
+      "mean_es": 0.02819191061527451
+    },
+    {
+      "model": "ewma_t4",
+      "label": "EWMA, Student-t 4",
+      "observations": 2231,
+      "exceptions": 42,
+      "rate": 0.01882563872702824,
+      "kupiec_p": 0.00018900391631216545,
+      "independence_p": 0.05053305912288086,
+      "basel": {
+        "red": 1,
+        "yellow": 3,
+        "green": 4
+      },
+      "var_status": "fail",
+      "es_exceptions": 90,
+      "es_expected": 55.77500000000005,
+      "severity": 1.0159837912469842,
+      "z2": -0.6394180405599013,
+      "es_zone": "green",
+      "es_windows": {
+        "red": 0,
+        "yellow": 3,
+        "green": 5
+      },
+      "latest_var_zone": "green",
+      "latest_es_zone": "green",
+      "mean_var": 0.027382572873824503,
+      "mean_es": 0.029184788276193287
+    },
+    {
+      "model": "ewma_t3",
+      "label": "EWMA, Student-t 3",
+      "observations": 2231,
+      "exceptions": 43,
+      "rate": 0.01927386822052891,
+      "kupiec_p": 9.44453174444521e-05,
+      "independence_p": 0.05764962932688307,
+      "basel": {
+        "red": 1,
+        "yellow": 3,
+        "green": 4
+      },
+      "var_status": "fail",
+      "es_exceptions": 104,
+      "es_expected": 55.77500000000005,
+      "severity": 0.9410856436691227,
+      "z2": -0.7547809402346692,
+      "es_zone": "yellow",
+      "es_windows": {
+        "red": 0,
+        "yellow": 3,
+        "green": 5
+      },
+      "latest_var_zone": "green",
+      "latest_es_zone": "green",
+      "mean_var": 0.027094061380263795,
+      "mean_es": 0.03007084520650696
+    },
+    {
+      "model": "fhs",
+      "label": "Filtered HS, all residuals",
+      "observations": 2231,
+      "exceptions": 18,
+      "rate": 0.008068130883012102,
+      "kupiec_p": 0.34264018098843096,
+      "independence_p": 0.007371247646479403,
+      "basel": {
+        "red": 0,
+        "yellow": 0,
+        "green": 8
+      },
+      "var_status": "fail",
+      "es_exceptions": 51,
+      "es_expected": 55.77500000000005,
+      "severity": 0.9747930041635914,
+      "z2": 0.10866081197054023,
+      "es_zone": "green",
+      "es_windows": {
+        "red": 0,
+        "yellow": 0,
+        "green": 8
+      },
+      "latest_var_zone": "green",
+      "latest_es_zone": "green",
+      "mean_var": 0.035078328560498154,
+      "mean_es": 0.03701658850821838
+    },
+    {
+      "model": "fhs_2y",
+      "label": "Filtered HS, latest 500",
+      "observations": 2231,
+      "exceptions": 22,
+      "rate": 0.009861048857014791,
+      "kupiec_p": 0.9472869255674502,
+      "independence_p": 0.017766867455946883,
+      "basel": {
+        "red": 0,
+        "yellow": 1,
+        "green": 7
+      },
+      "var_status": "warn",
+      "es_exceptions": 58,
+      "es_expected": 55.77500000000005,
+      "severity": 1.0243868277840982,
+      "z2": -0.0652521024021091,
+      "es_zone": "green",
+      "es_windows": {
+        "red": 0,
+        "yellow": 1,
+        "green": 7
+      },
+      "latest_var_zone": "green",
+      "latest_es_zone": "green",
+      "mean_var": 0.03478616278474231,
+      "mean_es": 0.03454850784990664
+    }
+  ]
+}

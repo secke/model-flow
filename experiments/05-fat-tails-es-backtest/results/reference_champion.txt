@@ -1,0 +1,24 @@
+left   champion_external.toml#5  run_hash 7ddb35d70d7f86fb  modelflow 0.16.0
+right  champion_builtin.toml#6  run_hash b44b76036d6863ab  modelflow 0.16.0
+
+step                   state         compared  changed  within  breaches     max rel  cause
+returns                identical         2511        0       0         0              
+model                  within tol.       2481     2349    2349         0    6.5e-14%  version 0.1.0 → 1.0.0  ← origin
+
+model (2349 changes, 0 beyond tolerance)
+  field                                                       changed   beyond      max |Δ|   max rel       mean Δ
+  model.var[*]                                                   2349        0    4.163e-17  6.5e-14%   -4.698e-18
+  largest changes:
+    model.var[725]                                                   0.016115 → 0.016115       -1.041e-17 (6.5e-14%)      rel 1e-12
+    model.var[691]                                                  0.0228385 → 0.0228385      -1.388e-17 (6.1e-14%)      rel 1e-12
+    model.var[690]                                                  0.0235523 → 0.0235523      -1.388e-17 (5.9e-14%)      rel 1e-12
+    model.var[1637]                                                  0.017938 → 0.017938       -1.041e-17 (5.8e-14%)      rel 1e-12
+    model.var[1633]                                                 0.0182342 → 0.0182342      -1.041e-17 (5.7e-14%)      rel 1e-12
+    model.var[739]                                                  0.0122488 → 0.0122488      -6.939e-18 (5.7e-14%)      rel 1e-12
+    model.var[576]                                                   0.018539 → 0.018539       -1.041e-17 (5.6e-14%)      rel 1e-12
+    model.var[616]                                                  0.0185707 → 0.0185707      -1.041e-17 (5.6e-14%)      rel 1e-12
+    model.var[932]                                                  0.0192944 → 0.0192944      -1.041e-17 (5.4e-14%)      rel 1e-12
+    model.var[735]                                                  0.0128742 → 0.0128742      -6.939e-18 (5.4e-14%)      rel 1e-12
+  … 2339 more
+
+OK: 2349 changes, all within tolerance; origin: model (version 0.1.0 → 1.0.0)
