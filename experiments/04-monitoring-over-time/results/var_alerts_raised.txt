@@ -1,0 +1,13 @@
+ALERT backtest-red on 2020-02-28: backtest.latest_basel_window.zone is red — Basel red zone: capital multiplier 4, model review required
+ALERT zone-change on 2020-02-28: backtest.latest_basel_window.zone changes (yellow → red)
+ALERT zone-change on 2020-08-31: backtest.latest_basel_window.zone changes (red → yellow)
+ALERT drift-persistent on 2020-08-31: drift.psi > 0.25, 3 dates in a row (0.285554) — Returns no longer match the calibration sample: review the approval evidence
+ALERT backtest-red on 2020-09-30: backtest.latest_basel_window.zone is red — Basel red zone: capital multiplier 4, model review required
+ALERT zone-change on 2020-09-30: backtest.latest_basel_window.zone changes (yellow → red)
+ALERT zone-change on 2021-02-26: backtest.latest_basel_window.zone changes (red → yellow)
+ALERT drift-persistent on 2022-06-30: drift.psi > 0.25, 3 dates in a row (0.423868) — Returns no longer match the calibration sample: review the approval evidence
+ALERT zone-change on 2022-11-30: backtest.latest_basel_window.zone changes (yellow → green)
+ALERT zone-change on 2024-08-30: backtest.latest_basel_window.zone changes (green → yellow)
+ALERT zone-change on 2024-09-30: backtest.latest_basel_window.zone changes (yellow → green)
+ALERT zone-change on 2024-10-31: backtest.latest_basel_window.zone changes (green → yellow)
+ALERT zone-change on 2026-04-30: backtest.latest_basel_window.zone changes (yellow → green)

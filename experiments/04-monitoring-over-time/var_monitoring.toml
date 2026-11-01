@@ -1,6 +1,8 @@
 # Ongoing monitoring of a VaR model frozen at the end of 2019: RiskMetrics EWMA (lambda = 0.94,
 # normal quantile), checked at every month end on the history known at that date.
 name = "sp500-var-monitoring"
+# The run status follows the regulatory window and the drift, not the whole-history backtest
+status_from = ["backtest.latest_basel_window.zone", "drift.status"]
 
 [[step]]
 name = "returns"
@@ -65,3 +67,23 @@ kind = "var_historical"
 version = "1.0.0"
 deps = ["recent"]
 params = { alpha = 0.99 }
+
+
+# Monitoring alerts, evaluated on the series of month ends (mf alerts, server webhooks)
+[[alert]]
+name = "backtest-red"
+path = "backtest.latest_basel_window.zone"
+one_of = ["red"]
+message = "Basel red zone: capital multiplier 4, model review required"
+
+[[alert]]
+name = "zone-change"
+path = "backtest.latest_basel_window.zone"
+changes = true
+
+[[alert]]
+name = "drift-persistent"
+path = "drift.psi"
+above = 0.25
+consecutive = 3
+message = "Returns no longer match the calibration sample: review the approval evidence"

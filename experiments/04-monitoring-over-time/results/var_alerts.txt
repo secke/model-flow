@@ -1,0 +1,24 @@
+sp500-var-monitoring: 3 alert rules, 82 dates, latest 2026-10-28
+
+ok     backtest-red  backtest.latest_basel_window.zone is red  (2 episodes)
+       Basel red zone: capital multiplier 4, model review required
+       2020-02-28 → 2020-07-31 (6 dates)  red
+       2020-09-30 → 2021-01-29 (5 dates)  red
+
+ok     zone-change  backtest.latest_basel_window.zone changes  (9 episodes)
+       2020-02-28  yellow → red
+       2020-08-31  red → yellow
+       2020-09-30  yellow → red
+       2021-02-26  red → yellow
+       2022-11-30  yellow → green
+       2024-08-30  green → yellow
+       2024-09-30  yellow → green
+       2024-10-31  green → yellow
+       2026-04-30  yellow → green
+
+ok     drift-persistent  drift.psi > 0.25, 3 dates in a row  (2 episodes)
+       Returns no longer match the calibration sample: review the approval evidence
+       2020-06-30 → 2021-05-28 (12 dates, raised 2020-08-31)  0.285554
+       2022-04-29 → 2023-10-31 (19 dates, raised 2022-06-30)  0.423868
+
+no active alert

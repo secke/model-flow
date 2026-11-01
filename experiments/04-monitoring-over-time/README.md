@@ -2,7 +2,7 @@
 
 **Question.** Supervisors expect models to be monitored continuously, not only validated once (SS1/23, principle 4; SR 26-2). Can ModelFlow run the same validation at every date of a history, keep each date replayable, and show how the verdicts evolve, without a script that copies pipelines around?
 
-**Date run:** 2026-10-31 · **ModelFlow:** v0.14.0 · **Engine:** quantparity `eccd513`
+**Date run:** 2026-10-31 (parts A, B) and 2026-11-01 (part C) · **ModelFlow:** v0.14.0, v0.15.0 for part C · **Engine:** quantparity `eccd513`
 
 ## What v0.14 adds
 
@@ -40,6 +40,8 @@ $MF run var_monitoring.toml --as-of all       # 82 month ends
 $MF run ecb.toml --as-of all                  # 58 month ends
 $MF series var_monitoring.toml backtest.latest_basel_window.zone backtest.latest_basel_window.exceptions \
     backtest.latest_basel_window.plus_factor drift.psi drift.status var_250d.var
+$MF series var_monitoring.toml                # the outputs that make the run status (v0.15)
+$MF alerts var_monitoring.toml                # alert rules over the 82 month ends (v0.15)
 $MF series ecb.toml spot_check.failed spot_check.max_abs_diff spot_check_naive.max_abs_diff \
     'curve.pillars[maturity=10.0].zero_rate'
 ```
@@ -102,6 +104,56 @@ The external models are Python processes, so parallelism is limited by process s
 
 The series makes the trend of experiment 02's first finding visible directly: the largest price error of the naive reading of the ECB par yields grows from 0.027 (January 2022, 10-year rate 0.03%) to 0.718 per 100 of face value (September 2026, 3.58%). Its correlation with the 10-year rate over the 58 dates is 0.94. Comparing two consecutive dates (`mf diff ecb.toml@2023-05-31 ecb.toml@2023-06-30`, [output](results/ecb_2023-05-31_vs_2023-06-30.txt)) traces the monthly changes to the new ECB data. Every other change is classified as downstream.
 
+## C. Run status and alerts that a monitoring team can act on (v0.15)
+
+Parts A and B left two gaps, both found on these data: every run had the status `fail` (the whole-history backtest), and the monitoring signals had to be read off the series by eye. v0.15 adds two declarations to the pipeline ([`var_monitoring.toml`](var_monitoring.toml)):
+
+```toml
+# The run status follows the regulatory window and the drift, not the whole-history backtest
+status_from = ["backtest.latest_basel_window.zone", "drift.status"]
+
+[[alert]]
+name = "backtest-red"
+path = "backtest.latest_basel_window.zone"
+one_of = ["red"]
+message = "Basel red zone: capital multiplier 4, model review required"
+
+[[alert]]
+name = "zone-change"
+path = "backtest.latest_basel_window.zone"
+changes = true
+
+[[alert]]
+name = "drift-persistent"
+path = "drift.psi"
+above = 0.25
+consecutive = 3
+message = "Returns no longer match the calibration sample: review the approval evidence"
+```
+
+Traffic lights count as verdicts (green = pass, yellow = warn, red = fail); a chosen output that is missing counts as `fail`. The rules are evaluated on the series of results. `mf run` prints the alerts raised on the dates it runs, `mf alerts` lists the episodes and exits with 1 while an alert is active, and the server sends each raised alert to its webhook. The model and its outputs are unchanged: `mf diff` finds identical results on 82 of 82 dates between the v0.14 and v0.15 runs (only the engine version in the built-in steps' fingerprints differs).
+
+**Run status** ([`results/var_status.csv`](results/var_status.csv)):
+
+| | v0.14 (every check) | v0.15 (`status_from`) |
+|---|---:|---:|
+| fail | 82 | 36: 4 red zone only, 25 drift only, 7 both |
+| warn | 0 | 38 |
+| pass | 0 | 8 (March–September 2024 except August, April–May 2026) |
+
+**Alerts** ([raised by `mf run`](results/var_alerts_raised.txt), [episodes](results/var_alerts.txt), [Markdown](results/var_alerts.md)): 13 alerts over 82 month ends.
+
+| Alert | Raised | Episodes |
+|---|---|---|
+| backtest-red | 2020-02-28, 2020-09-30 | 6 and 5 months in the red zone |
+| zone-change | 9 times | the 9 traffic-light changes of part A |
+| drift-persistent | 2020-08-31, 2022-06-30 | PSI above 0.25 from June 2020 to May 2021 (12 months), from April 2022 to October 2023 (19 months) |
+
+**Findings.**
+
+5. **The status now separates the months that need action.** 21 of the 29 green months are not `pass`, because the data drift. That is finding 1 of part A, which a monitoring dashboard can now show directly instead of a uniform `fail`.
+6. **Persistence turns 32 failing months into 2 alerts.** The PSI fails in 32 months; with `consecutive = 3`, the alert is raised twice, on the third month of each lasting regime change. The one-month spike after the April 2025 tariff shock (PSI fail in June 2025 only) raises no drift alert, and the zone stays yellow, with 9 exceptions and an add-on of 0.85 from April to June 2025, so no zone alert either. A rule on the exception count (`backtest.latest_basel_window.exceptions`, `above = 8`) would be the one to add for that case. The second drift alert, on 2022-06-30, comes five months before the backtest turns green and stays active through the whole green year that follows (until October 2023): the warning that the approval evidence is out of date reaches the monitoring team while the traffic light says nothing.
+
 ## What this experiment changed in ModelFlow
 
 | Finding | Status |
@@ -109,5 +161,5 @@ The series makes the trend of experiment 02's first finding visible directly: th
 | A series of validations needed one pipeline per date (experiment 02) | **added** in v0.14.0: dated pipelines, `--as-of DATE / all / new`, parallel runs |
 | No view of a result over time | **added**: `mf series`, API `series`, SDK `series()` |
 | Diff and replay did not know which date a run was for | **added**: the as-of date is part of the manifest, the history, the references (`@date`) and the diff causes |
-| The overall run status mixes the whole-history backtest with the regulatory window | open: a per-pipeline choice of the checks that make the status |
-| Monitoring thresholds (PSI fail for 3 consecutive months, zone changes) do not raise alerts yet | open: alert rules on series, through the existing webhooks |
+| The overall run status mixes the whole-history backtest with the regulatory window | **added** in v0.15.0: `status_from`, traffic lights as verdicts |
+| Monitoring thresholds (PSI fail for 3 consecutive months, zone changes) do not raise alerts | **added** in v0.15.0: `[[alert]]` rules (`one_of`, `above`, `below`, `changes`, `consecutive`), `mf alerts`, API, webhooks, SDK |

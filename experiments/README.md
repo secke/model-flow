@@ -16,7 +16,7 @@ ModelFlow's examples use synthetic data, which proves that the code works but no
 | 01 | [99% VaR backtest on the S&P 500](01-sp500-var-backtest/README.md) | FRED, 2016–2026, 2,511 days | Both textbook models fail over ten years (historical VaR: clustered exceptions, red over Nov 2021 – Nov 2022; normal EWMA: 2.3% exception rate, red during Covid), yet both are green on the current regulatory window |
 | 02 | [Reconstruction of the ECB AAA yield curve](02-ecb-aaa-curve/README.md) | ECB, 58 month ends 2022–2026, 358 maturities | The ECB "par yields" are continuous-coupon par yields: reading them as annual par rates is wrong by up to 7.5 bp. Rebuilt consistently, the bootstrap matches the ECB curve to 2e-12 bp at every pillar; interpolation error is below 0.12 bp beyond 10 years but up to 87 bp when extrapolating below 1 year |
 | 03 | [Change impact analysis with `mf diff`](03-change-impact/README.md) | S&P 500 and ECB data of 01 and 02 | A Student-t challenger removes 10 of 57 exceptions but still fails; a curve methodology fix moves pillar zero rates by up to 7.5 bp (beyond tolerance on 55 of 58 dates) while the check's verdict does not change; the v0.13 engine reproduces 706,000 recorded values exactly |
-| 04 | [Ongoing monitoring over time](04-monitoring-over-time/README.md) | S&P 500 point-in-time snapshots (82 month ends), ECB curves (58) | A VaR model frozen in 2019 is red for 11 months after Covid and needs a capital add-on in 53 of 82 months; for a whole year (Nov 2022 – Oct 2023) its backtest is green while its calibration data fails the drift test every month. The ECB check of 02 runs from one pipeline instead of 58 copies, in 15 s |
+| 04 | [Ongoing monitoring over time](04-monitoring-over-time/README.md) | S&P 500 point-in-time snapshots (82 month ends), ECB curves (58) | A VaR model frozen in 2019 is red for 11 months after Covid and needs a capital add-on in 53 of 82 months; for a whole year (Nov 2022 – Oct 2023) its backtest is green while its calibration data fails the drift test every month. The ECB check of 02 runs from one pipeline instead of 58 copies, in 15 s. With alert rules (v0.15), the 32 months of failing drift become 2 alerts, raised on the third month of each regime change |
 
 ## What the experiments changed in ModelFlow
 
@@ -32,8 +32,8 @@ ModelFlow's examples use synthetic data, which proves that the code works but no
 | 03 | An engine upgrade could not be told apart from a model change | fixed: the engine is recorded in every manifest and named by the diff |
 | 03 | Arrays were compared by position | fixed: arrays of objects are matched by identifier |
 | 03, 02 | A series of validations needed one pipeline per date and a loop | added in v0.14.0: dated pipelines (`${as_of}`), `mf run --as-of all / new` in parallel, `mf series` |
-| 04 | The run status mixes the whole-history backtest with the regulatory window | open |
-| 04 | Monitoring thresholds over time do not raise alerts | open |
+| 04 | The run status mixes the whole-history backtest with the regulatory window | fixed in v0.15: `status_from` |
+| 04 | Monitoring thresholds over time do not raise alerts | fixed in v0.15: `[[alert]]` rules, `mf alerts`, webhooks |
 
 ## Backlog
 
@@ -41,7 +41,7 @@ Ordered by the value they would have had in the experiments above.
 
 1. **Rate-based tolerances for curve checks** (02): `mf diff` now compares two curves in basis points per maturity band (03); a check *against a reference* (`pricing_benchmark`) still has price tolerances only. Next: a `curve_check` step with the same tolerance rules.
 2. **Fat-tailed challenger VaR models and ES backtesting** (01): Student-t EWMA, filtered historical simulation, expected shortfall backtests (Acerbi–Székely), in quantparity with a reference check.
-3. ~~**Validation over time**~~ (02): done in v0.14 (experiment 04). Next: alert rules on series (e.g. PSI in fail three months in a row) through the existing webhooks, and a per-pipeline choice of the checks that make the run status.
+3. ~~**Validation over time**~~ (02): done in v0.14 (experiment 04). Alert rules on series and the per-pipeline choice of the checks that make the run status: done in v0.15 (experiment 04, part C).
 4. **Zero-rate pillars and quote conventions in the curve builder** (02): accept zero rates and continuous-coupon par yields directly, in quantparity, reconciled with QuantLib.
 5. **Flag pricing outside a curve's pillar range** (02): warn instead of silently extrapolating.
 
