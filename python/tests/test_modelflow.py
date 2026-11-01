@@ -235,3 +235,18 @@ def test_status_from_and_alert_rules(tmp_path):
     assert [e["raised"] for e in by_name["zone-change"]["episodes"]] == ["#2", "#4"]
     psi = by_name["psi-high"]["episodes"]
     assert (psi[0]["start"], psi[0]["raised"], psi[0]["ongoing"]) == ("#2", "#3", True)
+
+
+def test_var_es_challengers(tmp_path):
+    rows = "".join(f"{-0.05 if k % 41 == 0 else 0.004 * ((k * 7919 % 13) - 6) / 6}\n" for k in range(800))
+    (tmp_path / "r.csv").write_text("ret\n" + rows)
+    p = mf.Pipeline("challengers", workdir=tmp_path)
+    p.add("returns", "csv", path="r.csv", column="ret")
+    for name, params in [("normal", {}), ("t4", {"distribution": "t", "nu": 4}), ("fhs", {"distribution": "fhs"})]:
+        p.add(name, "var_model", deps=["returns"], params=params)
+        p.add(f"es_{name}", "es_backtest", deps=["returns", name], params={"from": 280})
+    run = p.run()
+    assert run.output("fhs")["start"] == 280
+    assert {run.output(f"es_{n}")["observations"] for n in ("normal", "t4", "fhs")} == {520}
+    assert "var_model" in mf.builtin_kinds() and "es_backtest" in mf.builtin_kinds()
+    assert p.verify() == []

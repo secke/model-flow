@@ -95,7 +95,7 @@ The full walkthrough, with the web UI, three roles (model owner, validator, audi
 | `mf-server` | REST API, bearer tokens and OIDC SSO, roles and segregation of duties, validation decisions, append-only audit log, model inventory, scheduler, webhook alerts, web UI |
 | `mf-cli` | the `mf` binary: `run`, `verify`, `runs`, `show`, `report`, `diff`, `series`, `alerts` |
 | `mf-python` | the `modelflow` Python package (PyO3): pipelines, Python functions as steps, runs, replay, diff, reports |
-| [`quantparity`](https://github.com/secke/quantparity) | external dependency, pinned by git revision: BSM, Black-76, CRR, bonds, single and multi-curve (€STR / Euribor), VaR/ES, stress, FRTB PLA, Kupiec, Christoffersen, Basel traffic light, PSI, AUC/Gini/KS, PD calibration |
+| [`quantparity`](https://github.com/secke/quantparity) | external dependency, pinned by git revision: BSM, Black-76, CRR, bonds, single and multi-curve (€STR / Euribor), VaR/ES, VaR / ES forecasting models (EWMA normal or Student-t, filtered historical simulation), stress, FRTB PLA, Kupiec, Christoffersen, Basel traffic light, Acerbi-Székely ES backtests, PSI, AUC/Gini/KS, PD calibration |
 
 ## Results
 
@@ -112,6 +112,8 @@ Reported by quantparity's own CI, which reconciles every function with QuantLib:
 | €STR OIS curve, discount factors 1Y–30Y | 30 | 1.8e-13 |
 | Euribor 6M swaps with €STR discounting, NPV on 10M EUR | 54 | 2.0e-6 EUR |
 | American options, CRR 500 steps | 96 | 1.1e-3 ([explained](https://github.com/secke/quantparity#finding-quantlibs-crr-tree-does-not-use-the-martingale-probability)) |
+| Student-t quantile and cdf, 3 to 30 degrees of freedom | 77 × 2 | 1.4e-13 |
+| Expected shortfall multipliers, normal and Student-t (numerical integration of QuantLib densities) | 16 | 1.4e-12 |
 
 ### ModelFlow examples: QuantLib as the candidate pricer under validation
 
@@ -129,7 +131,7 @@ Moving the engine from ModelFlow's former in-house crates to quantparity changed
 
 ### Real market data
 
-[Experiments](experiments/README.md) run ModelFlow on public data, with every run fingerprinted and replayed: a 99% VaR backtest of the S&P 500 over ten years, the reconstruction of the ECB AAA yield curve at 58 month ends, the impact of a challenger model, a methodology fix and an engine upgrade measured with `mf diff`, and the monthly monitoring of a VaR model frozen in 2019, on point-in-time data until 2026. Each experiment lists what it changed in ModelFlow.
+[Experiments](experiments/README.md) run ModelFlow on public data, with every run fingerprinted and replayed: a 99% VaR backtest of the S&P 500 over ten years, the reconstruction of the ECB AAA yield curve at 58 month ends, the impact of a challenger model, a methodology fix and an engine upgrade measured with `mf diff`, the monthly monitoring of a VaR model frozen in 2019, on point-in-time data until 2026, and fat-tailed challengers with expected shortfall backtests. Each experiment lists what it changed in ModelFlow.
 
 ## Governance
 
@@ -205,7 +207,9 @@ params = { returns = "returns", forecasts = "ewma_model", alpha = 0.99 }
 | `process` | **external model, any language** | `command`, `code`, `timeout_secs` (300), `env`, `pass_env`, `memory_mb`, `cpu_secs`, `file_size_mb`, `max_output_mb` (256) |
 | `var_historical` | historical VaR | `alpha` |
 | `kupiec_backtest` | rolling backtest of historical VaR | `alpha`, `window`, `dates` (optional) |
-| `backtest_forecasts` | backtest of a model's VaR forecasts | `returns`, `forecasts`, `alpha`, `dates` (optional) |
+| `backtest_forecasts` | backtest of a model's VaR forecasts | `returns`, `forecasts`, `alpha`, `dates` (optional), `from` (first return evaluated) |
+| `var_model` | one-day VaR and ES forecasts: EWMA volatility with normal, Student-t (unit variance) or filtered historical simulation innovations | `distribution` (`normal`, `t`, `fhs`), `lambda` (0.94), `warmup` (30), `alpha` (0.99), `es_alpha` (0.975), `nu`, `window`, `min_residuals` (250) |
+| `es_backtest` | expected shortfall backtest (Acerbi-Székely Z1, Z2), on the whole sample and by 250-day window | `returns`, `forecasts` (`es`, `es_var`), `alpha` (default: the forecasts' ES level), `dates`, `from` |
 | `psi` | Population Stability Index | `baseline`, `current`, `column`, `bins` |
 | `pd_discrimination` | AUC, Gini, KS | `score`, `default`, `min_gini_pass`, `min_gini_warn` |
 | `pd_calibration` | per-grade binomial test, Hosmer-Lemeshow | `grade`, `pd`, `default` |
@@ -217,7 +221,7 @@ params = { returns = "returns", forecasts = "ewma_model", alpha = 0.99 }
 | `stress_test` | named stress scenarios with loss limits | `trades`, `scenarios`, `market` |
 | `pnl_attribution` | FRTB P&L attribution test (Spearman, KS, zones) | `hypothetical`, `risk_theoretical` or `sensitivities` + `scenarios` |
 
-VaR backtests combine **Kupiec** (POF), **Christoffersen** (independence, conditional coverage) and the **Basel traffic light** (with the multiplier add-on over 250 days at 99%). Besides the summary statistics, both backtests list every exception (`exception_list`: date, return, VaR, excess loss), apply the traffic light to consecutive regulatory 250-day windows ending at the latest observation (`basel_windows`, `latest_basel_window`, with the multiplier add-on) and, when `dates` points to a step with `YYYYMMDD` dates aligned with the returns, break exceptions down by year (`by_year`). Every test returns `pass`, `warn` or `fail`. A pricing gap up to `abs + rel × |reference|` passes, up to 10 times that warns, beyond fails; a missing candidate price fails.
+VaR backtests combine **Kupiec** (POF), **Christoffersen** (independence, conditional coverage) and the **Basel traffic light** (with the multiplier add-on over 250 days at 99%). Besides the summary statistics, both backtests list every exception (`exception_list`: date, return, VaR, excess loss), apply the traffic light to consecutive regulatory 250-day windows ending at the latest observation (`basel_windows`, `latest_basel_window`, with the multiplier add-on) and, when `dates` points to a step with `YYYYMMDD` dates aligned with the returns, break exceptions down by year (`by_year`). The ES backtest counts the losses beyond the VaR at the ES level and compares them with the forecast ES: Z2 = Σ X_t I_t / (T (1-α) ES_t) + 1 is 0 when the ES is right, and its zone is green above -0.70, yellow down to -1.8 and red below, the 5% and 0.01% thresholds of Acerbi and Székely (2014) on 250 days. Every test returns `pass`, `warn` or `fail`. A pricing gap up to `abs + rel × |reference|` passes, up to 10 times that warns, beyond fails; a missing candidate price fails.
 
 ### External model protocol and isolation
 
@@ -481,8 +485,8 @@ The schema is created at startup under an advisory lock, so several instances ca
 ## Deployment
 
 ```bash
-docker build -t modelflow:0.15.0 .
-docker run --rm modelflow:0.15.0 new-token          # fill in deploy/server.docker.toml
+docker build -t modelflow:0.16.0 .
+docker run --rm modelflow:0.16.0 new-token          # fill in deploy/server.docker.toml
 docker compose up --build                          # http://127.0.0.1:8080
 kubectl apply -k deploy/k8s                        # after filling in deploy/k8s/secret.yaml
 ```

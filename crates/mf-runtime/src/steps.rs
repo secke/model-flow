@@ -1,7 +1,10 @@
 use mf_core::{hash_bytes, Error, Inputs, Step};
 use quantparity::benchmark::{compare, prices_from_value, reference_prices, trades_from_value, Tolerances};
 use quantparity::curves::Market;
-use quantparity::validation::{calibration, discrimination, historical_var, psi, traffic_light, var_backtest};
+use quantparity::validation::{
+    calibration, discrimination, es_backtest, historical_var, psi, traffic_light, var_backtest,
+};
+use quantparity::var_models::{var_forecasts, Innovations};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
@@ -287,6 +290,8 @@ impl BuiltinStep {
         "var_historical",
         "kupiec_backtest",
         "backtest_forecasts",
+        "var_model",
+        "es_backtest",
         "psi",
         "price_portfolio",
         "pricing_benchmark",
@@ -347,20 +352,47 @@ impl BuiltinStep {
         offset: usize,
         inputs: &Inputs,
     ) -> Result<(), Error> {
-        let dates = match self.params.get("dates").and_then(Value::as_str) {
-            Some(_) => Some(series(
-                self.dep(inputs, "dates", usize::MAX)?,
-                self.params.get("date_column").and_then(Value::as_str),
-                &self.name,
-            )?),
-            None => None,
-        };
+        let dates = self.dates(inputs)?;
         if let (Value::Object(o), Value::Object(d)) =
             (out, backtest_details(realized, var, alpha, offset, dates.as_deref()))
         {
             o.extend(d);
         }
         Ok(())
+    }
+
+    /// Forecasts from the `from` parameter (index of the first return evaluated) when it is after
+    /// their start: models with different warm-ups are then backtested on the same days.
+    fn evaluated_from(&self, start: usize, f: &[f64]) -> Result<(usize, Vec<f64>), Error> {
+        let from = match self.params.get("from") {
+            None => return Ok((start, f.to_vec())),
+            Some(v) => v
+                .as_u64()
+                .ok_or_else(|| err(&self.name, "`from`: index of the first return evaluated"))?
+                as usize,
+        };
+        if from < start {
+            return Err(err(
+                &self.name,
+                format!("`from` = {from} is before the first forecast ({start})"),
+            ));
+        }
+        if from >= start + f.len() {
+            return Err(err(&self.name, format!("`from` = {from} is after the last forecast")));
+        }
+        Ok((from, f[from - start..].to_vec()))
+    }
+
+    /// Optional `dates` dependency (a series, or column `date_column` of a table).
+    fn dates(&self, inputs: &Inputs) -> Result<Option<Vec<f64>>, Error> {
+        match self.params.get("dates").and_then(Value::as_str) {
+            Some(_) => Ok(Some(series(
+                self.dep(inputs, "dates", usize::MAX)?,
+                self.params.get("date_column").and_then(Value::as_str),
+                &self.name,
+            )?)),
+            None => Ok(None),
+        }
     }
 
     fn json<T: serde::Serialize>(&self, v: Option<T>, why: &str) -> Result<Value, Error> {
@@ -415,9 +447,102 @@ impl Step for BuiltinStep {
                 if var.is_empty() || start + var.len() > r.len() {
                     return Err(err(&self.name, "forecasts are empty or longer than the series"));
                 }
+                let (start, var) = self.evaluated_from(start, &var)?;
                 let realized = &r[start..start + var.len()];
                 let mut out = self.json(var_backtest(realized, &var, alpha), "backtest not possible")?;
                 self.add_details(&mut out, realized, &var, alpha, start, inputs)?;
+                Ok(out)
+            }
+            // VaR / ES forecasts: EWMA volatility, normal, Student-t or filtered historical simulation.
+            "var_model" => {
+                let r = series(self.dep(inputs, "returns", 0)?, self.column(), &self.name)?;
+                let p = &self.params;
+                let innovations = match param_str(p, "distribution", "normal") {
+                    "normal" => Innovations::Normal,
+                    "t" | "student_t" => Innovations::StudentT {
+                        nu: p.get("nu").and_then(Value::as_f64).ok_or_else(|| {
+                            err(
+                                &self.name,
+                                "`nu` (degrees of freedom) is required for `distribution = \"t\"`",
+                            )
+                        })?,
+                    },
+                    "fhs" => Innovations::Filtered {
+                        window: p.get("window").and_then(Value::as_u64).map(|w| w as usize),
+                        min_residuals: param_f64(p, "min_residuals", 250.0) as usize,
+                    },
+                    d => return Err(err(&self.name, format!("unknown distribution `{d}` (normal, t, fhs)"))),
+                };
+                let f = var_forecasts(
+                    &r,
+                    param_f64(p, "lambda", 0.94),
+                    param_f64(p, "warmup", 30.0) as usize,
+                    alpha,
+                    param_f64(p, "es_alpha", 0.975),
+                    innovations,
+                )
+                .map_err(|e| err(&self.name, e))?;
+                Ok(serde_json::to_value(f).unwrap())
+            }
+            // Acerbi-Székely ES backtest of forecasts {"start", "es", "es_var"} (`var_model`, or an
+            // external model), over the whole sample and on consecutive 250-day windows.
+            "es_backtest" => {
+                let r = series(self.dep(inputs, "returns", 0)?, self.column(), &self.name)?;
+                let f = self.dep(inputs, "forecasts", 1)?;
+                let start = f.get("start").and_then(Value::as_u64).unwrap_or(0) as usize;
+                let field = |k: &str| {
+                    series(f.get(k).unwrap_or(&Value::Null), None, &self.name).map_err(|_| {
+                        err(
+                            &self.name,
+                            format!("forecasts: `{k}` is missing (ES and VaR at the ES level)"),
+                        )
+                    })
+                };
+                let (es, es_var) = (field("es")?, field("es_var")?);
+                if es.is_empty() || es.len() != es_var.len() || start + es.len() > r.len() {
+                    return Err(err(
+                        &self.name,
+                        "forecasts are empty, of different lengths or longer than the series",
+                    ));
+                }
+                let (_, es_var) = self.evaluated_from(start, &es_var)?;
+                let (start, es) = self.evaluated_from(start, &es)?;
+                let conf = self
+                    .params
+                    .get("alpha")
+                    .and_then(Value::as_f64)
+                    .or_else(|| f.get("es_confidence").and_then(Value::as_f64))
+                    .unwrap_or(0.975);
+                let realized = &r[start..start + es.len()];
+                let mut out = self.json(es_backtest(realized, &es_var, &es, conf), "invalid forecasts")?;
+                let dates = self.dates(inputs)?;
+                let date = |i: usize| dates.as_ref().and_then(|d| d.get(start + i)).map(|d| date_label(*d));
+                let n = realized.len();
+                let windows: Vec<Value> = (0..n / BASEL_WINDOW)
+                    .rev()
+                    .map(|k| n - (k + 1) * BASEL_WINDOW)
+                    .map(|a| {
+                        let b = a + BASEL_WINDOW;
+                        let t = es_backtest(&realized[a..b], &es_var[a..b], &es[a..b], conf).unwrap();
+                        let mut w = json!({"exceptions": t.exceptions, "z2": t.z2, "z1": t.z1, "zone": t.zone,
+                                           "status": t.status});
+                        match (date(a), date(b - 1)) {
+                            (Some(x), Some(y)) => {
+                                w["from"] = x;
+                                w["to"] = y;
+                            }
+                            _ => {
+                                w["from"] = json!(start + a);
+                                w["to"] = json!(start + b - 1);
+                            }
+                        }
+                        w
+                    })
+                    .collect();
+                if let Some(last) = windows.last() {
+                    out["latest_window"] = last.clone();
+                }
+                out["windows"] = json!(windows);
                 Ok(out)
             }
             "psi" => {
@@ -1028,6 +1153,66 @@ mod tests {
             .unwrap();
         assert_eq!(out["exceptions"], 1);
         assert!(out["traffic_light"]["zone"].is_string());
+    }
+
+    #[test]
+    fn var_model_feeds_var_and_es_backtests() {
+        let r: Vec<f64> = (0..900)
+            .map(|k| {
+                if k % 37 == 0 {
+                    -0.05
+                } else {
+                    0.004 * ((k * 7919 % 13) as f64 - 6.0) / 6.0
+                }
+            })
+            .collect();
+        // 28 days a month, 12 months a year, from 2020-01-01.
+        let days: Vec<f64> = (0..900)
+            .map(|k| ((2020 + k / 336) * 10_000 + (k % 336 / 28 + 1) * 100 + k % 28 + 1) as f64)
+            .collect();
+        let mut i = BTreeMap::new();
+        i.insert("r".to_string(), json!(r));
+        i.insert("d".to_string(), json!(days));
+        for (params, model) in [
+            (json!({}), "ewma-normal"),
+            (json!({"distribution": "t", "nu": 4}), "ewma-t"),
+            (json!({"distribution": "fhs", "min_residuals": 250}), "fhs"),
+        ] {
+            let f = builtin("var_model", &["r"], params).run(&i).unwrap();
+            assert_eq!(f["model"], model);
+            i.insert("f".to_string(), f);
+            let var = builtin("backtest_forecasts", &["r", "f"], json!({})).run(&i).unwrap();
+            assert!(var["traffic_light"]["zone"].is_string());
+            let es = builtin("es_backtest", &["r", "f", "d"], json!({"dates": "d"}))
+                .run(&i)
+                .unwrap();
+            assert_eq!(es["confidence"], 0.975);
+            let w = es["windows"].as_array().unwrap();
+            assert_eq!(es["latest_window"], *w.last().unwrap());
+            assert_eq!(es["latest_window"]["to"], "2022-09-04");
+            assert!(es["z2"].as_f64().unwrap() <= 1.0);
+        }
+        // Evaluated from the same day as the filtered simulation (index 280).
+        let f = builtin("var_model", &["r"], json!({})).run(&i).unwrap();
+        i.insert("f".to_string(), f);
+        let late = builtin("backtest_forecasts", &["r", "f"], json!({"from": 280}))
+            .run(&i)
+            .unwrap();
+        assert_eq!(late["observations"], 620);
+        let es = builtin("es_backtest", &["r", "f"], json!({"from": 280}))
+            .run(&i)
+            .unwrap();
+        assert_eq!(es["observations"], 620);
+        assert!(builtin("es_backtest", &["r", "f"], json!({"from": 10}))
+            .run(&i)
+            .is_err());
+        let e = builtin("var_model", &["r"], json!({"distribution": "t"}))
+            .run(&i)
+            .unwrap_err();
+        assert!(e.to_string().contains("nu"));
+        // Forecasts without an ES (a VaR-only external model) cannot be ES-backtested.
+        i.insert("f".to_string(), json!({"start": 1, "var": [0.02]}));
+        assert!(builtin("es_backtest", &["r", "f"], json!({})).run(&i).is_err());
     }
 
     #[test]

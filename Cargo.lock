@@ -1053,7 +1053,7 @@ dependencies = [
 
 [[package]]
 name = "mf-cli"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "mf-core",
  "mf-runtime",
@@ -1062,7 +1062,7 @@ dependencies = [
 
 [[package]]
 name = "mf-core"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1072,7 +1072,7 @@ dependencies = [
 
 [[package]]
 name = "mf-python"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "mf-core",
  "mf-runtime",
@@ -1083,7 +1083,7 @@ dependencies = [
 
 [[package]]
 name = "mf-runtime"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "csv",
  "libc",
@@ -1103,7 +1103,7 @@ dependencies = [
 
 [[package]]
 name = "mf-server"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "axum",
  "axum-server",
@@ -1582,8 +1582,8 @@ dependencies = [
 
 [[package]]
 name = "quantparity"
-version = "0.1.0"
-source = "git+https://github.com/secke/quantparity?rev=eccd51386b697edb7bd9d60c6ceb3bbe94b9e9bb#eccd51386b697edb7bd9d60c6ceb3bbe94b9e9bb"
+version = "0.2.0"
+source = "git+https://github.com/secke/quantparity?rev=bde35dd145dc3090c1c9bf8de24da52e48489d83#bde35dd145dc3090c1c9bf8de24da52e48489d83"
 dependencies = [
  "serde",
  "serde_json",

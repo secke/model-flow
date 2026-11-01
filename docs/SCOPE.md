@@ -12,9 +12,9 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 
 > Positioning and roadmap: [VISION.md](VISION.md).
 
-## Status (v0.15)
+## Status (v0.16)
 - `mf-core`: DAG, fingerprints of inputs, outputs and code, manifest, replay verification.
-- [`quantparity`](https://github.com/secke/quantparity) (external dependency, cross-checked against QuantLib): historical VaR; Kupiec, Christoffersen, Basel traffic light; PSI; AUC, Gini, KS; per-grade binomial calibration and Hosmer-Lemeshow; reference pricers (BSM and Greeks, Black-76, American CRR, bonds, implied volatility), yield curves (deposit + swap bootstrap), interest rate swaps and zero-coupons with DV01, pricer benchmark with per-product tolerances.
+- [`quantparity`](https://github.com/secke/quantparity) (external dependency, cross-checked against QuantLib): historical VaR; Kupiec, Christoffersen, Basel traffic light; PSI; VaR / ES forecasts (EWMA with normal or Student-t innovations, filtered historical simulation); Acerbi-Székely expected shortfall backtests; AUC, Gini, KS; per-grade binomial calibration and Hosmer-Lemeshow; reference pricers (BSM and Greeks, Black-76, American CRR, bonds, implied volatility), yield curves (deposit + swap bootstrap), interest rate swaps and zero-coupons with DV01, pricer benchmark with per-product tolerances.
 - `mf-runtime`: TOML pipelines, CSV steps (series or table), built-in steps, external processes with a timeout, SQLite storage, HTML validation report.
 - `mf-server`: REST API, hashed tokens, roles (model owner, validator, auditor, admin), validation decisions with segregation of duties, append-only audit log.
 - `mf-cli`: `mf run | verify | runs | show | report | diff | series | alerts`.
@@ -31,7 +31,7 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 - Validator web UI (SSO PKCE, triggering, report, replay, decisions, audit), tested end to end.
 - PostgreSQL storage for history and governance (audit log protected by a trigger), SQLite kept for local use.
 - Deployment: non-root Docker image, hardened docker-compose, Kubernetes manifests (Pod Security restricted, NetworkPolicy).
-- Four experiments on real market data (S&P 500 VaR backtest, ECB AAA curve, change impact with `mf diff`, monthly monitoring of a frozen VaR model).
+- Five experiments on real market data (S&P 500 VaR backtest, ECB AAA curve, change impact with `mf diff`, monthly monitoring of a frozen VaR model, fat-tailed challengers with ES backtests).
 - Seven examples: equity desk (VaR), PD scorecard, validation of QuantLib on options and bonds, on a single curve and swaps, in multi-curve, multi-asset portfolio risk, and the equity desk written with the Python SDK.
 - GitHub CI: format, clippy, tests (including PostgreSQL), example runs and reports as artifacts, diff action, Python wheel and tests, Docker image, UI tests.
 
