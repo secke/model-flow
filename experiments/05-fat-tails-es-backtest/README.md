@@ -88,5 +88,5 @@ Before comparing models, the built-in steps are checked against the external mod
 | No expected shortfall backtest | **added**: `es_backtest` (Acerbi-Székely Z1, Z2, zones, 250-day windows) |
 | Models with different warm-ups were backtested on different periods | **added**: `from` in `backtest_forecasts` and `es_backtest` |
 | QuantLib's normal quantile is accurate to about 1e-9 only | documented in quantparity's validation; quantparity refines its own to 4e-15 |
-| Exceptions cluster on the first day of a shock, whatever the distribution | open: GARCH-type volatility filters as challengers |
+| Exceptions cluster on the first day of a shock, whatever the distribution | **added** in v0.17: GARCH and GJR filters ([experiment 06](../06-garch-filters/README.md)); they remove the second-day exceptions |
 | Z2 thresholds assume moderate tails | open: p-values of Z2 by simulation from the forecast distribution |
