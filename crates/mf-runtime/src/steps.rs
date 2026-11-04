@@ -4,7 +4,7 @@ use quantparity::curves::Market;
 use quantparity::validation::{
     calibration, discrimination, es_backtest, historical_var, psi, traffic_light, var_backtest,
 };
-use quantparity::var_models::{var_forecasts, Innovations};
+use quantparity::var_models::{var_forecasts_with, Innovations, Volatility};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
@@ -453,7 +453,8 @@ impl Step for BuiltinStep {
                 self.add_details(&mut out, realized, &var, alpha, start, inputs)?;
                 Ok(out)
             }
-            // VaR / ES forecasts: EWMA volatility, normal, Student-t or filtered historical simulation.
+            // VaR / ES forecasts: EWMA, GARCH or GJR volatility; normal, Student-t or filtered
+            // historical simulation innovations.
             "var_model" => {
                 let r = series(self.dep(inputs, "returns", 0)?, self.column(), &self.name)?;
                 let p = &self.params;
@@ -473,10 +474,27 @@ impl Step for BuiltinStep {
                     },
                     d => return Err(err(&self.name, format!("unknown distribution `{d}` (normal, t, fhs)"))),
                 };
-                let f = var_forecasts(
+                let (volatility, warmup) = match param_str(p, "volatility", "ewma") {
+                    "ewma" => (
+                        Volatility::Ewma {
+                            lambda: param_f64(p, "lambda", 0.94),
+                        },
+                        30.0,
+                    ),
+                    v @ ("garch" | "gjr") => (
+                        Volatility::Garch {
+                            asymmetric: v == "gjr",
+                            refit: param_f64(p, "refit", 250.0) as usize,
+                            window: p.get("fit_window").and_then(Value::as_u64).map(|w| w as usize),
+                        },
+                        500.0,
+                    ),
+                    v => return Err(err(&self.name, format!("unknown volatility `{v}` (ewma, garch, gjr)"))),
+                };
+                let f = var_forecasts_with(
                     &r,
-                    param_f64(p, "lambda", 0.94),
-                    param_f64(p, "warmup", 30.0) as usize,
+                    volatility,
+                    param_f64(p, "warmup", warmup) as usize,
                     alpha,
                     param_f64(p, "es_alpha", 0.975),
                     innovations,
@@ -1192,6 +1210,21 @@ mod tests {
             assert_eq!(es["latest_window"]["to"], "2022-09-04");
             assert!(es["z2"].as_f64().unwrap() <= 1.0);
         }
+        // GJR volatility, refitted every 100 days on the latest 300 returns.
+        let f = builtin(
+            "var_model",
+            &["r"],
+            json!({"volatility": "gjr", "warmup": 300, "refit": 100, "fit_window": 300, "distribution": "fhs"}),
+        )
+        .run(&i)
+        .unwrap();
+        assert_eq!((f["model"].as_str(), f["start"].as_u64()), (Some("gjr-fhs"), Some(550)));
+        assert_eq!(f["fits"].as_array().unwrap().len(), 6);
+        assert_eq!(f["volatility"]["window"], 300);
+        let e = builtin("var_model", &["r"], json!({"volatility": "egarch"}))
+            .run(&i)
+            .unwrap_err();
+        assert!(e.to_string().contains("ewma, garch, gjr"));
         // Evaluated from the same day as the filtered simulation (index 280).
         let f = builtin("var_model", &["r"], json!({})).run(&i).unwrap();
         i.insert("f".to_string(), f);
