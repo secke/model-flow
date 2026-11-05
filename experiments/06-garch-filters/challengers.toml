@@ -2,7 +2,8 @@
 # simulation of experiment 05, on the S&P 500 2016-2026 (data of experiment 01). One-day 99% VaR
 # and 97.5% ES. GARCH(1,1) and GJR-GARCH(1,1) are fitted on the first 500 returns and refitted
 # every 250 days on all past returns (one variant on the latest 1,000). Every model is backtested
-# on the same days: from return 750, the first forecast of the GARCH filtered simulations.
+# on the same days: from return 750, the first forecast of the GARCH filtered simulations. A GARCH
+# model step warns when a fit reaches the stationarity bound (persistence >= 0.999).
 name = "sp500-garch-challengers"
 
 [[step]]
@@ -68,8 +69,8 @@ params = { returns = "returns", forecasts = "ewma_fhs", dates = "days", from = 7
 name = "garch_normal"
 kind = "var_model"
 version = "1.0.0"
-deps = ["returns"]
-params = { volatility = "garch", distribution = "normal", warmup = 500, refit = 250, alpha = 0.99, es_alpha = 0.975 }
+deps = ["returns", "days"]
+params = { dates = "days", volatility = "garch", distribution = "normal", warmup = 500, refit = 250, alpha = 0.99, es_alpha = 0.975 }
 
 [[step]]
 name = "var_garch_normal"
@@ -90,8 +91,8 @@ params = { returns = "returns", forecasts = "garch_normal", dates = "days", from
 name = "gjr_normal"
 kind = "var_model"
 version = "1.0.0"
-deps = ["returns"]
-params = { volatility = "gjr", distribution = "normal", warmup = 500, refit = 250, alpha = 0.99, es_alpha = 0.975 }
+deps = ["returns", "days"]
+params = { dates = "days", volatility = "gjr", distribution = "normal", warmup = 500, refit = 250, alpha = 0.99, es_alpha = 0.975 }
 
 [[step]]
 name = "var_gjr_normal"
@@ -112,8 +113,8 @@ params = { returns = "returns", forecasts = "gjr_normal", dates = "days", from =
 name = "gjr_t5"
 kind = "var_model"
 version = "1.0.0"
-deps = ["returns"]
-params = { volatility = "gjr", distribution = "t", nu = 5, warmup = 500, refit = 250, alpha = 0.99, es_alpha = 0.975 }
+deps = ["returns", "days"]
+params = { dates = "days", volatility = "gjr", distribution = "t", nu = 5, warmup = 500, refit = 250, alpha = 0.99, es_alpha = 0.975 }
 
 [[step]]
 name = "var_gjr_t5"
@@ -134,8 +135,8 @@ params = { returns = "returns", forecasts = "gjr_t5", dates = "days", from = 750
 name = "garch_fhs"
 kind = "var_model"
 version = "1.0.0"
-deps = ["returns"]
-params = { volatility = "garch", distribution = "fhs", warmup = 500, refit = 250, min_residuals = 250, alpha = 0.99, es_alpha = 0.975 }
+deps = ["returns", "days"]
+params = { dates = "days", volatility = "garch", distribution = "fhs", warmup = 500, refit = 250, min_residuals = 250, alpha = 0.99, es_alpha = 0.975 }
 
 [[step]]
 name = "var_garch_fhs"
@@ -156,8 +157,8 @@ params = { returns = "returns", forecasts = "garch_fhs", dates = "days", from = 
 name = "gjr_fhs"
 kind = "var_model"
 version = "1.0.0"
-deps = ["returns"]
-params = { volatility = "gjr", distribution = "fhs", warmup = 500, refit = 250, min_residuals = 250, alpha = 0.99, es_alpha = 0.975 }
+deps = ["returns", "days"]
+params = { dates = "days", volatility = "gjr", distribution = "fhs", warmup = 500, refit = 250, min_residuals = 250, alpha = 0.99, es_alpha = 0.975 }
 
 [[step]]
 name = "var_gjr_fhs"
@@ -178,8 +179,8 @@ params = { returns = "returns", forecasts = "gjr_fhs", dates = "days", from = 75
 name = "gjr_fhs_4y"
 kind = "var_model"
 version = "1.0.0"
-deps = ["returns"]
-params = { volatility = "gjr", distribution = "fhs", warmup = 500, refit = 250, fit_window = 1000, min_residuals = 250, alpha = 0.99, es_alpha = 0.975 }
+deps = ["returns", "days"]
+params = { dates = "days", volatility = "gjr", distribution = "fhs", warmup = 500, refit = 250, fit_window = 1000, min_residuals = 250, alpha = 0.99, es_alpha = 0.975 }
 
 [[step]]
 name = "var_gjr_fhs_4y"

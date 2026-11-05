@@ -39,13 +39,14 @@ ModelFlow's examples use synthetic data, which proves that the code works but no
 | 05, 03 | Fat-tailed challengers were external scripts with tabulated quantiles; no ES backtest | added in v0.16 / quantparity 0.2.0: `var_model` (normal, Student-t, filtered HS), `es_backtest` (Acerbi-Székely), each reconciled with QuantLib or an independent implementation |
 | 05 | Models with different warm-ups were backtested on different periods | added: `from` in the backtests |
 | 05, 06 | Exceptions cluster on the day after a shock with an EWMA filter | added in v0.17 / quantparity 0.3.0: GARCH and GJR filters in `var_model`, reconciled with `arch`; they remove the second-day exceptions |
+| 06 | A GARCH fit at the stationarity bound was only visible in the step output | added in v0.18: `var_model` warns (`persistence_check`, `max_persistence`) |
 
 ## Backlog
 
 Ordered by the value they would have had in the experiments above.
 
 1. **Rate-based tolerances for curve checks** (02): `mf diff` now compares two curves in basis points per maturity band (03); a check *against a reference* (`pricing_benchmark`) still has price tolerances only. Next: a `curve_check` step with the same tolerance rules.
-2. ~~**Fat-tailed challenger VaR models and ES backtesting**~~ (01): done in v0.16 with quantparity 0.2.0 (experiment 05); GARCH and GJR filters in v0.17 with quantparity 0.3.0 (experiment 06). Next: Z2 p-values by simulation from the forecast distribution (05), and a check on the fitted GARCH persistence, which reaches the stationarity bound after Covid (06).
+2. ~~**Fat-tailed challenger VaR models and ES backtesting**~~ (01): done in v0.16 with quantparity 0.2.0 (experiment 05); GARCH and GJR filters in v0.17 with quantparity 0.3.0 (experiment 06). The check on the fitted GARCH persistence (06) is done in v0.18. Next: Z2 p-values by simulation from the forecast distribution (05).
 3. ~~**Validation over time**~~ (02): done in v0.14 (experiment 04). Alert rules on series and the per-pipeline choice of the checks that make the run status: done in v0.15 (experiment 04, part C).
 4. **Zero-rate pillars and quote conventions in the curve builder** (02): accept zero rates and continuous-coupon par yields directly, in quantparity, reconciled with QuantLib.
 5. **Flag pricing outside a curve's pillar range** (02): warn instead of silently extrapolating.

@@ -2,7 +2,7 @@
 
 **Question.** In experiment 05, filtered historical simulation (FHS) on the RiskMetrics EWMA volatility was the only challenger to pass the 99% VaR and 97.5% ES backtests, but its exceptions still clustered: on the day after a shock, the EWMA volatility had not caught up. Does a volatility filter that reacts faster, GARCH(1,1), or more to losses, GJR-GARCH(1,1), fix the clustering? Does it change the capital?
 
-**Date run:** 2026-11-04 · **ModelFlow:** v0.17.0 · **Engine:** quantparity `de7636c` (0.3.0)
+**Date run:** 2026-11-04, persistence check added 2026-11-06 · **ModelFlow:** v0.17.0, v0.18.0 · **Engine:** quantparity `de7636c` (0.3.0)
 
 ## What this experiment added
 
@@ -11,7 +11,7 @@
 | GARCH(1,1) and GJR-GARCH(1,1) by Gaussian quasi-maximum likelihood, zero mean, with the conventions of the Python `arch` package (backcast, constraints) | `arch` 8.0.0 on 36 simulated samples ([`validation/RESULTS.md`](https://github.com/secke/quantparity/blob/main/validation/RESULTS.md)): conditional volatility 3.5e-18, log-likelihood at the optimum 1.8e-10, parameters 7.2e-7; and on the 27 fits of this experiment (below) |
 | VaR / ES forecasts with a GARCH or GJR filter, fitted on a warm-up sample and refitted every `refit` days on an expanding or rolling window, with normal, Student-t or FHS innovations | the forecast of day t is recomputed from the fit in force and the returns up to t-1 (unit tests) |
 
-ModelFlow exposes it through `var_model`: `volatility = "garch"` or `"gjr"`, `refit`, `fit_window`. The fits used are part of the step output, so they are fingerprinted, diffed and shown in the report with the forecasts.
+ModelFlow exposes it through `var_model`: `volatility = "garch"` or `"gjr"`, `refit`, `fit_window`. The fits used are part of the step output, so they are fingerprinted, diffed and shown in the report with the forecasts. Since v0.18, a GARCH model step also has a status: `warn` when a fit reaches the stationarity bound (finding 5).
 
 ## Reproduce
 
@@ -19,7 +19,7 @@ ModelFlow exposes it through `var_model`: `volatility = "garch"` or `"gjr"`, `re
 python3 ../01-sp500-var-backtest/fetch.py      # S&P 500 returns (FRED)
 cd ../06-garch-filters
 MF=../../target/release/mf
-$MF run challengers.toml                       # 8 models, 24 steps, 0.7 s
+$MF run challengers.toml                       # 8 models, 26 steps, 0.7 s
 $MF verify challengers.toml
 python3 summarize.py                           # results/summary.md, results/summary.json
 pip install arch==8.0.0 && python3 reference/arch_check.py   # results/reference_arch.md
@@ -48,7 +48,7 @@ The GARCH filters are fitted on the first 500 returns (two years) and refitted e
 
 ## Results
 
-[`results/summary.md`](results/summary.md), [`results/summary.json`](results/summary.json). Run fingerprint `262bf6fcdf34d94f`, replayed identically by `mf verify`. Expected exceptions: 17.6 at 99%, 44.0 at 97.5%.
+[`results/summary.md`](results/summary.md), [`results/summary.json`](results/summary.json). Run fingerprint `8e8c4d06c484f795` (ModelFlow v0.18.0), replayed identically by `mf verify`. The forecasts and backtests are identical to those of the first run under v0.17.0 (`262bf6fcdf34d94f`): `mf diff` finds only the added persistence checks. Expected exceptions: 17.6 at 99%, 44.0 at 97.5%.
 
 | Model | VaR 99% exceptions | Kupiec p | Independence p | Consecutive exception days | Basel windows red / yellow / green | ES 97.5% exceptions | Severity | Z2 | Mean VaR 99% |
 |---|---:|---:|---:|---|---|---:|---:|---:|---:|
@@ -69,7 +69,7 @@ The Basel and Z2 zones of each model in each of the seven 250-day windows, and e
 2. **The filter does not fix the tail.** With a normal quantile, GARCH has as many exceptions as the EWMA champion (40), and GJR has 34. Both fail Kupiec. The standardized returns still have an excess kurtosis of 2 to 6 and a 1% quantile of −2.8 to −3.1 against −2.33 for a normal. GJR with a Student-t 5 is borderline (26 exceptions, p = 0.06). What passes is the filtered simulation, with any of the three filters. Experiment 05 found this with EWMA; it holds for GARCH and GJR.
 3. **A better filter makes the passing model cheaper.** GARCH and GJR with FHS pass every test EWMA FHS passes, with a mean 99% VaR of 3.26% and 3.30% against 3.59%, 8–9% less capital for the same test results. The volatility is about the same on average (1.04% and 1.05% against 1.07%). The saving is in the FHS multiplier of σ, 3.10 and 3.12 against 3.31: a filter that reacts to the first loss of a shock leaves fewer extreme standardized losses for the tail. The ES is right in size as well (severity 1.04 for GJR FHS, 0.97 for EWMA FHS; Z2 +0.22 and +0.23).
 4. **Asymmetry matters in the volatility, not only in the distribution.** The GJR fits put almost all the reaction on losses: γ is 0.14 to 0.39 against α ≤ 0.12 in every fit, and α = 0 in the first two fits ([results/reference_arch.md](results/reference_arch.md)). The negative skew that experiment 05 found in the EWMA residuals (1% quantile −3.18, 99% quantile +2.21) is partly a volatility effect. With GJR, the 1% quantile of the residuals on the evaluated days is −2.93 against −3.12 for EWMA.
-5. **After Covid, the expanding-window GJR fit is at the stationarity bound.** The fits of October 2020 and October 2021 give α + γ/2 + β = 1.000: an integrated variance with no long-run level. `arch` finds the same optimum, so this is not an optimizer artefact. The forecasts stay usable for one day ahead, but a validator should flag it: the model's long-run volatility and multi-day forecasts are undefined. Fitting on the latest 1,000 days does not avoid it in 2020–2021, and gives a persistence of 0.96 to 0.99 afterwards.
+5. **After Covid, the expanding-window GJR fit is at the stationarity bound.** The fits of October 2020 and October 2021 give α + γ/2 + β = 1.000: an integrated variance with no long-run level. `arch` finds the same optimum, so this is not an optimizer artefact. The forecasts stay usable for one day ahead, but the model's long-run volatility and multi-day forecasts are undefined. Fitting on the latest 1,000 days does not avoid it in 2020–2021, and gives a persistence of 0.96 to 0.99 afterwards. Since v0.18 the step flags it: the four GJR models are `warn`, with the two fit dates, and the two GARCH models (highest persistence 0.986) `pass` ([summary](results/summary.md)).
 6. **The window choice for the fit is second order.** GJR FHS on the latest 1,000 returns has 12 exceptions against 15, all windows green, and the same mean VaR. The difference comes from three days in 2024–2025 and is well inside sampling noise.
 
 ## What this experiment changed in ModelFlow
@@ -78,5 +78,5 @@ The Basel and Z2 zones of each model in each of the seven 250-day windows, and e
 |---|---|
 | Exceptions cluster on the day after a shock with an EWMA filter (experiment 05) | **added** in quantparity 0.3.0 / ModelFlow v0.17.0: GARCH and GJR-GARCH filters in `var_model`, reconciled with `arch`. They remove the clustering (finding 1) |
 | `arch` fitted on unscaled daily returns stops short of the optimum and reports convergence (quantparity validation: 33 of 36 samples) | documented; quantparity rescales internally |
-| A fit at the stationarity bound is only visible in the step output | open: a check on the fitted persistence (warn at 1) as a validation rule |
+| A fit at the stationarity bound is only visible in the step output | **added** in v0.18.0: `var_model` warns when a fit has α + γ/2 + β ≥ `max_persistence` (0.999), with the fit dates (`persistence_check`) |
 | Z2 thresholds assume moderate tails (experiment 05) | open: p-values of Z2 by simulation from the forecast distribution |

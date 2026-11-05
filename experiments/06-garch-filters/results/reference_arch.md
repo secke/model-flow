@@ -1,4 +1,4 @@
-Run `262bf6fcdf34d94f`: every fit refitted with arch 8.0.0 on 100 r (zero mean, normal likelihood, default backcast, SLSQP with ftol 1e-12).
+Run `8e8c4d06c484f795`: every fit refitted with arch 8.0.0 on 100 r (zero mean, normal likelihood, default backcast, SLSQP with ftol 1e-12).
 
 | Model | Fit used from | Returns | quantparity log-lik. − arch | Largest parameter gap (ω × 1e4, α, γ, β) | α | γ | β | Persistence |
 |---|---|---:|---:|---:|---:|---:|---:|---:|

@@ -1,4 +1,4 @@
-Run `262bf6fcdf34d94f`, 1761 days evaluated (2019-11-11 onwards), every model on the same days. Expected exceptions: 17.6 at 99%, 44.0 at 97.5%.
+Run `8e8c4d06c484f795`, 1761 days evaluated (2019-11-11 onwards), every model on the same days. Expected exceptions: 17.6 at 99%, 44.0 at 97.5%.
 
 | Model | VaR 99% exceptions | Kupiec p | Christoffersen p (independence) | Consecutive exception days | Basel windows red / yellow / green | ES 97.5% exceptions | Severity | Z2 | ES windows red / yellow / green | Mean VaR | Mean ES |
 |---|---:|---:|---:|---|---|---:|---:|---:|---|---:|---:|
@@ -10,6 +10,17 @@ Run `262bf6fcdf34d94f`, 1761 days evaluated (2019-11-11 onwards), every model on
 | GARCH, filtered HS | 14 (0.80%) | 3.7e-01 | 0.64 | none | 0 / 1 / 6 | 29 | 1.10 | +0.28 (green) | 0 / 0 / 7 | 3.26% | 3.38% |
 | GJR, filtered HS | 15 (0.85%) | 5.2e-01 | 0.61 | none | 0 / 1 / 6 | 33 | 1.04 | +0.22 (green) | 0 / 0 / 7 | 3.30% | 3.68% |
 | GJR, filtered HS, fit on latest 1,000 | 12 (0.68%) | 1.5e-01 | 0.68 | none | 0 / 0 / 7 | 31 | 1.03 | +0.28 (green) | 0 / 0 / 7 | 3.31% | 3.70% |
+
+Persistence check of the GARCH model steps (warn at α + γ/2 + β ≥ 0.999):
+
+| Model | Fits | Highest persistence | Fits at the bound | Status |
+|---|---:|---:|---|---|
+| GARCH, normal | 9 | 0.985974 | none | pass |
+| GJR, normal | 9 | 1.000000 | 2020-10-22 (1.000000), 2021-10-20 (1.000000) | warn |
+| GJR, Student-t 5 | 9 | 1.000000 | 2020-10-22 (1.000000), 2021-10-20 (1.000000) | warn |
+| GARCH, filtered HS | 9 | 0.985974 | none | pass |
+| GJR, filtered HS | 9 | 1.000000 | 2020-10-22 (1.000000), 2021-10-20 (1.000000) | warn |
+| GJR, filtered HS, fit on latest 1,000 | 9 | 1.000000 | 2020-10-22 (1.000000), 2021-10-20 (1.000000) | warn |
 
 Standardized returns r_t / σ_t on the evaluated days (what the volatility filter leaves to the distribution):
 

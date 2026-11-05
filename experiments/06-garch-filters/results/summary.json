@@ -1,5 +1,5 @@
 {
-  "run_hash": "262bf6fcdf34d94fcd73b2747889467375ae7206bdd52b3c7fb3faddab2c0716",
+  "run_hash": "8e8c4d06c484f795ed61098ec2cf863a6776642d3711f10538624bc9818f9673",
   "from": 750,
   "models": [
     {
@@ -85,7 +85,8 @@
         "2025-10-10",
         "2026-01-20",
         "2026-06-05"
-      ]
+      ],
+      "persistence_check": null
     },
     {
       "model": "ewma_fhs",
@@ -139,7 +140,8 @@
         "2025-10-10",
         "2026-01-20",
         "2026-06-05"
-      ]
+      ],
+      "persistence_check": null
     },
     {
       "model": "garch_normal",
@@ -220,7 +222,14 @@
         "2025-10-10",
         "2026-01-20",
         "2026-06-05"
-      ]
+      ],
+      "persistence_check": {
+        "at_bound": [],
+        "fits": 9,
+        "highest": 0.9859741983373222,
+        "max_persistence": 0.999,
+        "status": "pass"
+      }
     },
     {
       "model": "gjr_normal",
@@ -290,7 +299,25 @@
         "2025-10-10",
         "2026-01-20",
         "2026-06-05"
-      ]
+      ],
+      "persistence_check": {
+        "at_bound": [
+          {
+            "date": "2020-10-22",
+            "from": 1000,
+            "persistence": 0.99999999999994
+          },
+          {
+            "date": "2021-10-20",
+            "from": 1250,
+            "persistence": 0.999999999999789
+          }
+        ],
+        "fits": 9,
+        "highest": 0.99999999999994,
+        "max_persistence": 0.999,
+        "status": "warn"
+      }
     },
     {
       "model": "gjr_t5",
@@ -352,7 +379,25 @@
         "2025-10-10",
         "2026-01-20",
         "2026-06-05"
-      ]
+      ],
+      "persistence_check": {
+        "at_bound": [
+          {
+            "date": "2020-10-22",
+            "from": 1000,
+            "persistence": 0.99999999999994
+          },
+          {
+            "date": "2021-10-20",
+            "from": 1250,
+            "persistence": 0.999999999999789
+          }
+        ],
+        "fits": 9,
+        "highest": 0.99999999999994,
+        "max_persistence": 0.999,
+        "status": "warn"
+      }
     },
     {
       "model": "garch_fhs",
@@ -402,7 +447,14 @@
         "2025-10-10",
         "2026-01-20",
         "2026-06-05"
-      ]
+      ],
+      "persistence_check": {
+        "at_bound": [],
+        "fits": 9,
+        "highest": 0.9859741983373222,
+        "max_persistence": 0.999,
+        "status": "pass"
+      }
     },
     {
       "model": "gjr_fhs",
@@ -453,7 +505,25 @@
         "2025-10-10",
         "2026-01-20",
         "2026-06-05"
-      ]
+      ],
+      "persistence_check": {
+        "at_bound": [
+          {
+            "date": "2020-10-22",
+            "from": 1000,
+            "persistence": 0.99999999999994
+          },
+          {
+            "date": "2021-10-20",
+            "from": 1250,
+            "persistence": 0.999999999999789
+          }
+        ],
+        "fits": 9,
+        "highest": 0.99999999999994,
+        "max_persistence": 0.999,
+        "status": "warn"
+      }
     },
     {
       "model": "gjr_fhs_4y",
@@ -501,7 +571,25 @@
         "2025-10-10",
         "2026-01-20",
         "2026-06-05"
-      ]
+      ],
+      "persistence_check": {
+        "at_bound": [
+          {
+            "date": "2020-10-22",
+            "from": 1000,
+            "persistence": 0.99999999999994
+          },
+          {
+            "date": "2021-10-20",
+            "from": 1250,
+            "persistence": 0.9999999999999482
+          }
+        ],
+        "fits": 9,
+        "highest": 0.9999999999999482,
+        "max_persistence": 0.999,
+        "status": "warn"
+      }
     }
   ]
 }

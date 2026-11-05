@@ -56,6 +56,7 @@ for key, label in MODELS:
         "mean_es": sum(f["es"][FROM - f["start"]:]) / e["observations"],
         "residuals": moments(key),
         "exception_dates": [x["date"] for x in exc],
+        "persistence_check": f.get("persistence_check"),
     })
 
 r0 = rows[0]
@@ -75,6 +76,13 @@ for r in rows:
         f"{b['red']} / {b['yellow']} / {b['green']} | {r['es_exceptions']} | {r['severity']:.2f} | "
         f"{r['z2']:+.2f} ({r['es_zone']}) | {w['red']} / {w['yellow']} / {w['green']} | {r['mean_var']:.2%} | {r['mean_es']:.2%} |"
     )
+lines += ["", "Persistence check of the GARCH model steps (warn at α + γ/2 + β ≥ 0.999):", "",
+          "| Model | Fits | Highest persistence | Fits at the bound | Status |", "|---|---:|---:|---|---|"]
+for r in rows:
+    c = r["persistence_check"]
+    if c:
+        at = ", ".join(f"{b['date']} ({b['persistence']:.6f})" for b in c["at_bound"]) or "none"
+        lines.append(f"| {r['label']} | {c['fits']} | {c['highest']:.6f} | {at} | {c['status']} |")
 lines += ["", "Standardized returns r_t / σ_t on the evaluated days (what the volatility filter leaves to the distribution):", "",
           "| Filter | Std | Excess kurtosis | 1% quantile | 99% quantile |", "|---|---:|---:|---:|---:|"]
 for key, label in [("ewma_normal", "EWMA"), ("garch_normal", "GARCH"), ("gjr_normal", "GJR"), ("gjr_fhs_4y", "GJR, fit on latest 1,000")]:
