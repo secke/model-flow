@@ -500,7 +500,33 @@ impl Step for BuiltinStep {
                     innovations,
                 )
                 .map_err(|e| err(&self.name, e))?;
-                Ok(serde_json::to_value(f).unwrap())
+                let mut out = serde_json::to_value(&f).unwrap();
+                // A GARCH fit at the stationarity bound has no long-run variance: warn.
+                if let Some(fits) = &f.fits {
+                    let max = param_f64(p, "max_persistence", 0.999);
+                    let dates = self.dates(inputs)?;
+                    let at_bound: Vec<Value> = fits
+                        .iter()
+                        .filter(|x| x.fit.persistence >= max)
+                        .map(|x| {
+                            let mut e = json!({"from": x.from, "persistence": x.fit.persistence});
+                            if let Some(d) = dates.as_ref().and_then(|d| d.get(x.from)) {
+                                e["date"] = json!(date_label(*d));
+                            }
+                            e
+                        })
+                        .collect();
+                    let status = if at_bound.is_empty() { "pass" } else { "warn" };
+                    out["persistence_check"] = json!({
+                        "max_persistence": max,
+                        "highest": fits.iter().map(|x| x.fit.persistence).fold(f64::NEG_INFINITY, f64::max),
+                        "fits": fits.len(),
+                        "at_bound": at_bound,
+                        "status": status,
+                    });
+                    out["status"] = json!(status);
+                }
+                Ok(out)
             }
             // Acerbi-Székely ES backtest of forecasts {"start", "es", "es_var"} (`var_model`, or an
             // external model), over the whole sample and on consecutive 250-day windows.
@@ -1221,6 +1247,38 @@ mod tests {
         assert_eq!((f["model"].as_str(), f["start"].as_u64()), (Some("gjr-fhs"), Some(550)));
         assert_eq!(f["fits"].as_array().unwrap().len(), 6);
         assert_eq!(f["volatility"]["window"], 300);
+        let check = &f["persistence_check"];
+        assert_eq!(check["fits"], 6);
+        let highest = check["highest"].as_f64().unwrap();
+        // Every fit at or above the bound is listed, with its date; the status follows.
+        let strict = builtin(
+            "var_model",
+            &["r", "d"],
+            json!({"volatility": "gjr", "warmup": 300, "refit": 100, "fit_window": 300,
+                   "max_persistence": highest, "dates": "d"}),
+        )
+        .run(&i)
+        .unwrap();
+        let bound = strict["persistence_check"]["at_bound"].as_array().unwrap();
+        assert!(!bound.is_empty() && bound.iter().all(|b| b["date"].is_string()));
+        assert_eq!(
+            (
+                strict["status"].as_str(),
+                strict["persistence_check"]["status"].as_str()
+            ),
+            (Some("warn"), Some("warn"))
+        );
+        let loose = builtin(
+            "var_model",
+            &["r"],
+            json!({"volatility": "garch", "warmup": 300, "max_persistence": 1.0}),
+        )
+        .run(&i)
+        .unwrap();
+        assert_eq!(loose["status"], "pass");
+        // EWMA has no fit, hence no check and no status.
+        let ewma = builtin("var_model", &["r"], json!({})).run(&i).unwrap();
+        assert!(ewma.get("status").is_none() && ewma.get("persistence_check").is_none());
         let e = builtin("var_model", &["r"], json!({"volatility": "egarch"}))
             .run(&i)
             .unwrap_err();

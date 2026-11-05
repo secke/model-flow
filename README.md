@@ -209,7 +209,7 @@ params = { returns = "returns", forecasts = "ewma_model", alpha = 0.99 }
 | `var_historical` | historical VaR | `alpha` |
 | `kupiec_backtest` | rolling backtest of historical VaR | `alpha`, `window`, `dates` (optional) |
 | `backtest_forecasts` | backtest of a model's VaR forecasts | `returns`, `forecasts`, `alpha`, `dates` (optional), `from` (first return evaluated) |
-| `var_model` | one-day VaR and ES forecasts: EWMA, GARCH(1,1) or GJR-GARCH(1,1) volatility with normal, Student-t (unit variance) or filtered historical simulation innovations; GARCH filters are fitted by quasi-maximum likelihood on the warm-up returns and refitted every `refit` days, the fits are in the output | `volatility` (`ewma`, `garch`, `gjr`), `distribution` (`normal`, `t`, `fhs`), `lambda` (0.94), `warmup` (30 for EWMA, 500 for GARCH), `refit` (250), `fit_window` (all past returns), `alpha` (0.99), `es_alpha` (0.975), `nu`, `window`, `min_residuals` (250) |
+| `var_model` | one-day VaR and ES forecasts: EWMA, GARCH(1,1) or GJR-GARCH(1,1) volatility with normal, Student-t (unit variance) or filtered historical simulation innovations; GARCH filters are fitted by quasi-maximum likelihood on the warm-up returns and refitted every `refit` days, the fits are in the output; a GARCH model warns when a fit reaches the stationarity bound (persistence ≥ `max_persistence`: no long-run variance) | `volatility` (`ewma`, `garch`, `gjr`), `max_persistence` (0.999), `dates`, `distribution` (`normal`, `t`, `fhs`), `lambda` (0.94), `warmup` (30 for EWMA, 500 for GARCH), `refit` (250), `fit_window` (all past returns), `alpha` (0.99), `es_alpha` (0.975), `nu`, `window`, `min_residuals` (250) |
 | `es_backtest` | expected shortfall backtest (Acerbi-Székely Z1, Z2), on the whole sample and by 250-day window | `returns`, `forecasts` (`es`, `es_var`), `alpha` (default: the forecasts' ES level), `dates`, `from` |
 | `psi` | Population Stability Index | `baseline`, `current`, `column`, `bins` |
 | `pd_discrimination` | AUC, Gini, KS | `score`, `default`, `min_gini_pass`, `min_gini_warn` |
@@ -486,8 +486,8 @@ The schema is created at startup under an advisory lock, so several instances ca
 ## Deployment
 
 ```bash
-docker build -t modelflow:0.17.0 .
-docker run --rm modelflow:0.17.0 new-token          # fill in deploy/server.docker.toml
+docker build -t modelflow:0.18.0 .
+docker run --rm modelflow:0.18.0 new-token          # fill in deploy/server.docker.toml
 docker compose up --build                          # http://127.0.0.1:8080
 kubectl apply -k deploy/k8s                        # after filling in deploy/k8s/secret.yaml
 ```
