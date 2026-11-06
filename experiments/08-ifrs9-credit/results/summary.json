@@ -1,5 +1,5 @@
 {
- "run_hash": "acbc90b37a0a6a6b5af40f487a3c157b6f6887fa5a2e363a9ea94ec990f7527d",
+ "run_hash": "dce15d9c7f35ec406c9a947a47ecaa2a8d3be3ee8d6edeee59932cc751e63779",
  "status": {
   "loans": null,
   "outcomes": null,
@@ -244,6 +244,7 @@
     {
      "defaults": 828,
      "grade": 1,
+     "jeffreys_p_value": 1.0,
      "mean_pd": 0.013968993068388216,
      "obligors": 122508,
      "observed_dr": 0.006758742286218043,
@@ -253,6 +254,7 @@
     {
      "defaults": 3126,
      "grade": 2,
+     "jeffreys_p_value": 1.0,
      "mean_pd": 0.024206805852372806,
      "obligors": 185498,
      "observed_dr": 0.016851933713571035,
@@ -262,6 +264,7 @@
     {
      "defaults": 5017,
      "grade": 3,
+     "jeffreys_p_value": 1.0,
      "mean_pd": 0.03851851851861841,
      "obligors": 146158,
      "observed_dr": 0.03432586652800394,
@@ -271,6 +274,7 @@
     {
      "defaults": 3818,
      "grade": 4,
+     "jeffreys_p_value": 4.5290990612634606e-20,
      "mean_pd": 0.04867140226259036,
      "obligors": 67726,
      "observed_dr": 0.056374213743613975,
@@ -280,6 +284,7 @@
     {
      "defaults": 1558,
      "grade": 5,
+     "jeffreys_p_value": 1.4739461220887422e-47,
      "mean_pd": 0.05416963649324835,
      "obligors": 19740,
      "observed_dr": 0.07892603850050658,
@@ -289,6 +294,7 @@
     {
      "defaults": 420,
      "grade": 6,
+     "jeffreys_p_value": 0.001892070644621066,
      "mean_pd": 0.09274193548386327,
      "obligors": 3949,
      "observed_dr": 0.10635603950367181,
@@ -298,6 +304,7 @@
     {
      "defaults": 82,
      "grade": 7,
+     "jeffreys_p_value": 0.01109758678160885,
      "mean_pd": 0.1470588235294126,
      "obligors": 439,
      "observed_dr": 0.1867881548974943,
@@ -315,6 +322,7 @@
     {
      "defaults": 6482,
      "grade": 1,
+     "jeffreys_p_value": 1.0,
      "mean_pd": 0.06598232710716574,
      "obligors": 122508,
      "observed_dr": 0.05291083031312241,
@@ -324,6 +332,7 @@
     {
      "defaults": 20589,
      "grade": 2,
+     "jeffreys_p_value": 1.0,
      "mean_pd": 0.11840374815072312,
      "obligors": 185498,
      "observed_dr": 0.11099311043784839,
@@ -333,6 +342,7 @@
     {
      "defaults": 26401,
      "grade": 3,
+     "jeffreys_p_value": 3.9379948374338025e-46,
      "mean_pd": 0.16663139329824542,
      "obligors": 146158,
      "observed_dr": 0.18063328726446723,
@@ -342,6 +352,7 @@
     {
      "defaults": 16083,
      "grade": 4,
+     "jeffreys_p_value": 1.6477559509390356e-111,
      "mean_pd": 0.20218363588536922,
      "obligors": 67726,
      "observed_dr": 0.23747157664707794,
@@ -351,6 +362,7 @@
     {
      "defaults": 5764,
      "grade": 5,
+     "jeffreys_p_value": 1.7268769399539899e-158,
      "mean_pd": 0.2109764789735264,
      "obligors": 19740,
      "observed_dr": 0.29199594731509626,
@@ -360,6 +372,7 @@
     {
      "defaults": 1324,
      "grade": 6,
+     "jeffreys_p_value": 1.0122277289664363e-43,
      "mean_pd": 0.23790322580646078,
      "obligors": 3949,
      "observed_dr": 0.3352747531020511,
@@ -369,6 +382,7 @@
     {
      "defaults": 182,
      "grade": 7,
+     "jeffreys_p_value": 3.928143285249716e-08,
      "mean_pd": 0.2941176470588252,
      "obligors": 439,
      "observed_dr": 0.4145785876993166,

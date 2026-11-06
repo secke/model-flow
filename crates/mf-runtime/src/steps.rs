@@ -4,8 +4,8 @@ use quantparity::curves::Market;
 use quantparity::ifrs9::{EclInput, MigrationMatrix, PdCurve, Repayment};
 use quantparity::validation::Z2Null;
 use quantparity::validation::{
-    calibration, discrimination, es_backtest, historical_var, parameter_backtest, psi, realized_ccf, staging_check,
-    traffic_light, var_backtest, StagingRecord, StagingRules,
+    calibration_with, discrimination, es_backtest, historical_var, parameter_backtest, psi, realized_ccf,
+    staging_check, traffic_light, var_backtest, GradeTest, StagingRecord, StagingRules,
 };
 use quantparity::var_models::{var_forecasts_with, Innovations, VarForecasts, Volatility};
 use serde_json::{json, Value};
@@ -946,7 +946,9 @@ impl Step for BuiltinStep {
                 let grade = self.table_col(t, "grade", "grade")?;
                 let pd = self.table_col(t, "pd", "pd")?;
                 let def = flags(&self.table_col(t, "default", "default")?);
-                self.json(calibration(&grade, &pd, &def), "invalid data")
+                let test = GradeTest::parse(self.params.get("test").and_then(Value::as_str).unwrap_or("binomial"))
+                    .map_err(|e| err(&self.name, e))?;
+                self.json(calibration_with(&grade, &pd, &def, test), "invalid data")
             }
             "ecl" => self.ecl(inputs),
             "lgd_backtest" => {
@@ -1768,6 +1770,14 @@ mod tests {
         assert!(d["gini"].as_f64().unwrap() > 0.0);
         let c = builtin("pd_calibration", &["t"], Value::Null).run(&i).unwrap();
         assert_eq!(c["grades"].as_array().unwrap().len(), 2);
+        assert!(c["grades"][0].get("jeffreys_p_value").is_none());
+        let c = builtin("pd_calibration", &["t"], json!({"test": "jeffreys"}))
+            .run(&i)
+            .unwrap();
+        assert!(c["grades"][0]["jeffreys_p_value"].is_f64());
+        assert!(builtin("pd_calibration", &["t"], json!({"test": "exact"}))
+            .run(&i)
+            .is_err());
     }
 
     #[test]

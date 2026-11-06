@@ -78,14 +78,14 @@ name = "pd_12m"
 kind = "pd_calibration"
 version = "1.0.0"
 deps = ["book"]
-params = { grade = "grade", pd = "pd", default = "default_12m" }
+params = { grade = "grade", pd = "pd", default = "default_12m", test = "jeffreys" }
 
 [[step]]
 name = "pd_lifetime"
 kind = "pd_calibration"
 version = "1.0.0"
 deps = ["book"]
-params = { grade = "grade", pd = "pd_lifetime", default = "default" }
+params = { grade = "grade", pd = "pd_lifetime", default = "default", test = "jeffreys" }
 
 [[step]]
 name = "pd_ranking"

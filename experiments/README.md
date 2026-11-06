@@ -45,6 +45,7 @@ ModelFlow's examples use synthetic data, which proves that the code works but no
 | 05, 07 | Fixed Z2 thresholds too severe for very fat tails, and applied to whole samples where they are too lenient | added in v0.19 / quantparity 0.4.0: `es_backtest` with `simulations`, p-values simulated from the forecast distribution; by default in v0.20, and no 250-day threshold on a longer sample |
 | 08 | No credit risk step beyond PD discrimination and calibration | added in v0.22 / quantparity 0.5.0: `ecl` (recomputation with explicit conventions, reconciliation, realized losses by segment), `lgd_backtest`, `ccf_backtest`, `staging_check`, each reconciled with numpy or scipy |
 | 08 | Defaults close to the data date bias the LGD backtest upward | added in v0.23: `min_workout_months` in `lgd_backtest` |
+| 08 | PD calibration by grade lacked the Jeffreys test of the ECB instructions | added in v0.23 / quantparity 0.6.0: `test = "jeffreys"` in `pd_calibration` |
 
 ## Backlog
 
@@ -58,7 +59,7 @@ Ordered by the value they would have had in the experiments above.
 6. ~~**Whole-sample Z2 zone without simulation**~~ (07): done in v0.20. `var_model` forecasts are simulated by default; other forecasts longer than 250 days take the zone of their latest window.
 7. ~~**Incomplete workouts in LGD backtests**~~ (08): done in v0.23. `lgd_backtest` leaves out the defaults whose workout is shorter than `min_workout_months`.
 8. **Staging and SICR on real data** (08): the Lending Club file has no payment history. Freddie Mac's single-family loan-level dataset (monthly delinquency and balances, free registration) would test `staging_check` and the stage 2 hit rate.
-9. **Jeffreys test for PD calibration** (08): the ECB instructions test PDs by grade with the Jeffreys test (a beta posterior) rather than the exact binomial test of `pd_calibration`; add it as an option.
+9. ~~**Jeffreys test for PD calibration**~~ (08): done in v0.23 with quantparity 0.6.0. `pd_calibration` takes `test = "jeffreys"`.
 
 ## Next experiments
 

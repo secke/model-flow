@@ -57,11 +57,12 @@ lines += [ecl_row(f"grade {G[r['segment'] - 1]}", r) for r in ecl["by"]["grade"]
 lines += [ecl_row(f"vintage {r['segment']}", r) for r in ecl["by"]["vintage"]]
 lines.append(ecl_row("**all**", ecl["total"]))
 
-lines += ["", "## PD calibration by grade (binomial test, one-sided)", "",
-          "| Grade | Loans | 12-month PD | Observed | p-value | Lifetime PD | Observed | p-value |", "|---|---:|---:|---:|---:|---:|---:|---:|"]
+lines += ["", "## PD calibration by grade (one-sided: Jeffreys test of the ECB instructions, exact binomial test)", "",
+          "| Grade | Loans | 12-month PD | Observed | Jeffreys p | Binomial p | Lifetime PD | Observed | Jeffreys p | Binomial p |",
+          "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
 for a, b in zip(out["pd_12m"]["grades"], out["pd_lifetime"]["grades"]):
-    lines.append(f"| {G[a['grade'] - 1]} | {a['obligors']:,} | {pct(a['mean_pd'])} | {pct(a['observed_dr'])} | {a['p_value']:.1e} | "
-                 f"{pct(b['mean_pd'])} | {pct(b['observed_dr'])} | {b['p_value']:.1e} |")
+    lines.append(f"| {G[a['grade'] - 1]} | {a['obligors']:,} | {pct(a['mean_pd'])} | {pct(a['observed_dr'])} | {a['jeffreys_p_value']:.1e} | {a['p_value']:.1e} | "
+                 f"{pct(b['mean_pd'])} | {pct(b['observed_dr'])} | {b['jeffreys_p_value']:.1e} | {b['p_value']:.1e} |")
 r = out["pd_ranking"]
 lines += ["", f"Hosmer-Lemeshow p-value: {out['pd_12m']['hl_p_value']:.1e} (12 months), {out['pd_lifetime']['hl_p_value']:.1e} (lifetime). "
           f"Ranking of the lifetime PD: AUC {r['auc']:.3f}, Gini {r['gini']:.3f}, KS {r['ks']:.3f}."]

@@ -1,4 +1,4 @@
-# Lending Club IFRS 9 validation: run `acbc90b37a0a6a6b`
+# Lending Club IFRS 9 validation: run `dce15d9c7f35ec40`
 
 Test book: 546,018 loans of the 2013-2015 vintages, 6,942.4 million USD lent.
 
@@ -40,17 +40,17 @@ Model's figure: 184.9. Step status: `fail`, 546,018 loans outside tolerance.
 | vintage 2015 | 283,026 | 78.0 | 72.9 | 0.94 | 185.5 | 229.7 | 1.24 |
 | **all** | 546,018 | 151.0 | 127.5 | 0.84 | 358.2 | 405.4 | 1.13 |
 
-## PD calibration by grade (binomial test, one-sided)
+## PD calibration by grade (one-sided: Jeffreys test of the ECB instructions, exact binomial test)
 
-| Grade | Loans | 12-month PD | Observed | p-value | Lifetime PD | Observed | p-value |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| A | 122,508 | 1.40% | 0.68% | 1.0e+00 | 6.60% | 5.29% | 1.0e+00 |
-| B | 185,498 | 2.42% | 1.69% | 1.0e+00 | 11.84% | 11.10% | 1.0e+00 |
-| C | 146,158 | 3.85% | 3.43% | 1.0e+00 | 16.66% | 18.06% | 4.1e-46 |
-| D | 67,726 | 4.87% | 5.64% | 4.9e-20 | 20.22% | 23.75% | 1.8e-111 |
-| E | 19,740 | 5.42% | 7.89% | 1.8e-47 | 21.10% | 29.20% | 2.1e-158 |
-| F | 3,949 | 9.27% | 10.64% | 2.1e-03 | 23.79% | 33.53% | 1.3e-43 |
-| G | 439 | 14.71% | 18.68% | 1.3e-02 | 29.41% | 41.46% | 5.2e-08 |
+| Grade | Loans | 12-month PD | Observed | Jeffreys p | Binomial p | Lifetime PD | Observed | Jeffreys p | Binomial p |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| A | 122,508 | 1.40% | 0.68% | 1.0e+00 | 1.0e+00 | 6.60% | 5.29% | 1.0e+00 | 1.0e+00 |
+| B | 185,498 | 2.42% | 1.69% | 1.0e+00 | 1.0e+00 | 11.84% | 11.10% | 1.0e+00 | 1.0e+00 |
+| C | 146,158 | 3.85% | 3.43% | 1.0e+00 | 1.0e+00 | 16.66% | 18.06% | 3.9e-46 | 4.1e-46 |
+| D | 67,726 | 4.87% | 5.64% | 4.5e-20 | 4.9e-20 | 20.22% | 23.75% | 1.6e-111 | 1.8e-111 |
+| E | 19,740 | 5.42% | 7.89% | 1.5e-47 | 1.8e-47 | 21.10% | 29.20% | 1.7e-158 | 2.1e-158 |
+| F | 3,949 | 9.27% | 10.64% | 1.9e-03 | 2.1e-03 | 23.79% | 33.53% | 1.0e-43 | 1.3e-43 |
+| G | 439 | 14.71% | 18.68% | 1.1e-02 | 1.3e-02 | 29.41% | 41.46% | 3.9e-08 | 5.2e-08 |
 
 Hosmer-Lemeshow p-value: 3.8e-275 (12 months), 0.0e+00 (lifetime). Ranking of the lifetime PD: AUC 0.657, Gini 0.313, KS 0.246.
 
