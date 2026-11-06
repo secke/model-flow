@@ -1,10 +1,11 @@
 use mf_core::{hash_bytes, Error, Inputs, Step};
 use quantparity::benchmark::{compare, prices_from_value, reference_prices, trades_from_value, Tolerances};
 use quantparity::curves::Market;
+use quantparity::validation::Z2Null;
 use quantparity::validation::{
     calibration, discrimination, es_backtest, historical_var, psi, traffic_light, var_backtest,
 };
-use quantparity::var_models::{var_forecasts_with, Innovations, Volatility};
+use quantparity::var_models::{var_forecasts_with, Innovations, VarForecasts, Volatility};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
@@ -559,10 +560,40 @@ impl Step for BuiltinStep {
                     .unwrap_or(0.975);
                 let realized = &r[start..start + es.len()];
                 let mut out = self.json(es_backtest(realized, &es_var, &es, conf), "invalid forecasts")?;
+                // Z2 p-values by simulation from the forecast distribution of a `var_model` step.
+                let simulations = param_f64(&self.params, "simulations", 0.0) as usize;
+                let seed = param_f64(&self.params, "seed", 1.0) as u64;
+                let null = if simulations > 0 {
+                    let model: VarForecasts = serde_json::from_value(f.clone()).map_err(|_| {
+                        err(
+                            &self.name,
+                            "`simulations` needs the forecasts of a `var_model` step: their model is simulated",
+                        )
+                    })?;
+                    if model.es_confidence != conf {
+                        return Err(err(
+                            &self.name,
+                            "`simulations`: `alpha` must be the forecasts' ES level",
+                        ));
+                    }
+                    Some(Z2Null::new(&r, &model).map_err(|e| err(&self.name, e))?)
+                } else {
+                    None
+                };
+                let simulate = |z2: f64, a: usize, b: usize| {
+                    null.as_ref()
+                        .map(|n| n.test(z2, start + a, start + b, simulations, seed))
+                        .transpose()
+                        .map_err(|e| err(&self.name, e))
+                };
+                let n = realized.len();
+                if let Some(s) = simulate(out["z2"].as_f64().unwrap_or(f64::NAN), 0, n)? {
+                    out["status"] = json!(s.status);
+                    out["simulated"] = serde_json::to_value(s).unwrap();
+                }
                 let dates = self.dates(inputs)?;
                 let date = |i: usize| dates.as_ref().and_then(|d| d.get(start + i)).map(|d| date_label(*d));
-                let n = realized.len();
-                let windows: Vec<Value> = (0..n / BASEL_WINDOW)
+                let windows = (0..n / BASEL_WINDOW)
                     .rev()
                     .map(|k| n - (k + 1) * BASEL_WINDOW)
                     .map(|a| {
@@ -570,6 +601,11 @@ impl Step for BuiltinStep {
                         let t = es_backtest(&realized[a..b], &es_var[a..b], &es[a..b], conf).unwrap();
                         let mut w = json!({"exceptions": t.exceptions, "z2": t.z2, "z1": t.z1, "zone": t.zone,
                                            "status": t.status});
+                        if let Some(s) = simulate(t.z2, a, b)? {
+                            w["p_value"] = json!(s.p_value);
+                            w["simulated_zone"] = json!(s.zone);
+                            w["status"] = json!(s.status);
+                        }
                         match (date(a), date(b - 1)) {
                             (Some(x), Some(y)) => {
                                 w["from"] = x;
@@ -580,9 +616,9 @@ impl Step for BuiltinStep {
                                 w["to"] = json!(start + b - 1);
                             }
                         }
-                        w
+                        Ok(w)
                     })
-                    .collect();
+                    .collect::<Result<Vec<Value>, Error>>()?;
                 if let Some(last) = windows.last() {
                     out["latest_window"] = last.clone();
                 }
@@ -1301,9 +1337,50 @@ mod tests {
             .run(&i)
             .unwrap_err();
         assert!(e.to_string().contains("nu"));
+        // Z2 p-values by simulation: whole sample and windows; the status follows the simulated zone.
+        for params in [
+            json!({}),
+            json!({"distribution": "t", "nu": 4}),
+            json!({"distribution": "fhs"}),
+        ] {
+            let f = builtin("var_model", &["r"], params).run(&i).unwrap();
+            i.insert("f".to_string(), f);
+            let es = builtin("es_backtest", &["r", "f"], json!({"simulations": 2000, "seed": 7}))
+                .run(&i)
+                .unwrap();
+            let s = &es["simulated"];
+            let p = s["p_value"].as_f64().unwrap();
+            assert!(p > 0.0 && p <= 1.0 && s["simulations"] == 2000 && s["seed"] == 7);
+            assert_eq!(es["status"], s["status"]);
+            let w = es["windows"].as_array().unwrap();
+            assert!(w.iter().all(|x| x["p_value"].is_f64() && x["status"].is_string()));
+            assert_eq!(
+                es["latest_window"]["simulated_zone"],
+                w.last().unwrap()["simulated_zone"]
+            );
+            let again = builtin("es_backtest", &["r", "f"], json!({"simulations": 2000, "seed": 7}))
+                .run(&i)
+                .unwrap();
+            assert_eq!(again, es);
+            assert!(
+                builtin("es_backtest", &["r", "f"], json!({"simulations": 100, "alpha": 0.99}))
+                    .run(&i)
+                    .is_err()
+            );
+        }
         // Forecasts without an ES (a VaR-only external model) cannot be ES-backtested.
         i.insert("f".to_string(), json!({"start": 1, "var": [0.02]}));
         assert!(builtin("es_backtest", &["r", "f"], json!({})).run(&i).is_err());
+        // An external model's ES forecasts are backtested, but cannot be simulated.
+        i.insert(
+            "f".to_string(),
+            json!({"start": 800, "es": vec![0.03; 100], "es_var": vec![0.02; 100]}),
+        );
+        assert!(builtin("es_backtest", &["r", "f"], json!({})).run(&i).is_ok());
+        let e = builtin("es_backtest", &["r", "f"], json!({"simulations": 100}))
+            .run(&i)
+            .unwrap_err();
+        assert!(e.to_string().contains("var_model"));
     }
 
     #[test]
