@@ -91,6 +91,28 @@ pub fn notify_rule(
     Ok(true)
 }
 
+/// Escalation of a validation finding past its remediation deadline (sent once per deadline).
+pub fn notify_finding(
+    cfg: &AlertsConfig,
+    f: &crate::governance::Finding,
+    days_overdue: i64,
+    link: Option<String>,
+) -> Result<bool, String> {
+    let Some(url) = cfg.url() else { return Ok(false) };
+    let mut text = format!(
+        "ModelFlow — finding #{} on {} ({}) is {days_overdue} days overdue: {} (due {}, owner {}).",
+        f.id, f.model, f.severity, f.title, f.due_date, f.owner
+    );
+    if let Some(l) = &link {
+        text.push_str(&format!(" {l}"));
+    }
+    let body = json!({"text": text, "status": "finding_overdue", "finding_id": f.id, "model": f.model,
+                      "severity": f.severity, "due_date": f.due_date, "owner": f.owner,
+                      "days_overdue": days_overdue, "link": link});
+    post(&url, &body)?;
+    Ok(true)
+}
+
 fn post(url: &str, body: &serde_json::Value) -> Result<(), String> {
     ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(10))

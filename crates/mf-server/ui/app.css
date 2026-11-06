@@ -204,3 +204,12 @@ select { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-r
 input[readonly] { background: var(--soft); color: var(--slate); }
 .model-form { max-width: 620px; margin-bottom: 20px; }
 #model-actions { margin: 8px 0 4px; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 0 0 16px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.tile .value { font-size: 26px; font-weight: 600; }
+.tile .label { font-size: 13px; color: var(--slate); }
+.tile.fail .value { color: var(--fail); }
+.tile.warn .value { color: var(--warn); }
+details > summary { cursor: pointer; margin: 12px 0; font-weight: 500; }
+.finding-form { margin-top: 8px; }

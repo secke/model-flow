@@ -13,6 +13,8 @@ const MODEL_STATES = {
 };
 const TIERS = { 1: "1 — high risk", 2: "2 — medium risk", 3: "3 — low risk" };
 const ROLES = { admin: "Administrator", model_owner: "Model owner", validator: "Validator", auditor: "Auditor" };
+const SEVERITY = { critical: ["Critical", "fail"], high: ["High", "fail"], medium: ["Medium", "warn"], low: ["Low", "none"] };
+const FINDING_STATES = { open: ["Open", "warn"], remediated: ["Remediated, awaiting review", "warn"], closed: ["Closed", "pass"], risk_accepted: ["Risk accepted", "none"] };
 
 let session = { token: null, me: null, config: null };
 
@@ -181,6 +183,7 @@ function layout(current, ...content) {
       el("ul", {},
         link("#/", "Pipelines", "pipelines"),
         link("#/models", "Model inventory", "models"),
+        link("#/findings", "Findings", "findings"),
         can("auditor", "admin") && link("#/audit", "Audit log", "audit"),
       ),
       el("div", { class: "who" },
@@ -352,6 +355,12 @@ async function viewRun(name, id) {
     }
   }
 
+  const pipeline = (await api("/api/pipelines")).find((x) => x.name === name);
+  const runFindings = (await api("/api/findings")).findings.filter((f) => f.pipeline === name && f.run_id === Number(id));
+  const raise = pipeline && pipeline.model && can("validator") &&
+    el("details", {}, el("summary", { id: "raise-finding" }, "Raise a finding on this run"),
+      findingForm({ model: pipeline.model, pipeline: name, run_id: Number(id) }));
+
   const frame = el("iframe", { class: "report", title: `Validation report ${name} #${id}`, sandbox: "" });
   frame.srcdoc = report || "<p>Report unavailable.</p>";
 
@@ -388,6 +397,9 @@ async function viewRun(name, id) {
             : el("p", { class: "muted" }, "No decision for this run."),
           decide && el("h2", {}, "Decide"),
           decide),
+        el("div", { class: "panel" }, el("h2", {}, "Findings on this run"),
+          runFindings.length ? findingList(runFindings) : el("p", { class: "muted" }, "No finding raised on this run."),
+          raise),
       ),
     ),
   );
@@ -496,6 +508,8 @@ async function viewModel(id) {
     if (m.status !== "retired") actions.push(btn("retired", "Retire the model", "btn reject"));
   }
   const editBox = el("div");
+  const modelFindings = (await api(`/api/findings?model=${enc(id)}`)).findings;
+  const raise = can("validator") && el("details", {}, el("summary", { id: "raise-finding" }, "Raise a finding"), findingForm({ model: id }));
   if (location.hash !== at) return; // the user has moved on: do not render over the new page
   show("models",
     el("div", { class: "crumbs" }, el("a", { href: "#/models" }, "Model inventory")),
@@ -510,6 +524,9 @@ async function viewModel(id) {
       el("div", {}, el("dt", {}, "Risk tier"), el("dd", {}, TIERS[m.tier] || m.tier)),
       el("div", {}, el("dt", {}, "Next review"), el("dd", {}, m.next_review ? (m.review_overdue ? el("span", { class: "state fail" }, `Overdue (${m.next_review})`) : m.next_review) : "Not set")),
       el("div", {}, el("dt", {}, "Last modified"), el("dd", {}, `${when(m.updated_at)} by ${m.updated_by}`)),
+      el("div", {}, el("dt", {}, "Active findings"), el("dd", {}, m.findings.blocking
+        ? el("span", { class: "state fail" }, `${m.findings.active} (${m.findings.blocking} blocking approval)`)
+        : String(m.findings.active))),
     ),
     actions.length > 0 && el("div", { class: "actions", id: "model-actions" }, actions),
     msg,
@@ -525,6 +542,175 @@ async function viewModel(id) {
             el("td", {}, p.last_run && p.last_run.decision ? state(p.last_run.decision) : el("span", { class: "muted" }, p.last_run ? "Pending" : "")),
           ))))
       : el("p", { class: "empty" }, `No pipeline declares this model. Add model = "${m.id}" to the relevant pipeline.toml.`)),
+    el("h2", {}, "Findings"),
+    modelFindings.length ? findingList(modelFindings) : el("p", { class: "empty" }, "No finding on this model."),
+    raise,
+  );
+}
+
+// ---------- Findings ----------
+function severity(s) {
+  const [label, cls] = SEVERITY[s] || [s, "none"];
+  return el("span", { class: `state ${cls}` }, label);
+}
+
+function findingState(f) {
+  if (f.overdue_days) return el("span", { class: "state fail" }, `Overdue by ${f.overdue_days} days`);
+  const [label, cls] = FINDING_STATES[f.status] || [f.status, "none"];
+  return el("span", { class: `state ${cls}` }, label);
+}
+
+function findingList(list) {
+  return el("div", { class: "table-wrap" }, el("table", { class: "findings" },
+    el("thead", {}, el("tr", {}, ["No.", "Model", "Severity", "Title", "Owner", "Due", "Status"].map((h) => el("th", { scope: "col" }, h)))),
+    el("tbody", {}, list.map((f) => el("tr", { class: "link", tabindex: 0, onclick: () => (location.hash = `#/findings/${f.id}`), onkeydown: (e) => e.key === "Enter" && (location.hash = `#/findings/${f.id}`) },
+      el("td", { class: "num" }, el("a", { href: `#/findings/${f.id}` }, `#${f.id}`)),
+      el("td", {}, f.model),
+      el("td", {}, severity(f.severity)),
+      el("td", {}, f.title),
+      el("td", {}, f.owner),
+      el("td", {}, f.due_date),
+      el("td", {}, findingState(f)),
+    )))));
+}
+
+function findingForm(base) {
+  const f = {
+    title: el("input", { type: "text", id: "f-title", required: true }),
+    severity: el("select", { id: "f-severity" }, Object.entries(SEVERITY).map(([v, [l]]) => el("option", { value: v, selected: v === "medium" ? true : null }, l))),
+    description: el("textarea", { id: "f-description", required: true, placeholder: "What is wrong, the evidence, the impact on the model's use…" }),
+    step: el("input", { type: "text", id: "f-step", placeholder: "Optional: the step concerned" }),
+    due: el("input", { type: "date", id: "f-due" }),
+  };
+  const msg = el("div");
+  const field = (key, label, hint) => el("div", { class: "field" }, el("label", { for: f[key].id }, label), f[key], hint && el("span", { class: "muted" }, hint));
+  return el("form", {
+    class: "panel finding-form",
+    onsubmit: async (e) => {
+      e.preventDefault();
+      try {
+        const body = { ...base, title: f.title.value.trim(), severity: f.severity.value, description: f.description.value.trim(), step: f.step.value.trim() || null, due_date: f.due.value || null };
+        const created = await api("/api/findings", { method: "POST", json: body });
+        location.hash = `#/findings/${created.id}`;
+      } catch (err) {
+        msg.replaceChildren(el("div", { class: "notice fail", role: "alert" }, err.message));
+      }
+    },
+  },
+    field("title", "Title"),
+    field("severity", "Severity", "Critical and high findings block the model's approval until they are closed."),
+    field("description", "Description"),
+    base.pipeline && field("step", "Step"),
+    field("due", "Remediation deadline", "Default: 30, 90, 180 or 365 days by severity."),
+    el("div", { class: "actions" }, el("button", { class: "btn primary", type: "submit", id: "f-save" }, "Raise the finding")),
+    msg,
+  );
+}
+
+async function viewFindings() {
+  const at = location.hash;
+  const [data, report] = await Promise.all([api("/api/findings"), api("/api/findings/report")]);
+  const tbody = el("div");
+  const filters = {
+    status: el("select", { id: "filter-status", "aria-label": "Status" },
+      [["active", "Active"], ["", "All"], ...Object.entries(FINDING_STATES).map(([k, [l]]) => [k, l])].map(([v, l]) => el("option", { value: v }, l))),
+    severity: el("select", { id: "filter-severity", "aria-label": "Severity" },
+      [["", "All severities"], ...Object.entries(SEVERITY).map(([k, [l]]) => [k, l])].map(([v, l]) => el("option", { value: v }, l))),
+  };
+  const fill = () => {
+    const st = filters.status.value, sev = filters.severity.value;
+    const rows = data.findings
+      .filter((f) => !st || f.status === st || (st === "active" && (f.status === "open" || f.status === "remediated")))
+      .filter((f) => !sev || f.severity === sev)
+      .sort((a, b) => (b.overdue_days || 0) - (a.overdue_days || 0) || a.due_date.localeCompare(b.due_date));
+    tbody.replaceChildren(rows.length ? findingList(rows) : el("p", { class: "empty" }, "No finding matches this filter."));
+  };
+  filters.status.addEventListener("change", fill);
+  filters.severity.addEventListener("change", fill);
+  fill();
+  const download = el("button", {
+    class: "btn", id: "report-md",
+    onclick: async () => {
+      const res = await fetch("/api/findings/report?format=md", { headers: { Authorization: `Bearer ${session.token}` } });
+      const url = URL.createObjectURL(new Blob([await res.text()], { type: "text/markdown" }));
+      const a = el("a", { href: url, download: `findings-${report.as_of}.md` });
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+  }, "Governance report (Markdown)");
+  const tile = (label, value, cls) => el("div", { class: `tile ${cls || ""}` }, el("div", { class: "value" }, String(value)), el("div", { class: "label" }, label));
+  if (location.hash !== at) return; // the user has moved on: do not render over the new page
+  show("findings",
+    el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, "Findings"), el("p", { class: "lead" }, "Raised by validators, remediated by model owners with a reproducible run as evidence, closed by validators.")), download),
+    el("div", { class: "tiles", id: "finding-tiles" },
+      tile("Active", report.active.length),
+      tile("Overdue", report.overdue, report.overdue ? "fail" : ""),
+      tile("Awaiting review", report.awaiting_review, report.awaiting_review ? "warn" : ""),
+      tile("Closed, last 90 days", report.closed_last_90_days)),
+    el("div", { class: "actions" }, filters.status, filters.severity),
+    tbody,
+  );
+}
+
+async function viewFinding(id) {
+  const at = location.hash;
+  const f = await api(`/api/findings/${enc(id)}`);
+  const msg = el("div");
+  const comment = el("textarea", { id: "fa-comment", placeholder: "Comment (required)" });
+  const due = el("input", { type: "date", id: "fa-due" });
+  const evidence = el("input", { type: "text", id: "fa-evidence", placeholder: "pipeline#run, e.g. desk-var#12" });
+  const send = async (action) => {
+    try {
+      await api(`/api/findings/${enc(id)}/actions`, { method: "POST", json: { action, comment: comment.value, due_date: due.value || null, evidence: evidence.value.trim() || null } });
+      route();
+    } catch (err) {
+      msg.replaceChildren(el("div", { class: "notice fail", role: "alert" }, err.message));
+    }
+  };
+  const btn = (action, label, cls = "btn") => el("button", { class: cls, id: `fa-${action}`, onclick: () => send(action) }, label);
+  const owner = session.me.role === "admin" || (session.me.role === "model_owner" && f.owner === session.me.name);
+  const buttons = [];
+  const extra = [];
+  if (owner && f.status === "open") {
+    buttons.push(btn("plan", "Save as remediation plan"), btn("remediate", "Submit the remediation", "btn primary"));
+    extra.push(el("div", { class: "field" }, el("label", { for: "fa-evidence" }, "Evidence run (optional)"), evidence,
+      el("span", { class: "muted" }, "A run of a pipeline of this model. It must replay identically.")));
+  }
+  if (can("validator") && f.status === "remediated") buttons.push(btn("close", "Close the finding", "btn approve"), btn("reopen", "Reopen", "btn reject"));
+  if (can("validator") && (f.status === "open" || f.status === "remediated")) {
+    buttons.push(btn("extend", "Extend the deadline"), btn("accept", "Accept the risk"));
+    extra.push(el("div", { class: "field" }, el("label", { for: "fa-due" }, "New deadline (to extend)"), due));
+  }
+  if (!can("auditor")) buttons.push(btn("comment", "Comment"));
+  const runLink = f.pipeline && (f.run_id ? el("a", { href: `#/p/${enc(f.pipeline)}/r/${f.run_id}` }, `${f.pipeline} #${f.run_id}`) : el("a", { href: `#/p/${enc(f.pipeline)}` }, f.pipeline));
+  const evLink = f.evidence && (() => { const [p, r] = f.evidence.split("#"); return el("a", { href: `#/p/${enc(p)}/r/${r}` }, f.evidence); })();
+  if (location.hash !== at) return; // the user has moved on: do not render over the new page
+  show("findings",
+    el("div", { class: "crumbs" }, el("a", { href: "#/findings" }, "Findings"), " / ", el("a", { href: `#/models/${enc(f.model)}` }, f.model)),
+    el("div", { class: "toolbar" }, el("div", {}, el("h1", {}, `Finding #${f.id}: ${f.title}`), el("p", { class: "lead" }, f.description))),
+    el("dl", { class: "facts" },
+      el("div", {}, el("dt", {}, "Status"), el("dd", { id: "finding-status" }, findingState(f))),
+      el("div", {}, el("dt", {}, "Severity"), el("dd", {}, severity(f.severity))),
+      el("div", {}, el("dt", {}, "Remediation owner"), el("dd", {}, f.owner)),
+      el("div", {}, el("dt", {}, "Deadline"), el("dd", {}, f.due_date)),
+      el("div", {}, el("dt", {}, "Raised by"), el("dd", {}, `${f.raised_by}, ${when(f.created_at)}`)),
+      runLink && el("div", {}, el("dt", {}, "Raised on"), el("dd", {}, runLink, f.step ? ` · step ${f.step}` : "")),
+      evLink && el("div", {}, el("dt", {}, "Evidence"), el("dd", {}, evLink)),
+      f.blocks_approval && el("div", {}, el("dt", {}, "Approval"), el("dd", {}, el("span", { class: "state fail" }, "Blocks the model's approval"))),
+    ),
+    f.remediation && el("div", { class: "panel" }, el("h2", {}, "Remediation plan"), el("p", {}, f.remediation)),
+    el("div", { class: "columns" },
+      el("section", {}, el("h2", {}, "History"),
+        el("ul", { class: "timeline", id: "finding-events" }, f.events.map((e) => el("li", { class: e.action === "close" ? "approved" : e.action === "reopen" || e.action === "escalate" ? "rejected" : "" },
+          el("div", {}, el("strong", {}, e.action), " · ", e.user),
+          el("div", { class: "meta" }, `${when(e.ts)} · ${(FINDING_STATES[e.status] || [e.status])[0]}`),
+          e.comment && el("p", {}, e.comment))))),
+      buttons.length > 0 && el("aside", {}, el("div", { class: "panel" }, el("h2", {}, "Act"),
+        el("div", { class: "field" }, el("label", { for: "fa-comment" }, "Comment"), comment),
+        extra,
+        el("div", { class: "actions", id: "finding-actions" }, buttons),
+        msg)),
+    ),
   );
 }
 
@@ -573,6 +759,8 @@ async function route() {
     else if (parts[0] === "audit") await viewAudit();
     else if (parts[0] === "models" && parts[1]) await viewModel(parts[1]);
     else if (parts[0] === "models") await viewModels();
+    else if (parts[0] === "findings" && parts[1]) await viewFinding(parts[1]);
+    else if (parts[0] === "findings") await viewFindings();
     else await viewPipelines();
     document.getElementById("main")?.focus?.();
   } catch (err) {

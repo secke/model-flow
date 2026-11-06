@@ -154,17 +154,60 @@ roles_claim = "groups"
     check(overflow <= 0, `no horizontal scrolling on mobile (${overflow}px)`);
     await page.setViewportSize({ width: 1280, height: 900 });
 
+    console.log("Validator: finding on the run");
+    await page.goto(origin + "/#/p/pd-retail-scorecard/r/1");
+    await page.waitForSelector("#raise-finding");
+    await page.click("#raise-finding");
+    await page.fill("#f-title", "Grade 6 under-calibrated");
+    await page.selectOption("#f-severity", "high");
+    await page.fill("#f-description", "Observed default rate 14.9% for a 10% PD on grade 6.");
+    await page.fill("#f-step", "calibration");
+    await page.click("#f-save");
+    await page.waitForURL(/#\/findings\/1$/);
+    await page.waitForSelector("#finding-status");
+    check((await page.textContent("#finding-status")).includes("Open"), "a finding raised on the run opens");
+    check((await page.textContent(".facts")).includes("Blocks the model's approval"), "a high finding blocks the approval");
+    await page.screenshot({ path: path.join(SHOTS, "6-finding-open.png"), fullPage: true });
+
     await page.goto(origin + "/#/models/PD-RETAIL-01");
     await page.waitForSelector("#status-approved");
     check((await page.$("#edit-model")) === null, "a validator cannot edit the record");
     await page.click("#status-approved");
     await page.waitForSelector(".notice.fail");
     check((await page.textContent(".notice.fail")).includes("latest run rejected"), "model cannot be approved while its latest run is rejected");
+    check((await page.textContent(".notice.fail")).includes("finding #1 (high, open)"), "nor while a high finding is open");
     await page.goto(origin + "/#/models");
     await page.waitForSelector("text=Retail PD scorecard");
     await page.screenshot({ path: path.join(SHOTS, "5-inventory.png"), fullPage: true });
     const stray = await page.evaluate(() => [...document.querySelector("main").childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() !== ""));
     check(!stray, "no stray text in the page");
+    await logout();
+
+    console.log("Model owner: remediation");
+    await login("dana");
+    await page.goto(origin + "/#/findings");
+    await page.waitForSelector("#finding-tiles");
+    check((await page.textContent("#finding-tiles")).includes("1Active"), "the findings page counts the active finding");
+    await page.click("text=Grade 6 under-calibrated");
+    await page.waitForSelector("#fa-remediate");
+    check((await page.$("#fa-close")) === null, "an owner cannot close a finding");
+    await page.fill("#fa-comment", "Grade 6 recalibrated on the latest default data.");
+    await page.fill("#fa-evidence", "pd-retail-scorecard#1");
+    await page.click("#fa-remediate");
+    await page.waitForSelector("#finding-status >> text=Remediated, awaiting review", { timeout: 60000 });
+    check((await page.textContent(".facts")).includes("pd-retail-scorecard#1"), "the evidence run is linked after an identical replay");
+    await logout();
+
+    console.log("Validator: closure review");
+    await login("eli");
+    await page.goto(origin + "/#/findings/1");
+    await page.waitForSelector("#fa-close");
+    await page.fill("#fa-comment", "Recalibration checked on the evidence run.");
+    await page.click("#fa-close");
+    await page.waitForSelector("#finding-status >> text=Closed");
+    const steps = await page.textContent("#finding-events");
+    check(["raise", "remediate", "close"].every((a) => steps.includes(a)), "the finding history records each step");
+    await page.screenshot({ path: path.join(SHOTS, "7-finding-closed.png"), fullPage: true });
     await logout();
 
     console.log("Auditor");
@@ -180,6 +223,8 @@ roles_claim = "groups"
     check(text.includes("eli") && text.includes("Rejected"), "the log records the validator's decision");
     await page.fill("#filter", "model.status");
     check((await page.textContent("tbody")).includes("refused: in_validation -> approved"), "the log records the refused model approval");
+    await page.fill("#filter", "finding.close");
+    check((await page.textContent("tbody")).includes("eli"), "the log records the closure of the finding");
     await page.fill("#filter", "value-not-found");
     check((await page.textContent("tbody")).includes("No entry"), "the log filter reports no results");
     await page.fill("#filter", "");

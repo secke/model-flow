@@ -92,7 +92,7 @@ The full walkthrough, with the web UI, three roles (model owner, validator, audi
 |---|---|
 | `mf-core` | DAG of versioned steps, fingerprints of inputs, outputs and code, run manifest, verified replay |
 | `mf-runtime` | TOML pipelines, step kinds, external process isolation, run store (SQLite, PostgreSQL), HTML report |
-| `mf-server` | REST API, bearer tokens and OIDC SSO, roles and segregation of duties, validation decisions, append-only audit log, model inventory, scheduler, webhook alerts, web UI |
+| `mf-server` | REST API, bearer tokens and OIDC SSO, roles and segregation of duties, validation decisions, findings, append-only audit log, model inventory, scheduler, webhook alerts, web UI |
 | `mf-cli` | the `mf` binary: `run`, `verify`, `runs`, `show`, `report`, `diff`, `series`, `alerts` |
 | `mf-python` | the `modelflow` Python package (PyO3): pipelines, Python functions as steps, runs, replay, diff, reports |
 | [`quantparity`](https://github.com/secke/quantparity) | external dependency, pinned by git revision: BSM, Black-76, CRR, bonds, single and multi-curve (€STR / Euribor), VaR/ES, VaR / ES forecasting models (EWMA, GARCH or GJR volatility; normal, Student-t or filtered historical simulation), stress, FRTB PLA, Kupiec, Christoffersen, Basel traffic light, Acerbi-Székely ES backtests, PSI, AUC/Gini/KS, PD calibration |
@@ -141,15 +141,27 @@ Moving the engine from ModelFlow's former in-house crates to quantparity changed
 
 | Role | Can |
 |---|---|
-| `model_owner` | register and edit their own models, trigger runs, replay |
-| `validator` | replay, approve or reject runs (never their own), approve models |
+| `model_owner` | register and edit their own models, trigger runs, replay, remediate the findings they own |
+| `validator` | replay, approve or reject runs (never their own), approve models, raise, close, reopen findings, extend their deadlines, accept their risk |
 | `auditor` | read everything, including the audit log; no action buttons |
 | `admin` | administration; cannot hold the validator role at the same time |
 
 - A decision is accepted only if the replay is identical; a rejection must be justified.
-- A model can be approved only if the latest run of every linked pipeline is approved.
+- A model can be approved only if the latest run of every linked pipeline is approved and no critical or high finding is open or awaiting review.
 - A user who is both validator and owner/admin in the identity provider is rejected at sign-in.
 - The configuration stores only SHA-256 fingerprints of service tokens.
+
+### Findings
+
+A validation finding is raised by a validator on a model, and optionally on the run and step that show it. It has a severity (`critical`, `high`, `medium`, `low`), a remediation owner (by default the model owner) and a deadline (by default 30, 90, 180 or 365 days by severity).
+
+| Status | Next steps |
+|---|---|
+| `open` | the owner records a remediation plan (`plan`) and submits the remediation (`remediate`), optionally with a run as evidence (`pipeline#run`): the run must belong to a pipeline of the model and replay identically; a validator extends the deadline (`extend`) or accepts the risk (`accept`) |
+| `remediated` | a validator closes the finding (`close`) or reopens it (`reopen`); not counted as overdue: it waits for the validator |
+| `closed`, `risk_accepted` | final; comments only |
+
+Every action needs a comment and is recorded in the finding's history and in the audit log. An open finding past its deadline is escalated once by the scheduler pass (webhook `status: "finding_overdue"`, audit `finding.escalate`); a new deadline is escalated again if missed. `GET /api/findings/report` gives the governance summary: counts by status and severity, active findings (overdue first), ageing, closures and mean time to close over 90 days, active findings by model; `?format=md` for a committee pack. The web UI has a findings page, the finding's history and actions, and findings on the model and run pages.
 
 ### Audit trail
 
@@ -160,7 +172,7 @@ Every action, denials included, is appended to the audit log. On PostgreSQL a tr
 | Expectation | How ModelFlow supports it |
 |---|---|
 | **SR 26-2** (US model risk management): independent validation, effective challenge, model inventory | Model inventory with risk tiers and review dates; validator-only approval; challenger and benchmark pricers as pipeline steps; replayable evidence |
-| **SS1/23** (UK PRA model risk management): model identification, governance, independent validation, use of model risk mitigants | Inventory with status workflow (development → in validation → approved → in use → retired); segregation of duties enforced by the server and at SSO level; overdue reviews flagged |
+| **SS1/23** (UK PRA model risk management): model identification, governance, independent validation, use of model risk mitigants | Inventory with status workflow (development → in validation → approved → in use → retired); segregation of duties enforced by the server and at SSO level; overdue reviews flagged; findings with severity, owner, deadline, evidence of remediation, closure review and escalation |
 | **BCBS 239** (risk data aggregation and reporting): accuracy, integrity, traceability | Every input, output and piece of code fingerprinted; lineage through the DAG; integrity checks on stored results; append-only audit log |
 
 ModelFlow is a tool that produces evidence; it does not make an institution compliant on its own.
@@ -418,7 +430,7 @@ mf-server serve --config server.toml              # web UI on http://127.0.0.1:8
 curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/pipelines
 ```
 
-The web UI has no external dependency (no CDN, no remote font) and works on a closed bank network. It covers pipelines, runs with queue tracking, the run page (verdict seal, report, replay, decisions), the model inventory and the filterable audit log. Content is inserted as text only, under a strict CSP (`script-src 'self'`), and the report is shown in a sandboxed frame.
+The web UI has no external dependency (no CDN, no remote font) and works on a closed bank network. It covers pipelines, runs with queue tracking, the run page (verdict seal, report, replay, decisions, findings), the model inventory, the findings and the filterable audit log. Content is inserted as text only, under a strict CSP (`script-src 'self'`), and the report is shown in a sandboxed frame.
 
 | Method | Path | Roles |
 |---|---|---|
@@ -428,6 +440,9 @@ The web UI has no external dependency (no CDN, no remote font) and works on a cl
 | POST | `/api/pipelines/{p}/runs/{id}/verify` | `validator`, `model_owner`, `admin` |
 | POST | `/api/pipelines/{p}/runs/{id}/decisions` `{"decision": "approved" \| "rejected", "comment": "…"}` | `validator` |
 | GET, POST | `/api/models`; PUT `/api/models/{id}`; POST `/api/models/{id}/status` | read: all; write: owner, admin; `approved`: validator |
+| GET | `/api/findings?model=&status=&severity=&overdue=true`, `/api/findings/{id}`, `/api/findings/report?format=md` | all |
+| POST | `/api/findings` `{"model", "title", "description", "severity", "pipeline"?, "run_id"?, "step"?, "due_date"?, "owner"?}` | `validator` |
+| POST | `/api/findings/{id}/actions` `{"action", "comment", "evidence"?, "due_date"?}` | `plan`, `remediate`: the remediation owner, `admin`; `close`, `reopen`, `extend`, `accept`: `validator`; `comment`: all but `auditor` |
 | GET | `/api/audit?limit=100` | `auditor`, `admin` |
 
 Runs are queued (`max_concurrent_runs`, default 2) and rate-limited per user (`rate_limit_per_minute`, default 120, `429` beyond). Jobs interrupted by a shutdown are marked failed at restart.
@@ -487,8 +502,8 @@ The schema is created at startup under an advisory lock, so several instances ca
 ## Deployment
 
 ```bash
-docker build -t modelflow:0.20.0 .
-docker run --rm modelflow:0.20.0 new-token          # fill in deploy/server.docker.toml
+docker build -t modelflow:0.21.0 .
+docker run --rm modelflow:0.21.0 new-token          # fill in deploy/server.docker.toml
 docker compose up --build                          # http://127.0.0.1:8080
 kubectl apply -k deploy/k8s                        # after filling in deploy/k8s/secret.yaml
 ```

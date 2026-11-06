@@ -12,7 +12,7 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 
 > Positioning and roadmap: [VISION.md](VISION.md).
 
-## Status (v0.20)
+## Status (v0.21)
 - `mf-core`: DAG, fingerprints of inputs, outputs and code, manifest, replay verification.
 - [`quantparity`](https://github.com/secke/quantparity) (external dependency, cross-checked against QuantLib): historical VaR; Kupiec, Christoffersen, Basel traffic light; PSI; VaR / ES forecasts (EWMA, GARCH or GJR-GARCH volatility with normal or Student-t innovations, filtered historical simulation; GARCH reconciled with the Python `arch` package, warning on fits at the stationarity bound); Acerbi-Székely expected shortfall backtests, with Z2 p-values simulated from the forecast distribution (by default for `var_model` forecasts); AUC, Gini, KS; per-grade binomial calibration and Hosmer-Lemeshow; reference pricers (BSM and Greeks, Black-76, American CRR, bonds, implied volatility), yield curves (deposit + swap bootstrap), interest rate swaps and zero-coupons with DV01, pricer benchmark with per-product tolerances.
 - `mf-runtime`: TOML pipelines, CSV steps (series or table), built-in steps, external processes with a timeout, SQLite storage, HTML validation report.
@@ -28,6 +28,7 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 - API: run queue, rate limiting, native TLS, OIDC single sign-on (groups to roles, segregation of duties).
 - Portfolio risk: historical VaR/ES by full revaluation, sensitivities, stress tests with limits, P&L attribution (FRTB).
 - Model inventory (statuses, risk tiers, reviews), scheduled runs and webhook alerts.
+- Validation findings: severity, remediation owner and deadline, remediation evidenced by a reproducible run, closure review by a validator, escalation of overdue findings, approval blocked by critical and high findings, governance report (JSON, Markdown).
 - Validator web UI (SSO PKCE, triggering, report, replay, decisions, audit), tested end to end.
 - PostgreSQL storage for history and governance (audit log protected by a trigger), SQLite kept for local use.
 - Deployment: non-root Docker image, hardened docker-compose, Kubernetes manifests (Pod Security restricted, NetworkPolicy).

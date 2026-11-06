@@ -5,6 +5,7 @@
 //! can approve or reject, never a run they triggered, and only if the replay is identical.
 
 pub mod alerts;
+pub mod findings;
 pub mod governance;
 pub mod oidc;
 pub mod scheduler;
@@ -786,6 +787,10 @@ pub async fn scheduler_tick(st: &AppState, now: i64) -> Result<Vec<i64>, String>
     })
     .await
     .map_err(|e| e.to_string())??;
+    let st3 = st.clone();
+    tokio::task::spawn_blocking(move || findings::escalate_overdue(&st3, &findings::today()))
+        .await
+        .map_err(|e| e.to_string())??;
     let system = Auth {
         name: "scheduler".into(),
         role: Role::ModelOwner,
@@ -1203,6 +1208,7 @@ async fn list_models(State(st): State<AppState>, _auth: Auth) -> ApiResult<Json<
                 .or_default()
                 .push(json!({"pipeline": name, "schedule": sp.schedule, "last_run": last}));
         }
+        let all_findings = gov.findings().map_err(ApiError::internal)?;
         let out: Vec<Value> = gov
             .models()
             .map_err(ApiError::internal)?
@@ -1212,6 +1218,7 @@ async fn list_models(State(st): State<AppState>, _auth: Auth) -> ApiResult<Json<
                 let mut v = serde_json::to_value(&m).unwrap();
                 v["pipelines"] = json!(linked.remove(&m.id).unwrap_or_default());
                 v["review_overdue"] = json!(overdue);
+                v["findings"] = findings::model_counts(&all_findings, &m.id, &today);
                 v
             })
             .collect();
@@ -1378,6 +1385,7 @@ async fn set_model_status(
             if linked == 0 {
                 blockers.push("no validation pipeline declares this model".into());
             }
+            blockers.extend(findings::approval_blockers(&gov, &id)?);
             if !blockers.is_empty() {
                 let _ = gov.audit(
                     &auth.name,
@@ -1433,6 +1441,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/models/:id", axum::routing::put(update_model))
         .route("/api/models/:id/status", post(set_model_status))
         .route("/api/audit", get(audit_log))
+        .route("/api/findings", get(findings::list).post(findings::create))
+        .route("/api/findings/report", get(findings::governance_report))
+        .route("/api/findings/:id", get(findings::get))
+        .route("/api/findings/:id/actions", post(findings::act))
         .layer(axum::middleware::from_fn_with_state(state.clone(), security_headers))
         .with_state(state)
 }

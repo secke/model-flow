@@ -30,6 +30,95 @@ pub struct ModelRecord {
 
 pub const MODEL_STATUSES: &[&str] = &["development", "in_validation", "approved", "in_use", "retired"];
 
+/// A validation finding: a weakness of a model raised by a validator, remediated by the model
+/// owner and closed by a validator.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct Finding {
+    pub id: i64,
+    pub model: String,
+    /// The run the finding was raised on, if any.
+    pub pipeline: Option<String>,
+    pub run_id: Option<i64>,
+    pub step: Option<String>,
+    pub title: String,
+    pub description: String,
+    /// `critical`, `high`, `medium` or `low`.
+    pub severity: String,
+    /// `open`, `remediated`, `closed` or `risk_accepted`.
+    pub status: String,
+    /// Responsible for the remediation (by default the model owner).
+    pub owner: String,
+    pub raised_by: String,
+    /// Remediation deadline (YYYY-MM-DD).
+    pub due_date: String,
+    pub remediation: String,
+    /// Run that evidences the remediation (`pipeline#id`), replayed identically when submitted.
+    pub evidence: Option<String>,
+    pub remediated_by: Option<String>,
+    pub closed_by: Option<String>,
+    pub closed_at: Option<i64>,
+    /// When the overdue finding was escalated (once).
+    pub escalated_at: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+pub const SEVERITIES: &[&str] = &["critical", "high", "medium", "low"];
+pub const FINDING_STATUSES: &[&str] = &["open", "remediated", "closed", "risk_accepted"];
+
+const FINDING_COLUMNS: &str =
+    "id, model, pipeline, run_id, step, title, description, severity, status, owner, raised_by,
+    due_date, remediation, evidence, remediated_by, closed_by, closed_at, escalated_at, created_at, updated_at";
+const FINDING_TYPES: &[C] = &[
+    C::I,
+    C::S,
+    C::OS,
+    C::OI,
+    C::OS,
+    C::S,
+    C::S,
+    C::S,
+    C::S,
+    C::S,
+    C::S,
+    C::S,
+    C::S,
+    C::OS,
+    C::OS,
+    C::OS,
+    C::OI,
+    C::OI,
+    C::I,
+    C::I,
+];
+
+fn finding_from(r: Vec<Value>) -> Finding {
+    let s = |i: usize| r[i].as_str().unwrap_or_default().to_string();
+    let os = |i: usize| r[i].as_str().map(String::from);
+    Finding {
+        id: r[0].as_i64().unwrap_or_default(),
+        model: s(1),
+        pipeline: os(2),
+        run_id: r[3].as_i64(),
+        step: os(4),
+        title: s(5),
+        description: s(6),
+        severity: s(7),
+        status: s(8),
+        owner: s(9),
+        raised_by: s(10),
+        due_date: s(11),
+        remediation: s(12),
+        evidence: os(13),
+        remediated_by: os(14),
+        closed_by: os(15),
+        closed_at: r[16].as_i64(),
+        escalated_at: r[17].as_i64(),
+        created_at: r[18].as_i64().unwrap_or_default(),
+        updated_at: r[19].as_i64().unwrap_or_default(),
+    }
+}
+
 pub enum Gov {
     Sqlite(Connection),
     Postgres(Box<RefCell<PgConn>>),
@@ -72,6 +161,15 @@ CREATE TABLE IF NOT EXISTS models (
     tier BIGINT NOT NULL, status TEXT NOT NULL, next_review TEXT,
     created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL, updated_by TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS schedules (pipeline TEXT PRIMARY KEY, last_slot BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS findings (
+    id BIGSERIAL PRIMARY KEY, model TEXT NOT NULL, pipeline TEXT, run_id BIGINT, step TEXT,
+    title TEXT NOT NULL, description TEXT NOT NULL, severity TEXT NOT NULL, status TEXT NOT NULL,
+    owner TEXT NOT NULL, raised_by TEXT NOT NULL, due_date TEXT NOT NULL, remediation TEXT NOT NULL,
+    evidence TEXT, remediated_by TEXT, closed_by TEXT, closed_at BIGINT, escalated_at BIGINT,
+    created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS finding_events (
+    id BIGSERIAL PRIMARY KEY, finding_id BIGINT NOT NULL, ts BIGINT NOT NULL, username TEXT NOT NULL,
+    action TEXT NOT NULL, status TEXT NOT NULL, comment TEXT NOT NULL);
 CREATE OR REPLACE FUNCTION mf_audit_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN RAISE EXCEPTION 'append-only audit log'; END $$;
 CREATE OR REPLACE TRIGGER audit_no_change BEFORE UPDATE OR DELETE ON audit
@@ -130,6 +228,15 @@ impl Gov {
                 tier INTEGER NOT NULL, status TEXT NOT NULL, next_review TEXT,
                 created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, updated_by TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS schedules (pipeline TEXT PRIMARY KEY, last_slot INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS findings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, model TEXT NOT NULL, pipeline TEXT, run_id INTEGER, step TEXT,
+                title TEXT NOT NULL, description TEXT NOT NULL, severity TEXT NOT NULL, status TEXT NOT NULL,
+                owner TEXT NOT NULL, raised_by TEXT NOT NULL, due_date TEXT NOT NULL, remediation TEXT NOT NULL,
+                evidence TEXT, remediated_by TEXT, closed_by TEXT, closed_at INTEGER, escalated_at INTEGER,
+                created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS finding_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, finding_id INTEGER NOT NULL, ts INTEGER NOT NULL,
+                user TEXT NOT NULL, action TEXT NOT NULL, status TEXT NOT NULL, comment TEXT NOT NULL);
              CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit
                 BEGIN SELECT RAISE(ABORT, 'append-only audit log'); END;
              CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit
@@ -158,7 +265,7 @@ impl Gov {
         match self {
             Gov::Sqlite(_) => {
                 let mut s = q.replace("{user}", "user");
-                for i in (1..=9).rev() {
+                for i in (1..=20).rev() {
                     s = s.replace(&format!("${i}"), &format!("?{i}"));
                 }
                 s
@@ -441,6 +548,91 @@ impl Gov {
                 comment: r[2].as_str().unwrap_or_default().into(),
                 created_at: r[3].as_i64().unwrap_or_default(),
             })
+            .collect())
+    }
+
+    /// Records a new open finding and its first event; returns its id.
+    pub fn create_finding(&self, f: &Finding, user: &str) -> Result<i64, String> {
+        let t = now();
+        let id = self.insert(
+            "INSERT INTO findings (model, pipeline, run_id, step, title, description, severity, status, owner,
+             raised_by, due_date, remediation, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8, $9, $10, '', $11, $11)",
+            &[
+                P::S(&f.model),
+                P::OS(f.pipeline.as_deref()),
+                P::OI(f.run_id),
+                P::OS(f.step.as_deref()),
+                P::S(&f.title),
+                P::S(&f.description),
+                P::S(&f.severity),
+                P::S(&f.owner),
+                P::S(user),
+                P::S(&f.due_date),
+                P::I(t),
+            ],
+        )?;
+        self.finding_event(id, user, "raise", "open", &f.description)?;
+        Ok(id)
+    }
+
+    pub fn finding(&self, id: i64) -> Result<Option<Finding>, String> {
+        let rows = self.query(
+            &format!("SELECT {FINDING_COLUMNS} FROM findings WHERE id = $1"),
+            &[P::I(id)],
+            FINDING_TYPES,
+        )?;
+        Ok(rows.into_iter().next().map(finding_from))
+    }
+
+    pub fn findings(&self) -> Result<Vec<Finding>, String> {
+        let rows = self.query(
+            &format!("SELECT {FINDING_COLUMNS} FROM findings ORDER BY id"),
+            &[],
+            FINDING_TYPES,
+        )?;
+        Ok(rows.into_iter().map(finding_from).collect())
+    }
+
+    /// Saves the mutable fields of a finding.
+    pub fn update_finding(&self, f: &Finding) -> Result<(), String> {
+        self.exec(
+            "UPDATE findings SET status = $2, remediation = $3, due_date = $4, evidence = $5, remediated_by = $6,
+             closed_by = $7, closed_at = $8, escalated_at = $9, updated_at = $10 WHERE id = $1",
+            &[
+                P::I(f.id),
+                P::S(&f.status),
+                P::S(&f.remediation),
+                P::S(&f.due_date),
+                P::OS(f.evidence.as_deref()),
+                P::OS(f.remediated_by.as_deref()),
+                P::OS(f.closed_by.as_deref()),
+                P::OI(f.closed_at),
+                P::OI(f.escalated_at),
+                P::I(now()),
+            ],
+        )
+        .map(|_| ())
+    }
+
+    pub fn finding_event(&self, id: i64, user: &str, action: &str, status: &str, comment: &str) -> Result<(), String> {
+        self.exec(
+            "INSERT INTO finding_events (finding_id, ts, {user}, action, status, comment) VALUES ($1, $2, $3, $4, $5, $6)",
+            &[P::I(id), P::I(now()), P::S(user), P::S(action), P::S(status), P::S(comment)],
+        )
+        .map(|_| ())
+    }
+
+    pub fn finding_events(&self, id: i64) -> Result<Vec<Value>, String> {
+        let rows = self.query(
+            "SELECT ts, {user}, action, status, comment FROM finding_events WHERE finding_id = $1 ORDER BY id",
+            &[P::I(id)],
+            &[C::I, C::S, C::S, C::S, C::S],
+        )?;
+        let keys = ["ts", "user", "action", "status", "comment"];
+        Ok(rows
+            .into_iter()
+            .map(|r| Value::Object(keys.iter().map(|k| k.to_string()).zip(r).collect()))
             .collect())
     }
 

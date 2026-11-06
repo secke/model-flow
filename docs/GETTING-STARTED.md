@@ -140,17 +140,20 @@ Sign in with alice's token, then:
 ### B4. Bob, validator
 1. Open the run: **Replay the run**. The replay must be identical.
 2. **Reject** with a comment, for example: "Sovereign crisis limit breached (128%): reduce the OAT exposure."
-3. **Model inventory** → `VAR-HS-01` → **Approve the model**: refused ("latest run rejected").
-4. **Sign out**.
+3. Still on the run, **Raise a finding on this run**: title "Sovereign crisis limit breached", severity **High**, step `stress`, a description. The finding opens with a deadline 90 days away.
+4. **Model inventory** → `VAR-HS-01` → **Approve the model**: refused, because the latest run is rejected and finding #1 (high) is open.
+5. **Sign out**.
 
 ### B5. Alice fixes, Bob approves
 1. In `examples/portfolio-risk/trades.json`, change the quantity of `BD-OAT-10Y` from `100000` to `50000`.
 2. As alice, trigger a new run. The stress test is back under its limit. The seal shows "Warning": the VaR rises to 92% of its limit, because the OAT was hedging part of the swaps' rate risk.
-3. As bob:
+3. Still as alice: **Findings** → finding #1 → comment "OAT position halved", evidence run `portfolio-risk-desk#3` → **Submit the remediation**. The server replays run #3 before accepting it as evidence; the finding is "Remediated, awaiting review".
+4. As bob:
    - **Replay the run**, then **Approve** with a comment on the VaR warning;
+   - **Findings** → finding #1 → **Close the finding** with a comment;
    - in the inventory, **Approve the model**, accepted this time.
-4. As alice: **Put into use**.
-5. In a terminal, see what the fix changed between alice's two runs (previous vs latest):
+5. As alice: **Put into use**.
+6. In a terminal, see what the fix changed between alice's two runs (previous vs latest):
    ```bash
    mf diff examples/portfolio-risk/pipeline.toml
    ```
@@ -159,7 +162,7 @@ Sign in with alice's token, then:
 Run #2 can no longer be replayed identically, since `trades.json` has changed: the replay says so (`positions: non-reproducible result`). This is the expected behavior. A run is only reproducible with the data that produced it. To keep both versions, version the pipeline directory with Git.
 
 ### B6. Carol, auditor
-**Audit log**: every action is there, denials included. Filter by `model.status` or `run.decide`. Carol sees no action buttons.
+**Audit log**: every action is there, denials included. Filter by `model.status`, `run.decide` or `finding.`. **Findings** → **Governance report (Markdown)** downloads the summary for a committee. Carol sees no action buttons.
 
 ### B7. Scheduling
 Add below the `model = …` line of `examples/portfolio-risk/pipeline.toml`:
@@ -172,6 +175,7 @@ The server rereads the pipelines on every pass: a run triggered by `scheduler` a
 ```bash
 curl -s -H "Authorization: Bearer $(token carol)" http://127.0.0.1:8080/api/models | python3 -m json.tool
 curl -s -H "Authorization: Bearer $(token carol)" "http://127.0.0.1:8080/api/audit?limit=5" | python3 -m json.tool
+curl -s -H "Authorization: Bearer $(token carol)" "http://127.0.0.1:8080/api/findings/report?format=md"
 curl -s -H "Authorization: Bearer $(token carol)" "http://127.0.0.1:8080/api/pipelines/portfolio-risk-desk/diff?left=2&right=3&format=md"
 ```
 The last call is the comparison of step B5, from the API: run #2 is alice's first run (run #1 is the one of part A, which shares the history), run #3 the run after the fix. `mf runs examples/portfolio-risk/pipeline.toml` lists the ids.
