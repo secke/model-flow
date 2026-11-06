@@ -61,7 +61,7 @@ The GARCH filters are fitted on the first 500 returns (two years) and refitted e
 | **GJR, filtered HS** | **15 (0.85%)** | **0.52** | **0.61** | **none** | 0 / 1 / 6 | 33 | 1.04 | +0.22 green | **3.30%** |
 | GJR, filtered HS, fit on latest 1,000 | 12 (0.68%) | 0.15 | 0.68 | none | 0 / 0 / 7 | 31 | 1.03 | +0.28 green | 3.31% |
 
-The Basel and Z2 zones of each model in each of the seven 250-day windows, and every exception day of every model, are in the summary.
+The Basel and Z2 zones of each model in each of the seven 250-day windows, and every exception day of every model, are in the summary. The whole-sample Z2 zones of this table use the 250-day thresholds; with p-values simulated over the 1,761 days ([experiment 07](../07-z2-simulated-pvalues/README.md)), the champion, GARCH normal and GJR normal are red and GJR t5 yellow; the filtered simulations stay green.
 
 **Findings.**
 
@@ -79,4 +79,4 @@ The Basel and Z2 zones of each model in each of the seven 250-day windows, and e
 | Exceptions cluster on the day after a shock with an EWMA filter (experiment 05) | **added** in quantparity 0.3.0 / ModelFlow v0.17.0: GARCH and GJR-GARCH filters in `var_model`, reconciled with `arch`. They remove the clustering (finding 1) |
 | `arch` fitted on unscaled daily returns stops short of the optimum and reports convergence (quantparity validation: 33 of 36 samples) | documented; quantparity rescales internally |
 | A fit at the stationarity bound is only visible in the step output | **added** in v0.18.0: `var_model` warns when a fit has α + γ/2 + β ≥ `max_persistence` (0.999), with the fit dates (`persistence_check`) |
-| Z2 thresholds assume moderate tails (experiment 05) | open: p-values of Z2 by simulation from the forecast distribution |
+| Z2 thresholds assume moderate tails (experiment 05) | **added** in v0.19: p-values of Z2 by simulation ([experiment 07](../07-z2-simulated-pvalues/README.md)) |

@@ -1,0 +1,571 @@
+{
+  "ewma_models.toml": {
+    "run_hash": "619f77c5d301dbf2fa08bd739d63661cff832e82b7bf830ed2267ea20c126c62",
+    "models": [
+      {
+        "model": "ewma_normal",
+        "days": 2231,
+        "z2": -0.9802805822150888,
+        "fixed_zone": "yellow",
+        "p_value": 9.99990000099999e-06,
+        "simulated_zone": "red",
+        "critical_5": -0.22603593805026034,
+        "critical_0_01": -0.531360593967314,
+        "windows_fixed": [
+          "yellow",
+          "red",
+          "green",
+          "yellow",
+          "green",
+          "yellow",
+          "yellow",
+          "green"
+        ],
+        "windows_simulated": [
+          "yellow",
+          "red",
+          "green",
+          "yellow",
+          "green",
+          "yellow",
+          "yellow",
+          "green"
+        ],
+        "window_p_values": [
+          0.030999690003099968,
+          5.999940000599994e-05,
+          0.05481945180548194,
+          0.001149988500114999,
+          0.5983540164598354,
+          0.02966970330296697,
+          0.0016499835001649984,
+          0.16831831681683182
+        ],
+        "changed_windows": []
+      },
+      {
+        "model": "ewma_t5",
+        "days": 2231,
+        "z2": -0.65823363414773,
+        "fixed_zone": "green",
+        "p_value": 9.99990000099999e-06,
+        "simulated_zone": "red",
+        "critical_5": -0.23633384884965558,
+        "critical_0_01": -0.5441113396470458,
+        "windows_fixed": [
+          "green",
+          "yellow",
+          "green",
+          "yellow",
+          "green",
+          "green",
+          "yellow",
+          "green"
+        ],
+        "windows_simulated": [
+          "green",
+          "yellow",
+          "green",
+          "yellow",
+          "green",
+          "green",
+          "yellow",
+          "green"
+        ],
+        "window_p_values": [
+          0.1000789992100079,
+          0.003239967600323997,
+          0.14483855161448386,
+          0.011829881701182989,
+          0.8018619813801862,
+          0.0971990280097199,
+          0.015149848501514985,
+          0.4042859571404286
+        ],
+        "changed_windows": []
+      },
+      {
+        "model": "ewma_t4",
+        "days": 2231,
+        "z2": -0.6394180405599013,
+        "fixed_zone": "green",
+        "p_value": 2.999970000299997e-05,
+        "simulated_zone": "red",
+        "critical_5": -0.24341677862524258,
+        "critical_0_01": -0.5756170893218042,
+        "windows_fixed": [
+          "green",
+          "yellow",
+          "green",
+          "yellow",
+          "green",
+          "green",
+          "yellow",
+          "green"
+        ],
+        "windows_simulated": [
+          "green",
+          "yellow",
+          "green",
+          "yellow",
+          "green",
+          "green",
+          "yellow",
+          "green"
+        ],
+        "window_p_values": [
+          0.12440875591244087,
+          0.004009959900400996,
+          0.17219827801721982,
+          0.01969980300196998,
+          0.7193928060719392,
+          0.12120878791212088,
+          0.024099759002409977,
+          0.3376366236337637
+        ],
+        "changed_windows": []
+      },
+      {
+        "model": "ewma_t3",
+        "days": 2231,
+        "z2": -0.7547809402346692,
+        "fixed_zone": "yellow",
+        "p_value": 0.00034999650003499967,
+        "simulated_zone": "yellow",
+        "critical_5": -0.2654541183499035,
+        "critical_0_01": -0.9807282874955687,
+        "windows_fixed": [
+          "green",
+          "yellow",
+          "green",
+          "yellow",
+          "green",
+          "green",
+          "yellow",
+          "green"
+        ],
+        "windows_simulated": [
+          "green",
+          "yellow",
+          "green",
+          "yellow",
+          "green",
+          "green",
+          "yellow",
+          "green"
+        ],
+        "window_p_values": [
+          0.11068889311106889,
+          0.007869921300786993,
+          0.14869851301486986,
+          0.024349756502434976,
+          0.27537724622753773,
+          0.14680853191468085,
+          0.03958960410395896,
+          0.0882991170088299
+        ],
+        "changed_windows": []
+      },
+      {
+        "model": "fhs",
+        "days": 2231,
+        "z2": 0.10866081197054023,
+        "fixed_zone": "green",
+        "p_value": 0.7611323886761132,
+        "simulated_zone": "green",
+        "critical_5": -0.23006791351592604,
+        "critical_0_01": -0.5405719901461798,
+        "windows_fixed": [
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green"
+        ],
+        "windows_simulated": [
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green"
+        ],
+        "window_p_values": [
+          0.5791642083579164,
+          0.07914920850791492,
+          0.7670223297767023,
+          0.9026909730902691,
+          0.987350126498735,
+          0.8428115718842811,
+          0.13735862641373586,
+          0.953560464395356
+        ],
+        "changed_windows": []
+      },
+      {
+        "model": "fhs_2y",
+        "days": 2231,
+        "z2": -0.0652521024021091,
+        "fixed_zone": "green",
+        "p_value": 0.2680173198268017,
+        "simulated_zone": "green",
+        "critical_5": -0.21516541027338376,
+        "critical_0_01": -0.5271074009715122,
+        "windows_fixed": [
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "yellow",
+          "green"
+        ],
+        "windows_simulated": [
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "yellow",
+          "green"
+        ],
+        "window_p_values": [
+          0.6068939310606893,
+          0.07691923080769192,
+          0.8459215407845921,
+          0.6587634123658763,
+          0.974260257397426,
+          0.10532894671053289,
+          0.026589734102658972,
+          0.9518804811951881
+        ],
+        "changed_windows": []
+      }
+    ]
+  },
+  "garch_models.toml": {
+    "run_hash": "404386fc1504f239158867940137ab2cefbc8e08e63ce605de1b7193a144d19b",
+    "models": [
+      {
+        "model": "ewma_normal",
+        "days": 1761,
+        "z2": -0.9074535751567749,
+        "fixed_zone": "yellow",
+        "p_value": 9.99990000099999e-06,
+        "simulated_zone": "red",
+        "critical_5": -0.2551454552062118,
+        "critical_0_01": -0.5864210720768104,
+        "windows_fixed": [
+          "red",
+          "green",
+          "yellow",
+          "green",
+          "yellow",
+          "yellow",
+          "green"
+        ],
+        "windows_simulated": [
+          "red",
+          "green",
+          "yellow",
+          "green",
+          "yellow",
+          "yellow",
+          "green"
+        ],
+        "window_p_values": [
+          5.999940000599994e-05,
+          0.05481945180548194,
+          0.001149988500114999,
+          0.5983540164598354,
+          0.02966970330296697,
+          0.0016499835001649984,
+          0.16831831681683182
+        ],
+        "changed_windows": []
+      },
+      {
+        "model": "ewma_fhs",
+        "days": 1761,
+        "z2": 0.23261787915790066,
+        "fixed_zone": "green",
+        "p_value": 0.9314406855931441,
+        "simulated_zone": "green",
+        "critical_5": -0.2615541513227915,
+        "critical_0_01": -0.6131939707044809,
+        "windows_fixed": [
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green"
+        ],
+        "windows_simulated": [
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green"
+        ],
+        "window_p_values": [
+          0.07914920850791492,
+          0.7670223297767023,
+          0.9026909730902691,
+          0.987350126498735,
+          0.8428115718842811,
+          0.13735862641373586,
+          0.953560464395356
+        ],
+        "changed_windows": []
+      },
+      {
+        "model": "garch_normal",
+        "days": 1761,
+        "z2": -0.6361695643000924,
+        "fixed_zone": "green",
+        "p_value": 2.999970000299997e-05,
+        "simulated_zone": "red",
+        "critical_5": -0.2551454552062118,
+        "critical_0_01": -0.5864210720768104,
+        "windows_fixed": [
+          "yellow",
+          "green",
+          "yellow",
+          "green",
+          "green",
+          "yellow",
+          "green"
+        ],
+        "windows_simulated": [
+          "yellow",
+          "green",
+          "yellow",
+          "green",
+          "green",
+          "yellow",
+          "green"
+        ],
+        "window_p_values": [
+          0.00014999850001499985,
+          0.0989990100098999,
+          0.00940990590094099,
+          0.6580334196658033,
+          0.23729762702372975,
+          0.004959950400495995,
+          0.4923050769492305
+        ],
+        "changed_windows": []
+      },
+      {
+        "model": "gjr_normal",
+        "days": 1761,
+        "z2": -0.7499571431744563,
+        "fixed_zone": "yellow",
+        "p_value": 9.99990000099999e-06,
+        "simulated_zone": "red",
+        "critical_5": -0.2551454552062118,
+        "critical_0_01": -0.5864210720768104,
+        "windows_fixed": [
+          "red",
+          "yellow",
+          "yellow",
+          "green",
+          "green",
+          "yellow",
+          "green"
+        ],
+        "windows_simulated": [
+          "red",
+          "green",
+          "yellow",
+          "green",
+          "green",
+          "yellow",
+          "green"
+        ],
+        "window_p_values": [
+          9.99990000099999e-06,
+          0.05096949030509695,
+          0.02893971060289397,
+          0.5089049109508905,
+          0.11347886521134788,
+          0.008309916900830992,
+          0.38023619763802363
+        ],
+        "changed_windows": [
+          {
+            "from": "2020-11-06",
+            "to": "2021-11-03",
+            "z2": -0.7040008065073726,
+            "fixed": "yellow",
+            "simulated": "green",
+            "p_value": 0.05096949030509695
+          }
+        ]
+      },
+      {
+        "model": "gjr_t5",
+        "days": 1761,
+        "z2": -0.43407829962802147,
+        "fixed_zone": "green",
+        "p_value": 0.004769952300476995,
+        "simulated_zone": "yellow",
+        "critical_5": -0.2676217577481046,
+        "critical_0_01": -0.6288657927279862,
+        "windows_fixed": [
+          "yellow",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green"
+        ],
+        "windows_simulated": [
+          "yellow",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green"
+        ],
+        "window_p_values": [
+          0.0016799832001679984,
+          0.13759862401375986,
+          0.09520904790952091,
+          0.6400835991640084,
+          0.23622763772362276,
+          0.06915930840691593,
+          0.6379936200637993
+        ],
+        "changed_windows": []
+      },
+      {
+        "model": "garch_fhs",
+        "days": 1761,
+        "z2": 0.2759483186282925,
+        "fixed_zone": "green",
+        "p_value": 0.961660383396166,
+        "simulated_zone": "green",
+        "critical_5": -0.24679720322719567,
+        "critical_0_01": -0.6022985457049119,
+        "windows_fixed": [
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green"
+        ],
+        "windows_simulated": [
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green"
+        ],
+        "window_p_values": [
+          0.1988480115198848,
+          0.8301616983830161,
+          0.7492025079749203,
+          0.9920000799992,
+          0.931750682493175,
+          0.14942850571494284,
+          0.8829411705882941
+        ],
+        "changed_windows": []
+      },
+      {
+        "model": "gjr_fhs",
+        "days": 1761,
+        "z2": 0.22104705091459131,
+        "fixed_zone": "green",
+        "p_value": 0.9083909160908391,
+        "simulated_zone": "green",
+        "critical_5": -0.2692985824050771,
+        "critical_0_01": -0.6450681954381847,
+        "windows_fixed": [
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green"
+        ],
+        "windows_simulated": [
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green"
+        ],
+        "window_p_values": [
+          0.17499825001749983,
+          0.7558024419755802,
+          0.5626043739562604,
+          0.949120508794912,
+          0.7668123318766812,
+          0.3208867911320887,
+          0.941270587294127
+        ],
+        "changed_windows": []
+      },
+      {
+        "model": "gjr_fhs_4y",
+        "days": 1761,
+        "z2": 0.27728926398439324,
+        "fixed_zone": "green",
+        "p_value": 0.955410445895541,
+        "simulated_zone": "green",
+        "critical_5": -0.269991625538049,
+        "critical_0_01": -0.6468814691881324,
+        "windows_fixed": [
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green"
+        ],
+        "windows_simulated": [
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green",
+          "green"
+        ],
+        "window_p_values": [
+          0.17499825001749983,
+          0.7558024419755802,
+          0.6761732382676173,
+          0.982320176798232,
+          0.8822011779882201,
+          0.2894071059289407,
+          0.9552404475955241
+        ],
+        "changed_windows": []
+      }
+    ]
+  }
+}

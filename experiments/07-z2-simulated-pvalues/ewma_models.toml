@@ -1,0 +1,150 @@
+# The six EWMA models of experiment 05 on the same days (from return 280), with the ES backtest's Z2
+# zones read from p-values simulated from each model's own forecast distribution (100,000 samples)
+# instead of the fixed thresholds -0.70 and -1.8.
+name = "sp500-ewma-z2-simulated"
+
+[[step]]
+name = "returns"
+kind = "csv"
+version = "1.0.0"
+path = "../01-sp500-var-backtest/data/returns.csv"
+column = "ret"
+
+[[step]]
+name = "days"
+kind = "csv"
+version = "1.0.0"
+path = "../01-sp500-var-backtest/data/returns.csv"
+column = "day"
+
+# Champion: RiskMetrics, normal quantile
+[[step]]
+name = "ewma_normal"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns"]
+params = { distribution = "normal", lambda = 0.94, alpha = 0.99, es_alpha = 0.975, warmup = 30 }
+
+[[step]]
+name = "var_ewma_normal"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "ewma_normal", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "ewma_normal", dates = "days", from = 280 }
+
+[[step]]
+name = "es_ewma_normal"
+kind = "es_backtest"
+version = "1.0.0"
+deps = ["returns", "ewma_normal", "days"]
+params = { simulations = 100000, seed = 1, returns = "returns", forecasts = "ewma_normal", dates = "days", from = 280 }
+
+# Student-t, 5 degrees of freedom (the challenger of experiment 03)
+[[step]]
+name = "ewma_t5"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns"]
+params = { distribution = "t", nu = 5, lambda = 0.94, alpha = 0.99, es_alpha = 0.975, warmup = 30 }
+
+[[step]]
+name = "var_ewma_t5"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "ewma_t5", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "ewma_t5", dates = "days", from = 280 }
+
+[[step]]
+name = "es_ewma_t5"
+kind = "es_backtest"
+version = "1.0.0"
+deps = ["returns", "ewma_t5", "days"]
+params = { simulations = 100000, seed = 1, returns = "returns", forecasts = "ewma_t5", dates = "days", from = 280 }
+
+# Student-t, 4 degrees of freedom
+[[step]]
+name = "ewma_t4"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns"]
+params = { distribution = "t", nu = 4, lambda = 0.94, alpha = 0.99, es_alpha = 0.975, warmup = 30 }
+
+[[step]]
+name = "var_ewma_t4"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "ewma_t4", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "ewma_t4", dates = "days", from = 280 }
+
+[[step]]
+name = "es_ewma_t4"
+kind = "es_backtest"
+version = "1.0.0"
+deps = ["returns", "ewma_t4", "days"]
+params = { simulations = 100000, seed = 1, returns = "returns", forecasts = "ewma_t4", dates = "days", from = 280 }
+
+# Student-t, 3 degrees of freedom
+[[step]]
+name = "ewma_t3"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns"]
+params = { distribution = "t", nu = 3, lambda = 0.94, alpha = 0.99, es_alpha = 0.975, warmup = 30 }
+
+[[step]]
+name = "var_ewma_t3"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "ewma_t3", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "ewma_t3", dates = "days", from = 280 }
+
+[[step]]
+name = "es_ewma_t3"
+kind = "es_backtest"
+version = "1.0.0"
+deps = ["returns", "ewma_t3", "days"]
+params = { simulations = 100000, seed = 1, returns = "returns", forecasts = "ewma_t3", dates = "days", from = 280 }
+
+# Filtered historical simulation, every past standardized return (at least 250)
+[[step]]
+name = "fhs"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns"]
+params = { distribution = "fhs", min_residuals = 250, lambda = 0.94, alpha = 0.99, es_alpha = 0.975, warmup = 30 }
+
+[[step]]
+name = "var_fhs"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "fhs", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "fhs", dates = "days", from = 280 }
+
+[[step]]
+name = "es_fhs"
+kind = "es_backtest"
+version = "1.0.0"
+deps = ["returns", "fhs", "days"]
+params = { simulations = 100000, seed = 1, returns = "returns", forecasts = "fhs", dates = "days", from = 280 }
+
+# Filtered historical simulation, the latest 500 standardized returns
+[[step]]
+name = "fhs_2y"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns"]
+params = { distribution = "fhs", window = 500, min_residuals = 250, lambda = 0.94, alpha = 0.99, es_alpha = 0.975, warmup = 30 }
+
+[[step]]
+name = "var_fhs_2y"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "fhs_2y", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "fhs_2y", dates = "days", from = 280 }
+
+[[step]]
+name = "es_fhs_2y"
+kind = "es_backtest"
+version = "1.0.0"
+deps = ["returns", "fhs_2y", "days"]
+params = { simulations = 100000, seed = 1, returns = "returns", forecasts = "fhs_2y", dates = "days", from = 280 }

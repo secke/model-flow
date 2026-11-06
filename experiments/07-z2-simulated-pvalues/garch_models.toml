@@ -1,0 +1,194 @@
+# The eight models of experiment 06 on the same days (from return 750), with the ES backtest's Z2
+# zones read from p-values simulated from each model's own forecast distribution (100,000 samples)
+# instead of the fixed thresholds -0.70 and -1.8.
+name = "sp500-garch-z2-simulated"
+
+[[step]]
+name = "returns"
+kind = "csv"
+version = "1.0.0"
+path = "../01-sp500-var-backtest/data/returns.csv"
+column = "ret"
+
+[[step]]
+name = "days"
+kind = "csv"
+version = "1.0.0"
+path = "../01-sp500-var-backtest/data/returns.csv"
+column = "day"
+
+# Champion of experiment 01: RiskMetrics, normal quantile
+[[step]]
+name = "ewma_normal"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns"]
+params = { volatility = "ewma", distribution = "normal", lambda = 0.94, warmup = 30, alpha = 0.99, es_alpha = 0.975 }
+
+[[step]]
+name = "var_ewma_normal"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "ewma_normal", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "ewma_normal", dates = "days", from = 750 }
+
+[[step]]
+name = "es_ewma_normal"
+kind = "es_backtest"
+version = "1.0.0"
+deps = ["returns", "ewma_normal", "days"]
+params = { simulations = 100000, seed = 1, returns = "returns", forecasts = "ewma_normal", dates = "days", from = 750 }
+
+# Best challenger of experiment 05: EWMA filtered historical simulation
+[[step]]
+name = "ewma_fhs"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns"]
+params = { volatility = "ewma", distribution = "fhs", lambda = 0.94, warmup = 30, min_residuals = 250, alpha = 0.99, es_alpha = 0.975 }
+
+[[step]]
+name = "var_ewma_fhs"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "ewma_fhs", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "ewma_fhs", dates = "days", from = 750 }
+
+[[step]]
+name = "es_ewma_fhs"
+kind = "es_backtest"
+version = "1.0.0"
+deps = ["returns", "ewma_fhs", "days"]
+params = { simulations = 100000, seed = 1, returns = "returns", forecasts = "ewma_fhs", dates = "days", from = 750 }
+
+# GARCH(1,1), normal quantile
+[[step]]
+name = "garch_normal"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns", "days"]
+params = { dates = "days", volatility = "garch", distribution = "normal", warmup = 500, refit = 250, alpha = 0.99, es_alpha = 0.975 }
+
+[[step]]
+name = "var_garch_normal"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "garch_normal", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "garch_normal", dates = "days", from = 750 }
+
+[[step]]
+name = "es_garch_normal"
+kind = "es_backtest"
+version = "1.0.0"
+deps = ["returns", "garch_normal", "days"]
+params = { simulations = 100000, seed = 1, returns = "returns", forecasts = "garch_normal", dates = "days", from = 750 }
+
+# GJR-GARCH(1,1), normal quantile
+[[step]]
+name = "gjr_normal"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns", "days"]
+params = { dates = "days", volatility = "gjr", distribution = "normal", warmup = 500, refit = 250, alpha = 0.99, es_alpha = 0.975 }
+
+[[step]]
+name = "var_gjr_normal"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "gjr_normal", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "gjr_normal", dates = "days", from = 750 }
+
+[[step]]
+name = "es_gjr_normal"
+kind = "es_backtest"
+version = "1.0.0"
+deps = ["returns", "gjr_normal", "days"]
+params = { simulations = 100000, seed = 1, returns = "returns", forecasts = "gjr_normal", dates = "days", from = 750 }
+
+# GJR-GARCH(1,1), Student-t 5 quantile
+[[step]]
+name = "gjr_t5"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns", "days"]
+params = { dates = "days", volatility = "gjr", distribution = "t", nu = 5, warmup = 500, refit = 250, alpha = 0.99, es_alpha = 0.975 }
+
+[[step]]
+name = "var_gjr_t5"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "gjr_t5", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "gjr_t5", dates = "days", from = 750 }
+
+[[step]]
+name = "es_gjr_t5"
+kind = "es_backtest"
+version = "1.0.0"
+deps = ["returns", "gjr_t5", "days"]
+params = { simulations = 100000, seed = 1, returns = "returns", forecasts = "gjr_t5", dates = "days", from = 750 }
+
+# GARCH(1,1), filtered historical simulation
+[[step]]
+name = "garch_fhs"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns", "days"]
+params = { dates = "days", volatility = "garch", distribution = "fhs", warmup = 500, refit = 250, min_residuals = 250, alpha = 0.99, es_alpha = 0.975 }
+
+[[step]]
+name = "var_garch_fhs"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "garch_fhs", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "garch_fhs", dates = "days", from = 750 }
+
+[[step]]
+name = "es_garch_fhs"
+kind = "es_backtest"
+version = "1.0.0"
+deps = ["returns", "garch_fhs", "days"]
+params = { simulations = 100000, seed = 1, returns = "returns", forecasts = "garch_fhs", dates = "days", from = 750 }
+
+# GJR-GARCH(1,1), filtered historical simulation
+[[step]]
+name = "gjr_fhs"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns", "days"]
+params = { dates = "days", volatility = "gjr", distribution = "fhs", warmup = 500, refit = 250, min_residuals = 250, alpha = 0.99, es_alpha = 0.975 }
+
+[[step]]
+name = "var_gjr_fhs"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "gjr_fhs", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "gjr_fhs", dates = "days", from = 750 }
+
+[[step]]
+name = "es_gjr_fhs"
+kind = "es_backtest"
+version = "1.0.0"
+deps = ["returns", "gjr_fhs", "days"]
+params = { simulations = 100000, seed = 1, returns = "returns", forecasts = "gjr_fhs", dates = "days", from = 750 }
+
+# GJR-GARCH(1,1), filtered historical simulation, fitted on the latest 1,000 returns
+[[step]]
+name = "gjr_fhs_4y"
+kind = "var_model"
+version = "1.0.0"
+deps = ["returns", "days"]
+params = { dates = "days", volatility = "gjr", distribution = "fhs", warmup = 500, refit = 250, fit_window = 1000, min_residuals = 250, alpha = 0.99, es_alpha = 0.975 }
+
+[[step]]
+name = "var_gjr_fhs_4y"
+kind = "backtest_forecasts"
+version = "1.0.0"
+deps = ["returns", "gjr_fhs_4y", "days"]
+params = { alpha = 0.99, returns = "returns", forecasts = "gjr_fhs_4y", dates = "days", from = 750 }
+
+[[step]]
+name = "es_gjr_fhs_4y"
+kind = "es_backtest"
+version = "1.0.0"
+deps = ["returns", "gjr_fhs_4y", "days"]
+params = { simulations = 100000, seed = 1, returns = "returns", forecasts = "gjr_fhs_4y", dates = "days", from = 750 }
