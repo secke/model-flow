@@ -418,6 +418,9 @@ impl BuiltinStep {
 }
 
 // ---------- IFRS 9 ----------
+/// Longest remaining life (and migration-matrix horizon) accepted by the `ecl` step, in years.
+const MAX_ECL_YEARS: f64 = 100.0;
+
 impl BuiltinStep {
     /// PD curve of each facility: `pd_curves` input (curves by segment, or a migration matrix
     /// whose state is the facility's 1-based `pd_segment`), otherwise a flat 12-month PD column.
@@ -445,7 +448,11 @@ impl BuiltinStep {
             let states: Vec<String> = serde_json::from_value(states.clone()).map_err(|x| e(x.to_string()))?;
             let m = MigrationMatrix::new(states, serde_json::from_value(m.clone()).map_err(|x| e(x.to_string()))?)
                 .map_err(e)?;
-            let years = param_f64(&self.params, "years", 30.0) as usize;
+            let years = param_f64(&self.params, "years", 30.0);
+            if !(1.0..=MAX_ECL_YEARS).contains(&years) {
+                return Err(e(format!("`years` must be between 1 and {MAX_ECL_YEARS}")));
+            }
+            let years = years as usize;
             for s in 1..m.states.len() {
                 cache.insert(s as i64, m.pd_curve(s - 1, years).map_err(e)?);
             }
@@ -481,18 +488,26 @@ impl BuiltinStep {
             }
         };
         let (reported, real_12m, real_life) = (opt("reported")?, opt("realized_12m")?, opt("realized_lifetime")?);
-        let ppy = param_f64(&self.params, "periods_per_year", 12.0) as u32;
+        let ppy = param_f64(&self.params, "periods_per_year", 12.0);
+        if !(1.0..=366.0).contains(&ppy) || ppy.fract() != 0.0 {
+            return Err(e("`periods_per_year` must be a whole number between 1 and 366".into()));
+        }
+        let ppy = ppy as u32;
         let repayment = Repayment::parse(param_str(&self.params, "repayment", "annuity")).map_err(e)?;
         let discount = self.params.get("discount").and_then(Value::as_bool).unwrap_or(true);
         let curves = self.pd_curves(inputs, t, n)?;
         let mut rows = Vec::with_capacity(n);
         for i in 0..n {
             let s = stage[i] as u8;
-            let k = if s == 3 {
-                1
-            } else {
-                periods[i].round().max(0.0) as usize
-            };
+            // Bounded so that a malformed table cannot make the step allocate without limit.
+            let max_periods = MAX_ECL_YEARS * ppy as f64;
+            if !(0.0..=max_periods).contains(&periods[i]) {
+                return Err(e(format!(
+                    "facility {i}: {} periods, outside 0 to {max_periods} ({MAX_ECL_YEARS} years)",
+                    periods[i]
+                )));
+            }
+            let k = if s == 3 { 1 } else { periods[i].round() as usize };
             let input = EclInput {
                 stage: s,
                 cumulative_pd: curves[i].cumulative_periods(k, ppy),
@@ -1763,6 +1778,17 @@ mod tests {
         let p = json!({"periods_per_year": 1, "repayment": "bullet", "pd_curves": "m"});
         let o = builtin("ecl", &["book", "m"], p).run(&i).unwrap();
         assert!((o["total"]["ecl"].as_f64().unwrap() - (50.0 + lifetime)).abs() < 1e-9);
+        // Out-of-range sizes are refused before anything is allocated.
+        let mut huge = i.clone();
+        huge.get_mut("book").unwrap()["periods"] = json!([3, 1e18]);
+        let e = builtin("ecl", &["book"], json!({})).run(&huge).unwrap_err();
+        assert!(e.to_string().contains("periods, outside"));
+        for p in [
+            json!({"periods_per_year": 1e12}),
+            json!({"pd_curves": "m", "years": 1e15}),
+        ] {
+            assert!(builtin("ecl", &["book", "m"], p).run(&i).is_err());
+        }
 
         i.insert(
             "d".to_string(),
