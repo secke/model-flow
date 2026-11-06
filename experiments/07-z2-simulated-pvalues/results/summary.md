@@ -1,4 +1,4 @@
-## `ewma_models.toml` (run `619f77c5d301dbf2`, 2231 days)
+## `ewma_models.toml` (run `cdb9afb859280acf`, 2231 days)
 
 | Model | Z2 | Fixed zone | Simulated p | Simulated zone | Simulated 5% quantile (fixed: −0.70) | 0.01% quantile (fixed: −1.8) | Windows red / yellow / green, fixed | same, simulated |
 |---|---:|---|---:|---|---:|---:|---|---|
@@ -14,7 +14,7 @@
 | Model | Window | Z2 | Fixed | Simulated (p) |
 |---|---|---:|---|---|
 
-## `garch_models.toml` (run `404386fc1504f239`, 1761 days)
+## `garch_models.toml` (run `73bfbed423e89db1`, 1761 days)
 
 | Model | Z2 | Fixed zone | Simulated p | Simulated zone | Simulated 5% quantile (fixed: −0.70) | 0.01% quantile (fixed: −1.8) | Windows red / yellow / green, fixed | same, simulated |
 |---|---:|---|---:|---|---:|---:|---|---|

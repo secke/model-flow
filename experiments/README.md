@@ -41,7 +41,7 @@ ModelFlow's examples use synthetic data, which proves that the code works but no
 | 05 | Models with different warm-ups were backtested on different periods | added: `from` in the backtests |
 | 05, 06 | Exceptions cluster on the day after a shock with an EWMA filter | added in v0.17 / quantparity 0.3.0: GARCH and GJR filters in `var_model`, reconciled with `arch`; they remove the second-day exceptions |
 | 06 | A GARCH fit at the stationarity bound was only visible in the step output | added in v0.18: `var_model` warns (`persistence_check`, `max_persistence`) |
-| 05, 07 | Fixed Z2 thresholds too severe for very fat tails, and applied to whole samples where they are too lenient | added in v0.19 / quantparity 0.4.0: `es_backtest` with `simulations`, p-values simulated from the forecast distribution |
+| 05, 07 | Fixed Z2 thresholds too severe for very fat tails, and applied to whole samples where they are too lenient | added in v0.19 / quantparity 0.4.0: `es_backtest` with `simulations`, p-values simulated from the forecast distribution; by default in v0.20, and no 250-day threshold on a longer sample |
 
 ## Backlog
 
@@ -52,7 +52,7 @@ Ordered by the value they would have had in the experiments above.
 3. ~~**Validation over time**~~ (02): done in v0.14 (experiment 04). Alert rules on series and the per-pipeline choice of the checks that make the run status: done in v0.15 (experiment 04, part C).
 4. **Zero-rate pillars and quote conventions in the curve builder** (02): accept zero rates and continuous-coupon par yields directly, in quantparity, reconciled with QuantLib.
 5. **Flag pricing outside a curve's pillar range** (02): warn instead of silently extrapolating.
-6. **Whole-sample Z2 zone without simulation** (07): `es_backtest` applies the 250-day thresholds to the whole sample, where they are far too lenient. Simulate by default for `var_model` forecasts, or give no whole-sample zone without simulation.
+6. ~~**Whole-sample Z2 zone without simulation**~~ (07): done in v0.20. `var_model` forecasts are simulated by default; other forecasts longer than 250 days take the zone of their latest window.
 
 ## Next experiments
 

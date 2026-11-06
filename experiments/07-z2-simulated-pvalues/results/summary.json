@@ -1,6 +1,6 @@
 {
   "ewma_models.toml": {
-    "run_hash": "619f77c5d301dbf2fa08bd739d63661cff832e82b7bf830ed2267ea20c126c62",
+    "run_hash": "cdb9afb859280acfa2aa70ec70ae556af86c0b84ffa0fd8b0fadf778703e2adb",
     "models": [
       {
         "model": "ewma_normal",
@@ -251,7 +251,7 @@
     ]
   },
   "garch_models.toml": {
-    "run_hash": "404386fc1504f239158867940137ab2cefbc8e08e63ce605de1b7193a144d19b",
+    "run_hash": "73bfbed423e89db1aab7e8954e40cd96fde5d4a4dbede41756979bacdd05adb2",
     "models": [
       {
         "model": "ewma_normal",

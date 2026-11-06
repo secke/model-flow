@@ -70,6 +70,8 @@ Before comparing models, the built-in steps are checked against the external mod
 
 *Severity*: mean ratio of the loss to the forecast ES on the days beyond the 97.5% VaR (1 when the ES is right). The windows are the eight consecutive 250-day windows ending on 2026-10-28; their zones, model by model, are in the summary.
 
+> **Since ModelFlow v0.20** the whole-sample ES zone of `es_backtest` is the zone of a p-value simulated from each model's forecast distribution ([experiment 07](../07-z2-simulated-pvalues/README.md)), not the 250-day thresholds used in this table. Rerunning this pipeline with v0.20 changes the whole-sample ES zones (and the recorded runs no longer replay identically: `mf diff` names the engine as the cause); the forecasts and the VaR backtests do not change, the windows keep their fixed-threshold zone, and their simulated zone agrees with it in 103 of the 104 windows of experiments 05 and 06.
+
 **Findings.**
 
 1. **Fatter symmetric tails do not fix the champion.** Going from 5 to 3 degrees of freedom does not reduce the 99% exceptions (43, 42, 43): once scaled to unit variance, the Student-t 99% quantile is almost flat in ν (2.61, 2.65, 2.62 standard deviations), and its 97.5% quantile falls (1.99, 1.96, 1.84). With 3 degrees of freedom the ES exceptions rise to 104 against 55.8 expected and Z2 gets worse than with 4. Every Student-t challenger fails Kupiec.
