@@ -1,4 +1,4 @@
-# Lending Club IFRS 9 validation: run `bdf1a28fffb5709e`
+# Lending Club IFRS 9 validation: run `acbc90b37a0a6a6b`
 
 Test book: 546,018 loans of the 2013-2015 vintages, 6,942.4 million USD lent.
 
@@ -83,3 +83,17 @@ Concordance of the estimated and realized LGDs: 0.518.
 | **all** | 76,818 | 90.5% | 89.0% | -32.0 | 1.0e+00 | pass |
 
 Concordance of the estimated and realized LGDs: 0.518.
+
+## LGD backtest by year of default, workouts of 12 months or more (t-test of realized - estimated, H0: the LGD is not too low)
+
+| Segment | Defaults | Estimated | Realized | t | p-value | Status |
+|---|---:|---:|---:|---:|---:|---|
+| 2013 | 506 | 90.4% | 91.9% | +3.2 | 8.5e-04 | fail |
+| 2014 | 4,993 | 90.4% | 89.3% | -7.2 | 1.0e+00 | pass |
+| 2015 | 14,378 | 90.4% | 88.5% | -22.0 | 1.0e+00 | pass |
+| 2016 | 26,622 | 90.4% | 89.8% | -8.3 | 1.0e+00 | pass |
+| 2017 | 21,690 | 90.5% | 88.7% | -19.6 | 1.0e+00 | pass |
+| 2018 | 3,209 | 90.5% | 86.6% | -14.5 | 1.0e+00 | pass |
+| **all** | 71,398 | 90.4% | 89.1% | -30.5 | 1.0e+00 | pass |
+
+Concordance of the estimated and realized LGDs: 0.519. Defaults left out, workout under 12 months at the data date: 5,420.

@@ -1,5 +1,5 @@
 {
- "run_hash": "bdf1a28fffb5709e9c6c400238e08582e0fa1719a238d6e21c7a091b2b1addcb",
+ "run_hash": "acbc90b37a0a6a6b5af40f487a3c157b6f6887fa5a2e363a9ea94ec990f7527d",
  "status": {
   "loans": null,
   "outcomes": null,
@@ -13,7 +13,8 @@
   "pd_lifetime": "fail",
   "pd_ranking": "warn",
   "lgd_by_grade": "fail",
-  "lgd_by_default_year": "fail"
+  "lgd_by_default_year": "fail",
+  "lgd_completed_workouts": "fail"
  },
  "curves": {
   "1": [
@@ -388,6 +389,7 @@
  },
  "lgd_by_grade": {
   "concordance": 0.518398389242125,
+  "excluded_incomplete": 0,
   "min_concordance": 0.6,
   "overall": {
    "mean_absolute_error": 0.07836228308273113,
@@ -484,6 +486,7 @@
  },
  "lgd_by_default_year": {
   "concordance": 0.518398389242125,
+  "excluded_incomplete": 0,
   "min_concordance": 0.6,
   "overall": {
    "mean_absolute_error": 0.07836228308273113,
@@ -574,6 +577,92 @@
     "segment": 2019,
     "status": "fail",
     "t_statistic": 4.525144824050378
+   }
+  ],
+  "status": "fail"
+ },
+ "lgd_completed_workouts": {
+  "concordance": 0.5185831555424939,
+  "excluded_incomplete": 5420,
+  "min_concordance": 0.6,
+  "overall": {
+   "mean_absolute_error": 0.07599910340410765,
+   "mean_error": -0.013954957768276178,
+   "mean_estimated": 0.9044579161121228,
+   "mean_realized": 0.8905029583444826,
+   "observations": 71398,
+   "p_value": 1.0,
+   "segment": null,
+   "status": "pass",
+   "t_statistic": -30.46194947240053
+  },
+  "parameter": "lgd",
+  "segments": [
+   {
+    "mean_absolute_error": 0.07214473491221862,
+    "mean_error": 0.015093131739091338,
+    "mean_estimated": 0.9039780130268332,
+    "mean_realized": 0.9190711447659248,
+    "observations": 506,
+    "p_value": 0.0008485128881641213,
+    "segment": 2013,
+    "status": "fail",
+    "t_statistic": 3.1556380831179114
+   },
+   {
+    "mean_absolute_error": 0.07638449420802723,
+    "mean_error": -0.011426473460009752,
+    "mean_estimated": 0.9041273115871323,
+    "mean_realized": 0.8927008381271123,
+    "observations": 4993,
+    "p_value": 0.9999999999997383,
+    "segment": 2014,
+    "status": "pass",
+    "t_statistic": -7.2383403314517105
+   },
+   {
+    "mean_absolute_error": 0.07513122695809202,
+    "mean_error": -0.0192083521907989,
+    "mean_estimated": 0.9040680322302503,
+    "mean_realized": 0.8848596800393395,
+    "observations": 14378,
+    "p_value": 1.0,
+    "segment": 2015,
+    "status": "pass",
+    "t_statistic": -21.973845828532795
+   },
+   {
+    "mean_absolute_error": 0.06931048650912937,
+    "mean_error": -0.006059825196469272,
+    "mean_estimated": 0.9042588178306089,
+    "mean_realized": 0.8981989926341833,
+    "observations": 26622,
+    "p_value": 1.0,
+    "segment": 2016,
+    "status": "pass",
+    "t_statistic": -8.298301910217871
+   },
+   {
+    "mean_absolute_error": 0.08069724646215105,
+    "mean_error": -0.017737798303558937,
+    "mean_estimated": 0.9049211267051261,
+    "mean_realized": 0.8871833284015457,
+    "observations": 21690,
+    "p_value": 1.0,
+    "segment": 2017,
+    "status": "pass",
+    "t_statistic": -19.56096327791293
+   },
+   {
+    "mean_absolute_error": 0.10362952339887907,
+    "mean_error": -0.038861208485381875,
+    "mean_estimated": 0.905315705623871,
+    "mean_realized": 0.8664544971384993,
+    "observations": 3209,
+    "p_value": 1.0,
+    "segment": 2018,
+    "status": "pass",
+    "t_statistic": -14.4624392616256
    }
   ],
   "status": "fail"

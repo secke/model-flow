@@ -67,7 +67,8 @@ lines += ["", f"Hosmer-Lemeshow p-value: {out['pd_12m']['hl_p_value']:.1e} (12 m
           f"Ranking of the lifetime PD: AUC {r['auc']:.3f}, Gini {r['gini']:.3f}, KS {r['ks']:.3f}."]
 summary["pd"] = {"12m": out["pd_12m"], "lifetime": out["pd_lifetime"], "ranking": {k: r[k] for k in ("auc", "gini", "ks")}}
 
-for key, title, label in [("lgd_by_grade", "grade", lambda s: G[s - 1]), ("lgd_by_default_year", "year of default", str)]:
+for key, title, label in [("lgd_by_grade", "grade", lambda s: G[s - 1]), ("lgd_by_default_year", "year of default", str),
+                          ("lgd_completed_workouts", "year of default, workouts of 12 months or more", str)]:
     b = out[key]
     lines += ["", f"## LGD backtest by {title} (t-test of realized - estimated, H0: the LGD is not too low)", "",
               "| Segment | Defaults | Estimated | Realized | t | p-value | Status |", "|---|---:|---:|---:|---:|---:|---|"]
@@ -75,7 +76,8 @@ for key, title, label in [("lgd_by_grade", "grade", lambda s: G[s - 1]), ("lgd_b
         name = "**all**" if s["segment"] is None else label(s["segment"])
         lines.append(f"| {name} | {s['observations']:,} | {pct(s['mean_estimated'], 1)} | {pct(s['mean_realized'], 1)} | "
                      f"{s['t_statistic']:+.1f} | {s['p_value']:.1e} | {s['status']} |")
-    lines += ["", f"Concordance of the estimated and realized LGDs: {b['concordance']:.3f}."]
+    lines += ["", f"Concordance of the estimated and realized LGDs: {b['concordance']:.3f}."
+              + (f" Defaults left out, workout under 12 months at the data date: {b['excluded_incomplete']:,}." if b.get("excluded_incomplete") else "")]
     summary[key] = b
 
 (HERE / "results").mkdir(exist_ok=True)

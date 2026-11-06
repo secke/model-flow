@@ -955,10 +955,31 @@ impl Step for BuiltinStep {
                 let real = self.table_col(t, "realized", "lgd_realized")?;
                 let seg = self.opt_col(t, "segment", "segment")?;
                 let min_c = param_f64(&self.params, "min_concordance", 0.6);
-                self.json(
-                    parameter_backtest("lgd", &est, &real, seg.as_deref(), min_c),
-                    "invalid data (equal-length finite columns are required)",
-                )
+                // Workouts still open at the data date: recoveries are missing, the realized LGD is too high.
+                let min_w = param_f64(&self.params, "min_workout_months", 0.0);
+                let keep: Vec<usize> = if min_w > 0.0 {
+                    let w = self
+                        .opt_col(t, "workout", "workout_months")?
+                        .ok_or_else(|| err(&self.name, "`min_workout_months` needs a `workout_months` column"))?;
+                    if w.len() != est.len() {
+                        return Err(err(&self.name, "`workout_months` and the estimates differ in length"));
+                    }
+                    (0..w.len()).filter(|&i| w[i] >= min_w).collect()
+                } else {
+                    (0..est.len()).collect()
+                };
+                let pick = |v: &[f64]| keep.iter().map(|&i| v[i]).collect::<Vec<f64>>();
+                let seg = seg.map(|s| pick(&s));
+                let b =
+                    parameter_backtest("lgd", &pick(&est), &pick(&real), seg.as_deref(), min_c).ok_or_else(|| {
+                        err(
+                        &self.name,
+                        "invalid data (equal-length finite columns and at least one completed workout are required)",
+                    )
+                    })?;
+                let mut out = serde_json::to_value(b).unwrap();
+                out["excluded_incomplete"] = json!(est.len() - keep.len());
+                Ok(out)
             }
             "ccf_backtest" => {
                 let t = self.dep(inputs, "table", 0)?;
@@ -1796,6 +1817,14 @@ mod tests {
         );
         let o = builtin("lgd_backtest", &["d"], Value::Null).run(&i).unwrap();
         assert_eq!(o["segments"].as_array().unwrap().len(), 2);
+        let p = json!({"min_workout_months": 12});
+        assert!(builtin("lgd_backtest", &["d"], p.clone()).run(&i).is_err());
+        i.get_mut("d").unwrap()["workout_months"] = json!([30, 5, 24, 12]);
+        let o = builtin("lgd_backtest", &["d"], p).run(&i).unwrap();
+        assert_eq!(
+            (o["excluded_incomplete"].clone(), o["overall"]["observations"].clone()),
+            (json!(1), json!(3))
+        );
         i.insert(
             "c".to_string(),
             json!({"limit": [100, 100, 100], "drawn": [50, 100, 20], "ead": [75, 100, 60], "ccf_estimate": [0.5, 0.5, 0.5]}),

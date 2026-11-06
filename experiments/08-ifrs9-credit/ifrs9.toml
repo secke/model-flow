@@ -107,3 +107,10 @@ kind = "lgd_backtest"
 version = "1.0.0"
 deps = ["defaults"]
 params = { segment = "default_year" }
+
+[[step]]
+name = "lgd_completed_workouts"
+kind = "lgd_backtest"
+version = "1.0.0"
+deps = ["defaults"]
+params = { segment = "default_year", min_workout_months = 12 }

@@ -73,6 +73,7 @@ elif output == "defaults":
         "default_year": [test["default_year"][i] for i in keep],
         "lgd_estimate": [lgd[int(test["grade"][i])] for i in keep],
         "lgd_realized": [test["lgd_realized"][i] for i in keep],
+        "workout_months": [test["workout_months"][i] for i in keep],
     }, sys.stdout)
 else:
     sys.exit(f"unknown output {output!r}")
