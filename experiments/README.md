@@ -1,6 +1,6 @@
 # Experiments on real data
 
-ModelFlow's examples use synthetic data, which proves that the code works but not that it is useful. The experiments here run ModelFlow on real, public market data to find out what a validator can actually conclude with it, and what is missing. Each finding about the tool is either fixed or added to the backlog below.
+ModelFlow's examples use synthetic data, which proves that the code works but not that it is useful. The experiments here run ModelFlow on real, public market and credit data to find out what a validator can actually conclude with it, and what is missing. Each finding about the tool is either fixed or added to the backlog below.
 
 ## Conventions
 
@@ -20,6 +20,7 @@ ModelFlow's examples use synthetic data, which proves that the code works but no
 | 05 | [Fat-tailed challengers and ES backtesting](05-fat-tails-es-backtest/README.md) | S&P 500, 2016–2026 (data of 01) | Student-t challengers (5, 4, 3 degrees of freedom) all fail Kupiec: the champion misses the asymmetry and the scale of the standardized returns, not only their kurtosis. Filtered historical simulation passes the VaR and the ES backtests (18 exceptions for 22.3 expected, Z2 +0.11, every window green), for a VaR 46% higher. The ES backtest shows the champion's tail losses are 23% larger than its ES |
 | 06 | [GARCH-type volatility filters](06-garch-filters/README.md) | S&P 500, 2019–2026 (data of 01) | GARCH and GJR filters remove the second-day exceptions of a shock (4 April 2025: EWMA volatility ×1.47 overnight, GJR ×2.50), but with a normal quantile they fail like the champion (34–40 exceptions for 17.6). With filtered historical simulation they pass every test for a 99% VaR 8–9% lower than EWMA FHS. After Covid the GJR fit is at the stationarity bound, in `arch` as in quantparity |
 | 07 | [Z2 p-values by simulation](07-z2-simulated-pvalues/README.md) | S&P 500 (models of 05 and 06) | The fixed Z2 thresholds hold on 250-day windows (1 of 104 window zones changes, at Z2 = −0.704) but are far too lenient on whole samples: over 1,761–2,231 days the 5% quantile is −0.22 to −0.27. Seven of 14 whole-sample verdicts change; the Student-t challengers of 05, "green" on the ES, are rejected (p < 1e-4). Filtered simulations stay green (p = 0.27–0.96) |
+| 08 | [IFRS 9 validation of a consumer loan ECL model](08-ifrs9-credit/README.md) | Lending Club, 612,745 36-month loans issued 2010–2015 | The model's ECL is 22% above the IFRS 9 measurement, entirely explained by no amortization and no discounting (recomputed with its own conventions, ModelFlow gives it back on every loan). Its 12-month ECL covers first-year losses on aggregate (ratio 0.84) but not by grade (0.44 for A, 1.48 for E), and its lifetime ECL is 13% short, 24% for the latest vintage. The LGD is conservative but has no ranking power (concordance 0.52); defaults close to the data cut-off bias realized LGDs upward |
 
 ## What the experiments changed in ModelFlow
 
@@ -42,6 +43,7 @@ ModelFlow's examples use synthetic data, which proves that the code works but no
 | 05, 06 | Exceptions cluster on the day after a shock with an EWMA filter | added in v0.17 / quantparity 0.3.0: GARCH and GJR filters in `var_model`, reconciled with `arch`; they remove the second-day exceptions |
 | 06 | A GARCH fit at the stationarity bound was only visible in the step output | added in v0.18: `var_model` warns (`persistence_check`, `max_persistence`) |
 | 05, 07 | Fixed Z2 thresholds too severe for very fat tails, and applied to whole samples where they are too lenient | added in v0.19 / quantparity 0.4.0: `es_backtest` with `simulations`, p-values simulated from the forecast distribution; by default in v0.20, and no 250-day threshold on a longer sample |
+| 08 | No credit risk step beyond PD discrimination and calibration | added in v0.22 / quantparity 0.5.0: `ecl` (recomputation with explicit conventions, reconciliation, realized losses by segment), `lgd_backtest`, `ccf_backtest`, `staging_check`, each reconciled with numpy or scipy |
 
 ## Backlog
 
@@ -53,8 +55,10 @@ Ordered by the value they would have had in the experiments above.
 4. **Zero-rate pillars and quote conventions in the curve builder** (02): accept zero rates and continuous-coupon par yields directly, in quantparity, reconciled with QuantLib.
 5. **Flag pricing outside a curve's pillar range** (02): warn instead of silently extrapolating.
 6. ~~**Whole-sample Z2 zone without simulation**~~ (07): done in v0.20. `var_model` forecasts are simulated by default; other forecasts longer than 250 days take the zone of their latest window.
+7. **Incomplete workouts in LGD backtests** (08): a `min_workout_months` filter in `lgd_backtest`, so that defaults too close to the data date, whose recoveries have not come in, are left out.
+8. **Staging and SICR on real data** (08): the Lending Club file has no payment history. Freddie Mac's single-family loan-level dataset (monthly delinquency and balances, free registration) would test `staging_check` and the stage 2 hit rate.
+9. **Jeffreys test for PD calibration** (08): the ECB instructions test PDs by grade with the Jeffreys test (a beta posterior) rather than the exact binomial test of `pd_calibration`; add it as an option.
 
 ## Next experiments
 
 - **Multi-asset portfolio risk on real history**: equity, EUR/USD, US rates and VIX from FRED; full-revaluation VaR/ES, the 2020 and 2022 stress periods, the FRTB P&L attribution test.
-- **PD model validation on a public credit dataset**: discrimination, calibration and population stability between two periods.

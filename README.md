@@ -101,7 +101,7 @@ The full walkthrough, with the web UI, three roles (model owner, validator, audi
 
 ### Reference engine: parity with QuantLib 1.44
 
-Reported by quantparity's own CI, which reconciles every function with QuantLib (the volatility models, which QuantLib does not have, with the Python `arch` package):
+Reported by quantparity's own CI, which reconciles every function with QuantLib (the volatility models, which QuantLib does not have, with the Python `arch` package, and the credit functions with numpy and scipy):
 
 | Area | Cases | Max abs diff vs QuantLib |
 |---|---:|---:|
@@ -116,6 +116,8 @@ Reported by quantparity's own CI, which reconciles every function with QuantLib 
 | Expected shortfall multipliers, normal and Student-t (numerical integration of QuantLib densities) | 16 | 1.4e-12 |
 | GARCH / GJR-GARCH(1,1): conditional volatility, log-likelihood at the fitted optimum (against `arch` 8.0.0) | 48,000 / 36 | 3.5e-18 / 1.8e-10 |
 | Z2 null distribution by simulation: P(Z2 ≤ -0.70), P(Z2 ≤ -1.8), normal, t3, t5 (against an independent numpy / scipy Monte Carlo) | 6 | 1.2e-3 (Monte Carlo noise, standard error 8e-4) |
+| IFRS 9 ECL, stages 1 to 3, three exposure profiles (against an independent numpy implementation) | 600 | 9.8e-15 relative |
+| LGD / CCF t-test and concordance (against `scipy.stats.ttest_1samp`, `somersd`) | 36 | 8.8e-14 |
 
 ### ModelFlow examples: QuantLib as the candidate pricer under validation
 
@@ -131,9 +133,9 @@ Each benchmark example runs QuantLib as an external process and compares it, tra
 
 Moving the engine from ModelFlow's former in-house crates to quantparity changed no number: 55,731 values across the six examples are identical bit for bit. The upgrade to v0.13 was checked with `mf diff` itself: 56,668 values of the six examples and 706,000 values of the real-data experiments are identical.
 
-### Real market data
+### Real data
 
-[Experiments](experiments/README.md) run ModelFlow on public data, with every run fingerprinted and replayed: a 99% VaR backtest of the S&P 500 over ten years, the reconstruction of the ECB AAA yield curve at 58 month ends, the impact of a challenger model, a methodology fix and an engine upgrade measured with `mf diff`, the monthly monitoring of a VaR model frozen in 2019, on point-in-time data until 2026, and fat-tailed challengers with expected shortfall backtests. Each experiment lists what it changed in ModelFlow.
+[Experiments](experiments/README.md) run ModelFlow on public data, with every run fingerprinted and replayed: a 99% VaR backtest of the S&P 500 over ten years, the reconstruction of the ECB AAA yield curve at 58 month ends, the impact of a challenger model, a methodology fix and an engine upgrade measured with `mf diff`, the monthly monitoring of a VaR model frozen in 2019, on point-in-time data until 2026, fat-tailed challengers and GARCH filters with expected shortfall backtests, and the IFRS 9 validation of a consumer loan ECL model on 612,745 Lending Club loans. Each experiment lists what it changed in ModelFlow.
 
 ## Governance
 
@@ -173,6 +175,7 @@ Every action, denials included, is appended to the audit log. On PostgreSQL a tr
 |---|---|
 | **SR 26-2** (US model risk management): independent validation, effective challenge, model inventory | Model inventory with risk tiers and review dates; validator-only approval; challenger and benchmark pricers as pipeline steps; replayable evidence |
 | **SS1/23** (UK PRA model risk management): model identification, governance, independent validation, use of model risk mitigants | Inventory with status workflow (development → in validation → approved → in use → retired); segregation of duties enforced by the server and at SSO level; overdue reviews flagged; findings with severity, owner, deadline, evidence of remediation, closure review and escalation |
+| **IFRS 9** impairment (5.5) and the ECB's instructions for reporting the validation results of internal models (PD, LGD, CCF back-testing) | `ecl` recomputes the expected credit loss under stated conventions (exposure profile, discounting at the effective interest rate, 12-month or lifetime horizon by stage) and reconciles it with the reported figure; `staging_check` recomputes the stages from the default definition, the 30-day backstop and the SICR thresholds; `lgd_backtest` and `ccf_backtest` run the one-sided t-tests of the ECB instructions by segment, `pd_calibration` a one-sided binomial test by grade |
 | **BCBS 239** (risk data aggregation and reporting): accuracy, integrity, traceability | Every input, output and piece of code fingerprinted; lineage through the DAG; integrity checks on stored results; append-only audit log |
 
 ModelFlow is a tool that produces evidence; it does not make an institution compliant on its own.
@@ -227,6 +230,10 @@ params = { returns = "returns", forecasts = "ewma_model", alpha = 0.99 }
 | `psi` | Population Stability Index | `baseline`, `current`, `column`, `bins` |
 | `pd_discrimination` | AUC, Gini, KS | `score`, `default`, `min_gini_pass`, `min_gini_warn` |
 | `pd_calibration` | per-grade binomial test, Hosmer-Lemeshow | `grade`, `pd`, `default` |
+| `ecl` | IFRS 9 expected credit loss recomputed facility by facility (stage 1: 12 months, stages 2 and 3: lifetime), totals by stage and by segment; reconciliation with the reported ECL (fails beyond `tolerance` on the total, warns when facilities differ by more than `max(abs_tolerance, tolerance × reported)`) with the 20 largest gaps; realized losses against the 12-month and lifetime ECL. PDs: a `pd_12m` column (flat hazard), or a `pd_curves` input: cumulative PDs by year for each segment (`{"curves": {"1": [...]}}`) or an annual migration matrix (`{"states": [...], "matrix": [[...]]}`, default last) | `table` columns `stage`, `balance`, `lgd`, `eir`, `periods`, optional `reported`, `realized_12m`, `realized_lifetime`; `pd_curves`, `pd_segment` (`grade`), `periods_per_year` (12), `repayment` (`annuity`, `linear`, `bullet`), `discount` (true), `segments`, `tolerance` (0.01), `abs_tolerance` (1), `years` (30, migration matrices) |
+| `lgd_backtest` | realized against estimated LGD on defaulted facilities: one-sided t-test (H0: the LGD is not too low) by segment and overall, concordance (1 + Somers' D) / 2 | `estimated` (`lgd_estimate`), `realized` (`lgd_realized`), `segment`, `min_concordance` (0.6, warns below) |
+| `ccf_backtest` | realized CCF, (EAD − drawn) / (limit − drawn), against the estimate: same tests | `limit`, `drawn`, `ead`, `estimated` (`ccf_estimate`), `segment`, `min_undrawn` (0), `min_concordance` |
+| `staging_check` | IFRS 9 stage of each facility recomputed from the default definition, the days past due, a watch list / forbearance flag and the PD increase since origination; reported × recomputed table, understaged (fail beyond `tolerance`) and overstaged (warn) facilities with their criteria; with `defaulted_next_12m`, the default rate by stage and the share of defaults that were in stage 2 | `stage`, `pd_origination`, `pd_current`, optional `dpd`, `defaulted`, `flag`, `defaulted_next_12m`; `dpd_stage2` (30), `dpd_stage3` (90), `relative_threshold` (2), `absolute_threshold` (0), `low_credit_risk_pd`, `tolerance` (0) |
 | `price_portfolio` | reference valuation and Greeks | `trades`, `market` |
 | `pricing_benchmark` | candidate pricer vs. reference, per-product tolerances | `trades`, `candidate`, `reference` (optional), `market` (optional), `tolerances` |
 | `curve_bootstrap` | curve construction, re-pricing of the input instruments, term structure | `curve`, `tolerance`, `grid_step` |
@@ -502,8 +509,8 @@ The schema is created at startup under an advisory lock, so several instances ca
 ## Deployment
 
 ```bash
-docker build -t modelflow:0.21.0 .
-docker run --rm modelflow:0.21.0 new-token          # fill in deploy/server.docker.toml
+docker build -t modelflow:0.22.0 .
+docker run --rm modelflow:0.22.0 new-token          # fill in deploy/server.docker.toml
 docker compose up --build                          # http://127.0.0.1:8080
 kubectl apply -k deploy/k8s                        # after filling in deploy/k8s/secret.yaml
 ```
@@ -523,7 +530,7 @@ pip install "maturin[patchelf]" pytest numpy pandas && maturin develop --release
 
 CI runs formatting, clippy, the tests on SQLite and PostgreSQL 16, the six examples end to end, the CLI against PostgreSQL, the diff action on an unchanged and a changed model, the Python wheel with its tests and the SDK example, the Docker image (read-only, no capabilities), Kubernetes manifest validation and the Playwright UI test (simulated SSO, owner → validator → auditor). See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Further reading: [experiments on real market data](experiments/README.md), [product vision](docs/VISION.md), [scope and roadmap](docs/SCOPE.md).
+Further reading: [experiments on real data](experiments/README.md), [product vision](docs/VISION.md), [scope and roadmap](docs/SCOPE.md).
 
 ## License
 

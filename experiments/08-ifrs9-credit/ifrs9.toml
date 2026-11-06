@@ -1,0 +1,109 @@
+# IFRS 9 validation of a simple ECL model for Lending Club 36-month loans (data/: run fetch.py).
+# The model (model/ifrs9_model.py) estimates PD curves and LGDs by grade on the 2010-2012
+# vintages; ModelFlow recomputes its ECL with amortization and discounting, backtests the ECL,
+# the PDs and the LGDs on the 2013-2015 vintages, out of time.
+name = "lending-club-ifrs9"
+
+[[step]]
+name = "loans"
+kind = "csv"
+version = "1.0.0"
+path = "data/loans.csv"
+columns = ["vintage", "issue_month", "grade", "funded", "int_rate", "defaulted", "last_payment_month", "total_rec_prncp", "recoveries", "collection_recovery_fee"]
+
+[[step]]
+name = "outcomes"
+kind = "process"
+version = "1.0.0"
+deps = ["loans"]
+command = ["python3", "model/outcomes.py"]
+code = ["model/outcomes.py"]
+
+[[step]]
+name = "pd_curves"
+kind = "process"
+version = "1.0.0"
+deps = ["outcomes"]
+command = ["python3", "model/ifrs9_model.py"]
+code = ["model/ifrs9_model.py"]
+params = { output = "curves", dev = [2010, 2012] }
+
+[[step]]
+name = "book"
+kind = "process"
+version = "1.0.0"
+deps = ["outcomes"]
+command = ["python3", "model/ifrs9_model.py"]
+code = ["model/ifrs9_model.py"]
+params = { output = "book", dev = [2010, 2012] }
+max_output_mb = 512
+
+[[step]]
+name = "defaults"
+kind = "process"
+version = "1.0.0"
+deps = ["outcomes"]
+command = ["python3", "model/ifrs9_model.py"]
+code = ["model/ifrs9_model.py"]
+params = { output = "defaults", dev = [2010, 2012] }
+
+# ECL recomputed: monthly periods, instalments at the loan rate, discounting at the same rate;
+# reconciled with the model's ECL and compared with the realized losses.
+[[step]]
+name = "ecl"
+kind = "ecl"
+version = "1.0.0"
+deps = ["book", "pd_curves"]
+params = { pd_curves = "pd_curves", repayment = "annuity", periods_per_year = 12, segments = ["grade", "vintage"] }
+
+# The model's figure, with its own conventions (no amortization, no discounting): the recomputation
+# must give it back.
+[[step]]
+name = "ecl_model_conventions"
+kind = "ecl"
+version = "1.0.0"
+deps = ["book", "pd_curves"]
+params = { pd_curves = "pd_curves", repayment = "bullet", periods_per_year = 1, discount = false }
+
+# Amortization alone: instalments, no discounting.
+[[step]]
+name = "ecl_no_discount"
+kind = "ecl"
+version = "1.0.0"
+deps = ["book", "pd_curves"]
+params = { pd_curves = "pd_curves", repayment = "annuity", periods_per_year = 12, discount = false }
+
+[[step]]
+name = "pd_12m"
+kind = "pd_calibration"
+version = "1.0.0"
+deps = ["book"]
+params = { grade = "grade", pd = "pd", default = "default_12m" }
+
+[[step]]
+name = "pd_lifetime"
+kind = "pd_calibration"
+version = "1.0.0"
+deps = ["book"]
+params = { grade = "grade", pd = "pd_lifetime", default = "default" }
+
+[[step]]
+name = "pd_ranking"
+kind = "pd_discrimination"
+version = "1.0.0"
+deps = ["book"]
+params = { score = "pd_lifetime", default = "default" }
+
+[[step]]
+name = "lgd_by_grade"
+kind = "lgd_backtest"
+version = "1.0.0"
+deps = ["defaults"]
+params = { segment = "grade" }
+
+[[step]]
+name = "lgd_by_default_year"
+kind = "lgd_backtest"
+version = "1.0.0"
+deps = ["defaults"]
+params = { segment = "default_year" }

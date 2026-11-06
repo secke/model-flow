@@ -12,9 +12,9 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 
 > Positioning and roadmap: [VISION.md](VISION.md).
 
-## Status (v0.21)
+## Status (v0.22)
 - `mf-core`: DAG, fingerprints of inputs, outputs and code, manifest, replay verification.
-- [`quantparity`](https://github.com/secke/quantparity) (external dependency, cross-checked against QuantLib): historical VaR; Kupiec, Christoffersen, Basel traffic light; PSI; VaR / ES forecasts (EWMA, GARCH or GJR-GARCH volatility with normal or Student-t innovations, filtered historical simulation; GARCH reconciled with the Python `arch` package, warning on fits at the stationarity bound); Acerbi-Székely expected shortfall backtests, with Z2 p-values simulated from the forecast distribution (by default for `var_model` forecasts); AUC, Gini, KS; per-grade binomial calibration and Hosmer-Lemeshow; reference pricers (BSM and Greeks, Black-76, American CRR, bonds, implied volatility), yield curves (deposit + swap bootstrap), interest rate swaps and zero-coupons with DV01, pricer benchmark with per-product tolerances.
+- [`quantparity`](https://github.com/secke/quantparity) (external dependency, cross-checked against QuantLib): historical VaR; Kupiec, Christoffersen, Basel traffic light; PSI; VaR / ES forecasts (EWMA, GARCH or GJR-GARCH volatility with normal or Student-t innovations, filtered historical simulation; GARCH reconciled with the Python `arch` package, warning on fits at the stationarity bound); Acerbi-Székely expected shortfall backtests, with Z2 p-values simulated from the forecast distribution (by default for `var_model` forecasts); AUC, Gini, KS; per-grade binomial calibration and Hosmer-Lemeshow; IFRS 9 ECL (PD curves, migration matrices, amortizing exposures, discounting at the effective interest rate), LGD and CCF backtests, staging check from the SICR criteria; reference pricers (BSM and Greeks, Black-76, American CRR, bonds, implied volatility), yield curves (deposit + swap bootstrap), interest rate swaps and zero-coupons with DV01, pricer benchmark with per-product tolerances.
 - `mf-runtime`: TOML pipelines, CSV steps (series or table), built-in steps, external processes with a timeout, SQLite storage, HTML validation report.
 - `mf-server`: REST API, hashed tokens, roles (model owner, validator, auditor, admin), validation decisions with segregation of duties, append-only audit log.
 - `mf-cli`: `mf run | verify | runs | show | report | diff | series | alerts`.
@@ -32,7 +32,7 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 - Validator web UI (SSO PKCE, triggering, report, replay, decisions, audit), tested end to end.
 - PostgreSQL storage for history and governance (audit log protected by a trigger), SQLite kept for local use.
 - Deployment: non-root Docker image, hardened docker-compose, Kubernetes manifests (Pod Security restricted, NetworkPolicy).
-- Seven experiments on real market data (S&P 500 VaR backtest, ECB AAA curve, change impact with `mf diff`, monthly monitoring of a frozen VaR model, fat-tailed challengers with ES backtests, GARCH and GJR volatility filters, Z2 p-values by simulation).
+- Eight experiments on real data (S&P 500 VaR backtest, ECB AAA curve, change impact with `mf diff`, monthly monitoring of a frozen VaR model, fat-tailed challengers with ES backtests, GARCH and GJR volatility filters, Z2 p-values by simulation, IFRS 9 validation of a consumer loan ECL model on 612,745 Lending Club loans).
 - Seven examples: equity desk (VaR), PD scorecard, validation of QuantLib on options and bonds, on a single curve and swaps, in multi-curve, multi-asset portfolio risk, and the equity desk written with the Python SDK.
 - GitHub CI: format, clippy, tests (including PostgreSQL), example runs and reports as artifacts, diff action, Python wheel and tests, Docker image, UI tests.
 
@@ -47,7 +47,7 @@ Decision 1 settled: existing models are integrated as **external processes** (JS
 | Week | Deliverable |
 |---|---|
 | 1-2 | ~~External steps, CSV/Parquet, SQLite and PostgreSQL, timeout, isolation, content-addressed storage~~ (done) |
-| 3-4 | ~~Christoffersen, traffic light, PSI, Gini/KS, PD calibration~~ (done); remaining: challenger model, LGD/EAD, sensitivity tests |
+| 3-4 | ~~Christoffersen, traffic light, PSI, Gini/KS, PD calibration~~ (done); ~~challenger models, LGD / CCF backtests, IFRS 9 ECL and staging~~ (done); remaining: sensitivity tests |
 | 5 | ~~Reference pricers, QuantLib validation, curves, swaps, OIS multi-curve, market conventions~~ (done); remaining: historical fixings, swaptions, caps/floors, FX |
 | 6 | ~~HTML validation report~~ (done); remaining: PDF export, model inventory, signed audit trail |
 | 7 | ~~REST API, roles, decisions, audit, queue, rate limiting, TLS, OIDC SSO, web UI, inventory, scheduling, alerts~~ (done) |

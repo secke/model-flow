@@ -4,7 +4,7 @@ members = ["crates/mf-core", "crates/mf-runtime", "crates/mf-server", "crates/mf
 
 [workspace.package]
 edition = "2021"
-version = "0.21.0"
+version = "0.22.0"
 license = "Apache-2.0"
 repository = "https://github.com/secke/model-flow"
 authors = ["secke"]
@@ -18,7 +18,7 @@ thiserror = "1"
 toml = "0.8"
 rusqlite = { version = "0.32", features = ["bundled"] }
 # Pricing and validation engine, cross-checked against QuantLib (pinned for reproducibility).
-quantparity = { git = "https://github.com/secke/quantparity", rev = "ab2c2011d196801e1c27ba496185c388b0444c47" }
+quantparity = { git = "https://github.com/secke/quantparity", rev = "e8e4306ecf98940d1fb993d6aac1052ef0e6603e" }
 
 # The reference engine's simulations and fits run optimized in debug builds and tests too.
 [profile.dev.package.quantparity]

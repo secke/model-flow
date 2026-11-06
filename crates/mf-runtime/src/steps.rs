@@ -1,9 +1,11 @@
 use mf_core::{hash_bytes, Error, Inputs, Step};
 use quantparity::benchmark::{compare, prices_from_value, reference_prices, trades_from_value, Tolerances};
 use quantparity::curves::Market;
+use quantparity::ifrs9::{EclInput, MigrationMatrix, PdCurve, Repayment};
 use quantparity::validation::Z2Null;
 use quantparity::validation::{
-    calibration, discrimination, es_backtest, historical_var, psi, traffic_light, var_backtest,
+    calibration, discrimination, es_backtest, historical_var, parameter_backtest, psi, realized_ccf, staging_check,
+    traffic_light, var_backtest, StagingRecord, StagingRules,
 };
 use quantparity::var_models::{var_forecasts_with, Innovations, VarForecasts, Volatility};
 use serde_json::{json, Value};
@@ -303,6 +305,10 @@ impl BuiltinStep {
         "pnl_attribution",
         "pd_discrimination",
         "pd_calibration",
+        "ecl",
+        "lgd_backtest",
+        "ccf_backtest",
+        "staging_check",
     ];
 
     /// Input named by the `key` parameter, otherwise dependency number `idx`.
@@ -399,6 +405,245 @@ impl BuiltinStep {
     fn json<T: serde::Serialize>(&self, v: Option<T>, why: &str) -> Result<Value, Error> {
         v.map(|x| serde_json::to_value(x).unwrap())
             .ok_or_else(|| err(&self.name, why))
+    }
+
+    /// Column named by parameter `key`, otherwise column `default` if the table has one.
+    fn opt_col(&self, t: &Value, key: &str, default: &str) -> Result<Option<Vec<f64>>, Error> {
+        match self.params.get(key).and_then(Value::as_str) {
+            Some(c) => series(t, Some(c), &self.name).map(Some),
+            None if t.get(default).is_some() => series(t, Some(default), &self.name).map(Some),
+            None => Ok(None),
+        }
+    }
+}
+
+// ---------- IFRS 9 ----------
+impl BuiltinStep {
+    /// PD curve of each facility: `pd_curves` input (curves by segment, or a migration matrix
+    /// whose state is the facility's 1-based `pd_segment`), otherwise a flat 12-month PD column.
+    fn pd_curves(&self, inputs: &Inputs, t: &Value, n: usize) -> Result<Vec<PdCurve>, Error> {
+        let e = |m: String| err(&self.name, m);
+        if self.params.get("pd_curves").is_none() {
+            let pd = self.table_col(t, "pd_12m", "pd_12m")?;
+            return pd.iter().map(|&p| PdCurve::flat(p).map_err(e)).collect();
+        }
+        let doc = self.dep(inputs, "pd_curves", usize::MAX)?;
+        let seg = self.table_col(t, "pd_segment", "grade")?;
+        if seg.len() != n {
+            return Err(e("`pd_segment` and the facilities differ in length".into()));
+        }
+        let mut cache: BTreeMap<i64, PdCurve> = BTreeMap::new();
+        if let Some(curves) = doc.get("curves").and_then(Value::as_object) {
+            for (k, v) in curves {
+                let c: Vec<f64> = serde_json::from_value(v.clone()).map_err(|x| e(format!("curve `{k}`: {x}")))?;
+                let k = k
+                    .parse::<f64>()
+                    .map_err(|_| e(format!("curve `{k}`: the key must be a number")))?;
+                cache.insert(k.round() as i64, PdCurve::new(c).map_err(e)?);
+            }
+        } else if let (Some(states), Some(m)) = (doc.get("states"), doc.get("matrix")) {
+            let states: Vec<String> = serde_json::from_value(states.clone()).map_err(|x| e(x.to_string()))?;
+            let m = MigrationMatrix::new(states, serde_json::from_value(m.clone()).map_err(|x| e(x.to_string()))?)
+                .map_err(e)?;
+            let years = param_f64(&self.params, "years", 30.0) as usize;
+            for s in 1..m.states.len() {
+                cache.insert(s as i64, m.pd_curve(s - 1, years).map_err(e)?);
+            }
+        } else {
+            return Err(e("`pd_curves` must have `curves` or `states` and `matrix`".into()));
+        }
+        seg.iter()
+            .map(|s| {
+                cache
+                    .get(&(s.round() as i64))
+                    .cloned()
+                    .ok_or_else(|| e(format!("no PD curve for segment {s}")))
+            })
+            .collect()
+    }
+
+    fn ecl(&self, inputs: &Inputs) -> Result<Value, Error> {
+        let e = |m: String| err(&self.name, m);
+        let t = self.dep(inputs, "table", 0)?;
+        let stage = self.table_col(t, "stage", "stage")?;
+        let n = stage.len();
+        let col = |k: &str| -> Result<Vec<f64>, Error> {
+            let v = self.table_col(t, k, k)?;
+            (v.len() == n)
+                .then_some(v)
+                .ok_or_else(|| e(format!("column `{k}`: {} rows for {n}", stage.len())))
+        };
+        let (balance, lgd, eir, periods) = (col("balance")?, col("lgd")?, col("eir")?, col("periods")?);
+        let opt = |k: &str| -> Result<Option<Vec<f64>>, Error> {
+            match self.opt_col(t, k, k)? {
+                Some(v) if v.len() != n => Err(e(format!("column `{k}`: {} rows for {n}", v.len()))),
+                v => Ok(v),
+            }
+        };
+        let (reported, real_12m, real_life) = (opt("reported")?, opt("realized_12m")?, opt("realized_lifetime")?);
+        let ppy = param_f64(&self.params, "periods_per_year", 12.0) as u32;
+        let repayment = Repayment::parse(param_str(&self.params, "repayment", "annuity")).map_err(e)?;
+        let discount = self.params.get("discount").and_then(Value::as_bool).unwrap_or(true);
+        let curves = self.pd_curves(inputs, t, n)?;
+        let mut rows = Vec::with_capacity(n);
+        for i in 0..n {
+            let s = stage[i] as u8;
+            let k = if s == 3 {
+                1
+            } else {
+                periods[i].round().max(0.0) as usize
+            };
+            let input = EclInput {
+                stage: s,
+                cumulative_pd: curves[i].cumulative_periods(k, ppy),
+                lgd: vec![lgd[i]],
+                ead: repayment.profile(balance[i], k, eir[i], ppy),
+                eir: if discount { eir[i] } else { 0.0 },
+            };
+            rows.push(quantparity::ifrs9::ecl(&input, ppy).map_err(|m| e(format!("facility {i}: {m}")))?);
+        }
+        // Totals by group: facilities, exposure, ECL (12 months, lifetime, stage), reported, realized.
+        #[derive(Default, Clone)]
+        struct Sum {
+            n: usize,
+            exposure: f64,
+            ecl_12m: f64,
+            ecl_lifetime: f64,
+            ecl: f64,
+            reported: f64,
+            real_12m: f64,
+            real_life: f64,
+        }
+        let add = |g: &mut Sum, i: usize| {
+            g.n += 1;
+            g.exposure += balance[i];
+            g.ecl_12m += rows[i].ecl_12m;
+            g.ecl_lifetime += rows[i].ecl_lifetime;
+            g.ecl += rows[i].ecl;
+            g.reported += reported.as_ref().map_or(0.0, |r| r[i]);
+            g.real_12m += real_12m.as_ref().map_or(0.0, |r| r[i]);
+            g.real_life += real_life.as_ref().map_or(0.0, |r| r[i]);
+        };
+        let show = |g: &Sum| {
+            let mut o = json!({"facilities": g.n, "exposure": g.exposure, "ecl": g.ecl, "ecl_12m": g.ecl_12m,
+                               "ecl_lifetime": g.ecl_lifetime, "coverage": g.ecl / g.exposure});
+            if reported.is_some() {
+                o["reported"] = json!(g.reported);
+                o["difference"] = json!(g.ecl - g.reported);
+            }
+            if real_12m.is_some() {
+                o["realized_12m"] = json!(g.real_12m);
+                o["realized_to_ecl_12m"] = json!(g.real_12m / g.ecl_12m);
+            }
+            if real_life.is_some() {
+                o["realized_lifetime"] = json!(g.real_life);
+                o["realized_to_ecl_lifetime"] = json!(g.real_life / g.ecl_lifetime);
+            }
+            o
+        };
+        let mut total = Sum::default();
+        let mut by_stage: BTreeMap<u8, Sum> = BTreeMap::new();
+        for (i, r) in rows.iter().enumerate() {
+            add(&mut total, i);
+            add(by_stage.entry(r.stage).or_default(), i);
+        }
+        let mut out = json!({
+            "facilities": n, "periods_per_year": ppy, "repayment": repayment, "discount": discount,
+            "total": show(&total),
+            "by_stage": by_stage.iter().map(|(s, g)| { let mut o = show(g); o["stage"] = json!(s); o }).collect::<Vec<_>>(),
+        });
+        let segments: Vec<String> = match self.params.get("segments") {
+            Some(Value::Array(a)) => a.iter().filter_map(Value::as_str).map(String::from).collect(),
+            Some(Value::String(s)) => vec![s.clone()],
+            _ => vec![],
+        };
+        for name in segments {
+            let seg = series(t, Some(&name), &self.name)?;
+            let mut groups: BTreeMap<i64, Sum> = BTreeMap::new();
+            for (i, v) in seg.iter().enumerate().take(n) {
+                add(groups.entry(v.round() as i64).or_default(), i);
+            }
+            out["by"][&name] = json!(groups
+                .iter()
+                .map(|(k, g)| {
+                    let mut o = show(g);
+                    o["segment"] = json!(k);
+                    o
+                })
+                .collect::<Vec<_>>());
+        }
+        let mut status = "pass";
+        if let Some(rep) = &reported {
+            let rel_tol = param_f64(&self.params, "tolerance", 0.01);
+            let abs_tol = param_f64(&self.params, "abs_tolerance", 1.0);
+            let mut diffs: Vec<(usize, f64)> = (0..n).map(|i| (i, rows[i].ecl - rep[i])).collect();
+            let outside = diffs
+                .iter()
+                .filter(|(i, d)| d.abs() > abs_tol.max(rel_tol * rep[*i].abs()))
+                .count();
+            diffs.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
+            let rel = (total.ecl - total.reported) / total.reported.abs();
+            status = if rel.abs() > rel_tol || !rel.is_finite() {
+                "fail"
+            } else if outside > 0 {
+                "warn"
+            } else {
+                "pass"
+            };
+            out["reconciliation"] = json!({
+                "reported": total.reported, "recomputed": total.ecl, "difference": total.ecl - total.reported,
+                "relative_difference": rel, "tolerance": rel_tol, "abs_tolerance": abs_tol,
+                "facilities_outside_tolerance": outside,
+                "largest": diffs.iter().take(20).map(|&(i, d)| json!({"index": i, "reported": rep[i],
+                    "recomputed": rows[i].ecl, "difference": d, "stage": rows[i].stage})).collect::<Vec<_>>(),
+                "status": status,
+            });
+        }
+        out["status"] = json!(status);
+        Ok(out)
+    }
+
+    fn staging(&self, inputs: &Inputs) -> Result<Value, Error> {
+        let t = self.dep(inputs, "table", 0)?;
+        let stage = self.table_col(t, "stage", "stage")?;
+        let n = stage.len();
+        let get = |k: &str| -> Result<Vec<f64>, Error> { Ok(self.opt_col(t, k, k)?.unwrap_or_else(|| vec![0.0; n])) };
+        let (defaulted, dpd, flag) = (get("defaulted")?, get("dpd")?, get("flag")?);
+        let (pd0, pd1) = (
+            self.table_col(t, "pd_origination", "pd_origination")?,
+            self.table_col(t, "pd_current", "pd_current")?,
+        );
+        let next = self.opt_col(t, "defaulted_next_12m", "defaulted_next_12m")?;
+        if [defaulted.len(), dpd.len(), flag.len(), pd0.len(), pd1.len()]
+            .iter()
+            .any(|&l| l != n)
+            || next.as_ref().is_some_and(|v| v.len() != n)
+        {
+            return Err(err(&self.name, "columns of different lengths"));
+        }
+        let records: Vec<StagingRecord> = (0..n)
+            .map(|i| StagingRecord {
+                reported_stage: stage[i].round().clamp(0.0, 255.0) as u8,
+                defaulted: defaulted[i] != 0.0,
+                dpd: dpd[i],
+                pd_origination: pd0[i],
+                pd_current: pd1[i],
+                flag: flag[i] != 0.0,
+                defaulted_next_12m: next.as_ref().map(|v| v[i] != 0.0),
+            })
+            .collect();
+        let d = StagingRules::default();
+        let p = |k: &str, x: f64| param_f64(&self.params, k, x);
+        let rules = StagingRules {
+            dpd_stage2: p("dpd_stage2", d.dpd_stage2),
+            dpd_stage3: p("dpd_stage3", d.dpd_stage3),
+            relative_threshold: p("relative_threshold", d.relative_threshold),
+            absolute_threshold: p("absolute_threshold", d.absolute_threshold),
+            low_credit_risk_pd: self.params.get("low_credit_risk_pd").and_then(Value::as_f64),
+            tolerance: p("tolerance", d.tolerance),
+        };
+        let c = staging_check(&records, &rules).map_err(|m| err(&self.name, m))?;
+        Ok(serde_json::to_value(c).unwrap())
     }
 }
 
@@ -688,6 +933,39 @@ impl Step for BuiltinStep {
                 let def = flags(&self.table_col(t, "default", "default")?);
                 self.json(calibration(&grade, &pd, &def), "invalid data")
             }
+            "ecl" => self.ecl(inputs),
+            "lgd_backtest" => {
+                let t = self.dep(inputs, "table", 0)?;
+                let est = self.table_col(t, "estimated", "lgd_estimate")?;
+                let real = self.table_col(t, "realized", "lgd_realized")?;
+                let seg = self.opt_col(t, "segment", "segment")?;
+                let min_c = param_f64(&self.params, "min_concordance", 0.6);
+                self.json(
+                    parameter_backtest("lgd", &est, &real, seg.as_deref(), min_c),
+                    "invalid data (equal-length finite columns are required)",
+                )
+            }
+            "ccf_backtest" => {
+                let t = self.dep(inputs, "table", 0)?;
+                let limit = self.table_col(t, "limit", "limit")?;
+                let drawn = self.table_col(t, "drawn", "drawn")?;
+                let ead = self.table_col(t, "ead", "ead")?;
+                let est = self.table_col(t, "estimated", "ccf_estimate")?;
+                let seg = self.opt_col(t, "segment", "segment")?;
+                let r = realized_ccf(&limit, &drawn, &ead, param_f64(&self.params, "min_undrawn", 0.0))
+                    .filter(|_| est.len() == limit.len())
+                    .ok_or_else(|| err(&self.name, "invalid data (equal-length finite columns are required)"))?;
+                let pick = |v: &[f64]| r.kept.iter().map(|&i| v[i]).collect::<Vec<f64>>();
+                let seg = seg.map(|s| pick(&s));
+                let min_c = param_f64(&self.params, "min_concordance", 0.6);
+                let b = parameter_backtest("ccf", &pick(&est), &r.ccf, seg.as_deref(), min_c)
+                    .ok_or_else(|| err(&self.name, "no facility with an undrawn amount above `min_undrawn`"))?;
+                let mut out = serde_json::to_value(b).unwrap();
+                out["excluded"] = json!(r.excluded);
+                out["outside_unit_interval"] = json!(r.outside_unit_interval);
+                Ok(out)
+            }
+            "staging_check" => self.staging(inputs),
             "price_portfolio" => {
                 let trades = trades_from_value(self.dep(inputs, "trades", 0)?).map_err(|e| err(&self.name, e))?;
                 let market = self.market(inputs)?;
@@ -1454,6 +1732,63 @@ mod tests {
         assert!(d["gini"].as_f64().unwrap() > 0.0);
         let c = builtin("pd_calibration", &["t"], Value::Null).run(&i).unwrap();
         assert_eq!(c["grades"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn ifrs9_steps() {
+        let mut i = BTreeMap::new();
+        // Two bullet facilities, annual periods, flat 12-month PD: closed-form ECLs.
+        i.insert(
+            "book".to_string(),
+            json!({"stage": [1, 2], "balance": [1000, 1000], "lgd": [0.5, 0.5], "eir": [0.0, 0.0],
+                   "periods": [3, 3], "pd_12m": [0.1, 0.1], "grade": [1, 2], "reported": [50, 135.5]}),
+        );
+        let p = json!({"periods_per_year": 1, "repayment": "bullet", "segments": ["grade"]});
+        let o = builtin("ecl", &["book"], p).run(&i).unwrap();
+        let lifetime = 500.0 * (1.0 - 0.9f64.powi(3));
+        assert!((o["total"]["ecl"].as_f64().unwrap() - (50.0 + lifetime)).abs() < 1e-9);
+        assert_eq!(o["by"]["grade"].as_array().unwrap().len(), 2);
+        // 135.5 reported against 135.5: within tolerance.
+        assert_eq!(o["status"], "pass");
+        // Curves by segment from a JSON document, and a migration matrix.
+        i.insert("curves".to_string(), json!({"curves": {"1": [0.1], "2": [0.2, 0.3]}}));
+        let p = json!({"periods_per_year": 1, "repayment": "bullet", "pd_curves": "curves"});
+        let o = builtin("ecl", &["book", "curves"], p).run(&i).unwrap();
+        assert!((o["by_stage"][1]["ecl"].as_f64().unwrap() - 500.0 * (1.0 - 0.7 * 0.7 / 0.8)).abs() < 1e-9);
+        assert_eq!(o["status"], "fail");
+        i.insert(
+            "m".to_string(),
+            json!({"states": ["A", "B", "D"], "matrix": [[0.9, 0.0, 0.1], [0.0, 0.9, 0.1], [0, 0, 1]]}),
+        );
+        let p = json!({"periods_per_year": 1, "repayment": "bullet", "pd_curves": "m"});
+        let o = builtin("ecl", &["book", "m"], p).run(&i).unwrap();
+        assert!((o["total"]["ecl"].as_f64().unwrap() - (50.0 + lifetime)).abs() < 1e-9);
+
+        i.insert(
+            "d".to_string(),
+            json!({"lgd_estimate": [0.4, 0.4, 0.6, 0.6], "lgd_realized": [0.3, 0.5, 0.7, 0.5], "segment": [1, 1, 2, 2]}),
+        );
+        let o = builtin("lgd_backtest", &["d"], Value::Null).run(&i).unwrap();
+        assert_eq!(o["segments"].as_array().unwrap().len(), 2);
+        i.insert(
+            "c".to_string(),
+            json!({"limit": [100, 100, 100], "drawn": [50, 100, 20], "ead": [75, 100, 60], "ccf_estimate": [0.5, 0.5, 0.5]}),
+        );
+        let o = builtin("ccf_backtest", &["c"], Value::Null).run(&i).unwrap();
+        assert_eq!(
+            (o["excluded"].clone(), o["overall"]["observations"].clone()),
+            (json!(1), json!(2))
+        );
+        i.insert(
+            "s".to_string(),
+            json!({"stage": [1, 1, 2], "dpd": [0, 45, 0], "pd_origination": [0.01, 0.01, 0.01],
+                   "pd_current": [0.01, 0.01, 0.05]}),
+        );
+        let o = builtin("staging_check", &["s"], Value::Null).run(&i).unwrap();
+        assert_eq!(
+            (o["understaged"].clone(), o["status"].clone()),
+            (json!(1), json!("fail"))
+        );
     }
 
     #[test]

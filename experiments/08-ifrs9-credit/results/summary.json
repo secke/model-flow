@@ -1,0 +1,581 @@
+{
+ "run_hash": "bdf1a28fffb5709e9c6c400238e08582e0fa1719a238d6e21c7a091b2b1addcb",
+ "status": {
+  "loans": null,
+  "outcomes": null,
+  "pd_curves": null,
+  "book": null,
+  "defaults": null,
+  "ecl": "fail",
+  "ecl_model_conventions": "pass",
+  "ecl_no_discount": "fail",
+  "pd_12m": "fail",
+  "pd_lifetime": "fail",
+  "pd_ranking": "warn",
+  "lgd_by_grade": "fail",
+  "lgd_by_default_year": "fail"
+ },
+ "curves": {
+  "1": [
+   0.013968993068416318,
+   0.041483676384993916,
+   0.06598232710725435
+  ],
+  "2": [
+   0.024206805852375474,
+   0.07438763767877692,
+   0.11840374815058359
+  ],
+  "3": [
+   0.03851851851851852,
+   0.10977072310405643,
+   0.16663139329805995
+  ],
+  "4": [
+   0.04867140226256248,
+   0.13443830570902393,
+   0.20218363588529334
+  ],
+  "5": [
+   0.0541696364932288,
+   0.14468995010691377,
+   0.21097647897362795
+  ],
+  "6": [
+   0.09274193548387097,
+   0.15725806451612903,
+   0.23790322580645162
+  ],
+  "7": [
+   0.14705882352941177,
+   0.23529411764705882,
+   0.29411764705882354
+  ]
+ },
+ "lgd": {
+  "1": 0.915528845492855,
+  "2": 0.9070908035674405,
+  "3": 0.9022556695570357,
+  "4": 0.9053813724327429,
+  "5": 0.8981754284807696,
+  "6": 0.8764736603554862,
+  "7": 0.8810822651104757
+ },
+ "ecl": {
+  "reported": 184945479.46846393,
+  "recomputed": 151011884.1665532,
+  "no_discount": 160838678.4017176,
+  "model_conventions": 184945479.46846393,
+  "total": {
+   "coverage": 0.021752016759798765,
+   "difference": -33933595.30191073,
+   "ecl": 151011884.1665532,
+   "ecl_12m": 151011884.1665532,
+   "ecl_lifetime": 358174672.5354236,
+   "exposure": 6942431400.0,
+   "facilities": 546018,
+   "realized_12m": 127515867.97158194,
+   "realized_lifetime": 405389723.23085314,
+   "realized_to_ecl_12m": 0.8444094891958492,
+   "realized_to_ecl_lifetime": 1.1318212992593997,
+   "reported": 184945479.46846393
+  },
+  "by": {
+   "grade": [
+    {
+     "coverage": 0.010615896837304115,
+     "difference": -3873111.9373551905,
+     "ecl": 18920524.766355682,
+     "ecl_12m": 18920524.766355682,
+     "ecl_lifetime": 47418773.90254599,
+     "exposure": 1782282275.0,
+     "facilities": 122508,
+     "realized_12m": 8407665.724766774,
+     "realized_lifetime": 36263773.87012308,
+     "realized_to_ecl_12m": 0.4443674701727731,
+     "realized_to_ecl_lifetime": 0.7647556207305483,
+     "reported": 22793636.703710873,
+     "segment": 1
+    },
+    {
+     "coverage": 0.018050983493321838,
+     "difference": -9157213.325873964,
+     "ecl": 42310135.23869924,
+     "ecl_12m": 42310135.23869924,
+     "ecl_lifetime": 107905728.24884152,
+     "exposure": 2343924100.0,
+     "facilities": 185498,
+     "realized_12m": 27629475.09446881,
+     "realized_lifetime": 104795272.35792719,
+     "realized_to_ecl_12m": 0.653022613579295,
+     "realized_to_ecl_lifetime": 0.9711743209429873,
+     "reported": 51467348.564573206,
+     "segment": 2
+    },
+    {
+     "coverage": 0.028335232792977144,
+     "difference": -11244323.362757444,
+     "ecl": 49640805.30919656,
+     "ecl_12m": 49640805.30919656,
+     "ecl_lifetime": 115802959.0130952,
+     "exposure": 1751910975.0,
+     "facilities": 146158,
+     "realized_12m": 41587982.4445374,
+     "realized_lifetime": 135570210.43660742,
+     "realized_to_ecl_12m": 0.8377781582208281,
+     "realized_to_ecl_lifetime": 1.1706972912607259,
+     "reported": 60885128.671954006,
+     "segment": 3
+    },
+    {
+     "coverage": 0.035619718564208244,
+     "difference": -6689175.909164287,
+     "ecl": 28209036.116924718,
+     "ecl_12m": 28209036.116924718,
+     "ecl_lifetime": 63340790.888084896,
+     "exposure": 791950000.0,
+     "facilities": 67726,
+     "realized_12m": 32724337.82445491,
+     "realized_lifetime": 88060409.8088705,
+     "realized_to_ecl_12m": 1.1600657919970943,
+     "realized_to_ecl_lifetime": 1.3902638185314422,
+     "reported": 34898212.026089005,
+     "segment": 4
+    },
+    {
+     "coverage": 0.039054576852649396,
+     "difference": -2204180.5529769473,
+     "ecl": 8967706.078718826,
+     "ecl_12m": 8967706.078718826,
+     "ecl_lifetime": 19251763.059211954,
+     "exposure": 229619850.0,
+     "facilities": 19740,
+     "realized_12m": 13299170.051916204,
+     "realized_lifetime": 33039535.727952752,
+     "realized_to_ecl_12m": 1.4830069066911473,
+     "realized_to_ecl_lifetime": 1.7161823374999081,
+     "reported": 11171886.631695773,
+     "segment": 5
+    },
+    {
+     "coverage": 0.06463828314827505,
+     "difference": -623749.4657407161,
+     "ecl": 2421859.113214176,
+     "ecl_12m": 2421859.113214176,
+     "ecl_lifetime": 3701727.379673906,
+     "exposure": 37467875.0,
+     "facilities": 3949,
+     "realized_12m": 3161897.5973683423,
+     "realized_lifetime": 6563503.5267834,
+     "realized_to_ecl_12m": 1.305566281752873,
+     "realized_to_ecl_lifetime": 1.7730920874463734,
+     "reported": 3045608.5789548922,
+     "segment": 6
+    },
+    {
+     "coverage": 0.1026884324579509,
+     "difference": -141840.74814939615,
+     "ecl": 541817.5433886978,
+     "ecl_12m": 541817.5433886978,
+     "ecl_lifetime": 752930.0439755667,
+     "exposure": 5276325.0,
+     "facilities": 439,
+     "realized_12m": 705339.2340697694,
+     "realized_lifetime": 1097017.50259427,
+     "realized_to_ecl_12m": 1.3018021337189551,
+     "realized_to_ecl_lifetime": 1.4569979128497483,
+     "reported": 683658.2915380939,
+     "segment": 7
+    }
+   ],
+   "vintage": [
+    {
+     "coverage": 0.021788333597798776,
+     "difference": -6336501.489627585,
+     "ecl": 27716718.018173806,
+     "ecl_12m": 27716718.018173806,
+     "ecl_lifetime": 65865611.989447095,
+     "exposure": 1272089850.0,
+     "facilities": 100422,
+     "realized_12m": 19893602.166668076,
+     "realized_lifetime": 62564827.16522069,
+     "realized_to_ecl_12m": 0.7177473954031597,
+     "realized_to_ecl_lifetime": 0.9498860676379163,
+     "reported": 34053219.50780139,
+     "segment": 2013
+    },
+    {
+     "coverage": 0.022160085963747116,
+     "difference": -10256885.807220608,
+     "ecl": 45340438.90532962,
+     "ecl_12m": 45340438.90532962,
+     "ecl_lifetime": 106823565.02009824,
+     "exposure": 2046040750.0,
+     "facilities": 162570,
+     "realized_12m": 34699828.862862535,
+     "realized_lifetime": 113090575.15200472,
+     "realized_to_ecl_12m": 0.7653174451027134,
+     "realized_to_ecl_lifetime": 1.0586669255114953,
+     "reported": 55597324.71255023,
+     "segment": 2014
+    },
+    {
+     "coverage": 0.021508901039062053,
+     "difference": -17340208.005149543,
+     "ecl": 77954727.24299343,
+     "ecl_12m": 77954727.24299343,
+     "ecl_lifetime": 185485495.52585435,
+     "exposure": 3624300800.0,
+     "facilities": 283026,
+     "realized_12m": 72922436.94205165,
+     "realized_lifetime": 229734320.9136317,
+     "realized_to_ecl_12m": 0.9354459892437879,
+     "realized_to_ecl_lifetime": 1.2385567953026797,
+     "reported": 95294935.24814297,
+     "segment": 2015
+    }
+   ]
+  }
+ },
+ "pd": {
+  "12m": {
+   "grades": [
+    {
+     "defaults": 828,
+     "grade": 1,
+     "mean_pd": 0.013968993068388216,
+     "obligors": 122508,
+     "observed_dr": 0.006758742286218043,
+     "p_value": 0.9999999998171522,
+     "status": "pass"
+    },
+    {
+     "defaults": 3126,
+     "grade": 2,
+     "mean_pd": 0.024206805852372806,
+     "obligors": 185498,
+     "observed_dr": 0.016851933713571035,
+     "p_value": 1.0,
+     "status": "pass"
+    },
+    {
+     "defaults": 5017,
+     "grade": 3,
+     "mean_pd": 0.03851851851861841,
+     "obligors": 146158,
+     "observed_dr": 0.03432586652800394,
+     "p_value": 0.9999999999881501,
+     "status": "pass"
+    },
+    {
+     "defaults": 3818,
+     "grade": 4,
+     "mean_pd": 0.04867140226259036,
+     "obligors": 67726,
+     "observed_dr": 0.056374213743613975,
+     "p_value": 4.898605670880794e-20,
+     "status": "fail"
+    },
+    {
+     "defaults": 1558,
+     "grade": 5,
+     "mean_pd": 0.05416963649324835,
+     "obligors": 19740,
+     "observed_dr": 0.07892603850050658,
+     "p_value": 1.8045787474587555e-47,
+     "status": "fail"
+    },
+    {
+     "defaults": 420,
+     "grade": 6,
+     "mean_pd": 0.09274193548386327,
+     "obligors": 3949,
+     "observed_dr": 0.10635603950367181,
+     "p_value": 0.0020569985098188074,
+     "status": "fail"
+    },
+    {
+     "defaults": 82,
+     "grade": 7,
+     "mean_pd": 0.1470588235294126,
+     "obligors": 439,
+     "observed_dr": 0.1867881548974943,
+     "p_value": 0.013078907209719798,
+     "status": "warn"
+    }
+   ],
+   "hl_df": 7,
+   "hl_p_value": 3.808788775926074e-275,
+   "hosmer_lemeshow": 1293.7135887952816,
+   "status": "fail"
+  },
+  "lifetime": {
+   "grades": [
+    {
+     "defaults": 6482,
+     "grade": 1,
+     "mean_pd": 0.06598232710716574,
+     "obligors": 122508,
+     "observed_dr": 0.05291083031312241,
+     "p_value": 0.9999999998045999,
+     "status": "pass"
+    },
+    {
+     "defaults": 20589,
+     "grade": 2,
+     "mean_pd": 0.11840374815072312,
+     "obligors": 185498,
+     "observed_dr": 0.11099311043784839,
+     "p_value": 1.0,
+     "status": "pass"
+    },
+    {
+     "defaults": 26401,
+     "grade": 3,
+     "mean_pd": 0.16663139329824542,
+     "obligors": 146158,
+     "observed_dr": 0.18063328726446723,
+     "p_value": 4.135972303283223e-46,
+     "status": "fail"
+    },
+    {
+     "defaults": 16083,
+     "grade": 4,
+     "mean_pd": 0.20218363588536922,
+     "obligors": 67726,
+     "observed_dr": 0.23747157664707794,
+     "p_value": 1.8269861057075513e-111,
+     "status": "fail"
+    },
+    {
+     "defaults": 5764,
+     "grade": 5,
+     "mean_pd": 0.2109764789735264,
+     "obligors": 19740,
+     "observed_dr": 0.29199594731509626,
+     "p_value": 2.145270235481e-158,
+     "status": "fail"
+    },
+    {
+     "defaults": 1324,
+     "grade": 6,
+     "mean_pd": 0.23790322580646078,
+     "obligors": 3949,
+     "observed_dr": 0.3352747531020511,
+     "p_value": 1.2881313664031388e-43,
+     "status": "fail"
+    },
+    {
+     "defaults": 182,
+     "grade": 7,
+     "mean_pd": 0.2941176470588252,
+     "obligors": 439,
+     "observed_dr": 0.4145785876993166,
+     "p_value": 5.160968641032703e-08,
+     "status": "fail"
+    }
+   ],
+   "hl_df": 7,
+   "hl_p_value": 0.0,
+   "hosmer_lemeshow": 2182.011664667816,
+   "status": "fail"
+  },
+  "ranking": {
+   "auc": 0.6567217682610035,
+   "gini": 0.31344353652200696,
+   "ks": 0.24638985521961876
+  }
+ },
+ "lgd_by_grade": {
+  "concordance": 0.518398389242125,
+  "min_concordance": 0.6,
+  "overall": {
+   "mean_absolute_error": 0.07836228308273113,
+   "mean_error": -0.014435292333296518,
+   "mean_estimated": 0.9045249245001077,
+   "mean_realized": 0.89008963216749,
+   "observations": 76818,
+   "p_value": 1.0,
+   "segment": null,
+   "status": "pass",
+   "t_statistic": -32.01441386330441
+  },
+  "parameter": "lgd",
+  "segments": [
+   {
+    "mean_absolute_error": 0.09224253302416845,
+    "mean_error": -0.02526645068057253,
+    "mean_estimated": 0.9155288454928633,
+    "mean_realized": 0.8902623948122859,
+    "observations": 6481,
+    "p_value": 1.0,
+    "segment": 1,
+    "status": "pass",
+    "t_statistic": -14.130448835777514
+   },
+   {
+    "mean_absolute_error": 0.08044142008829677,
+    "mean_error": -0.015310919436455135,
+    "mean_estimated": 0.9070908035678863,
+    "mean_realized": 0.891779884130984,
+    "observations": 20586,
+    "p_value": 1.0,
+    "segment": 2,
+    "status": "pass",
+    "t_statistic": -17.36928797620008
+   },
+   {
+    "mean_absolute_error": 0.07511483288955173,
+    "mean_error": -0.012162085080563403,
+    "mean_estimated": 0.9022556695566188,
+    "mean_realized": 0.890093584476473,
+    "observations": 26399,
+    "p_value": 1.0,
+    "segment": 3,
+    "status": "pass",
+    "t_statistic": -16.326194817314352
+   },
+   {
+    "mean_absolute_error": 0.07596644131058398,
+    "mean_error": -0.016191930414827277,
+    "mean_estimated": 0.9053813724329917,
+    "mean_realized": 0.8891894420179179,
+    "observations": 16082,
+    "p_value": 1.0,
+    "segment": 4,
+    "status": "pass",
+    "t_statistic": -16.81390788696123
+   },
+   {
+    "mean_absolute_error": 0.07694150612922158,
+    "mean_error": -0.010822739161995457,
+    "mean_estimated": 0.8981754284807745,
+    "mean_realized": 0.8873526893187729,
+    "observations": 5764,
+    "p_value": 0.9999999999920699,
+    "segment": 5,
+    "status": "pass",
+    "t_statistic": -6.753398349450384
+   },
+   {
+    "mean_absolute_error": 0.0780838885201503,
+    "mean_error": 0.009629358714158667,
+    "mean_estimated": 0.8764736603554864,
+    "mean_realized": 0.8861030190696442,
+    "observations": 1324,
+    "p_value": 0.002006365118364939,
+    "segment": 6,
+    "status": "fail",
+    "t_statistic": 2.8822117473646793
+   },
+   {
+    "mean_absolute_error": 0.07868263211430626,
+    "mean_error": 0.006322387284451876,
+    "mean_estimated": 0.8810822651104778,
+    "mean_realized": 0.8874046523949274,
+    "observations": 182,
+    "p_value": 0.24924499365662944,
+    "segment": 7,
+    "status": "pass",
+    "t_statistic": 0.6782332336216864
+   }
+  ],
+  "status": "fail"
+ },
+ "lgd_by_default_year": {
+  "concordance": 0.518398389242125,
+  "min_concordance": 0.6,
+  "overall": {
+   "mean_absolute_error": 0.07836228308273113,
+   "mean_error": -0.014435292333296518,
+   "mean_estimated": 0.9045249245001077,
+   "mean_realized": 0.89008963216749,
+   "observations": 76818,
+   "p_value": 1.0,
+   "segment": null,
+   "status": "pass",
+   "t_statistic": -32.01441386330441
+  },
+  "parameter": "lgd",
+  "segments": [
+   {
+    "mean_absolute_error": 0.07214473491221862,
+    "mean_error": 0.015093131739091338,
+    "mean_estimated": 0.9039780130268332,
+    "mean_realized": 0.9190711447659248,
+    "observations": 506,
+    "p_value": 0.0008485128881641213,
+    "segment": 2013,
+    "status": "fail",
+    "t_statistic": 3.1556380831179114
+   },
+   {
+    "mean_absolute_error": 0.07638449420802723,
+    "mean_error": -0.011426473460009752,
+    "mean_estimated": 0.9041273115871323,
+    "mean_realized": 0.8927008381271123,
+    "observations": 4993,
+    "p_value": 0.9999999999997383,
+    "segment": 2014,
+    "status": "pass",
+    "t_statistic": -7.2383403314517105
+   },
+   {
+    "mean_absolute_error": 0.07513122695809202,
+    "mean_error": -0.0192083521907989,
+    "mean_estimated": 0.9040680322302503,
+    "mean_realized": 0.8848596800393395,
+    "observations": 14378,
+    "p_value": 1.0,
+    "segment": 2015,
+    "status": "pass",
+    "t_statistic": -21.973845828532795
+   },
+   {
+    "mean_absolute_error": 0.06931048650912937,
+    "mean_error": -0.006059825196469272,
+    "mean_estimated": 0.9042588178306089,
+    "mean_realized": 0.8981989926341833,
+    "observations": 26622,
+    "p_value": 1.0,
+    "segment": 2016,
+    "status": "pass",
+    "t_statistic": -8.298301910217871
+   },
+   {
+    "mean_absolute_error": 0.08069724646215105,
+    "mean_error": -0.017737798303558937,
+    "mean_estimated": 0.9049211267051261,
+    "mean_realized": 0.8871833284015457,
+    "observations": 21690,
+    "p_value": 1.0,
+    "segment": 2017,
+    "status": "pass",
+    "t_statistic": -19.56096327791293
+   },
+   {
+    "mean_absolute_error": 0.10743862285593579,
+    "mean_error": -0.031357768714755825,
+    "mean_estimated": 0.9053631200201935,
+    "mean_realized": 0.87400535130538,
+    "observations": 8044,
+    "p_value": 1.0,
+    "segment": 2018,
+    "status": "pass",
+    "t_statistic": -18.20666970598284
+   },
+   {
+    "mean_absolute_error": 0.10557390655867076,
+    "mean_error": 0.025644550071970376,
+    "mean_estimated": 0.9055154146797953,
+    "mean_realized": 0.9311599647517705,
+    "observations": 585,
+    "p_value": 3.6576881861094535e-06,
+    "segment": 2019,
+    "status": "fail",
+    "t_statistic": 4.525144824050378
+   }
+  ],
+  "status": "fail"
+ }
+}
