@@ -120,6 +120,27 @@ fn post(url: &str, body: &serde_json::Value) -> Result<(), String> {
         .post(url)
         .set("Content-Type", "application/json")
         .send_string(&body.to_string())
-        .map_err(|err| format!("webhook: {err}"))?;
+        .map_err(redact)?;
     Ok(())
+}
+
+/// Error of a webhook call without its URL: webhook URLs often carry a secret, and the error is
+/// written to the audit log.
+fn redact(err: ureq::Error) -> String {
+    match err {
+        ureq::Error::Status(code, _) => format!("webhook: HTTP {code}"),
+        ureq::Error::Transport(t) => format!("webhook: {}", t.kind()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn errors_do_not_reveal_the_webhook_url() {
+        let e = super::post("http://127.0.0.1:1/hooks/T000-SECRET", &serde_json::json!({})).unwrap_err();
+        assert!(
+            e.starts_with("webhook: ") && !e.contains("SECRET") && !e.contains("127.0.0.1"),
+            "{e}"
+        );
+    }
 }

@@ -216,7 +216,13 @@ pub fn escalate_overdue(st: &AppState, today: &str) -> Result<Vec<i64>, String> 
         };
         f.escalated_at = Some(chrono::Utc::now().timestamp());
         gov.update_finding(&f)?;
-        let note = format!("{days} days overdue (due {}), {outcome}", f.due_date);
+        // The event is visible to every user: no transport detail, which stays in the audit log.
+        let sent = if outcome.starts_with("error") {
+            "notification failed"
+        } else {
+            outcome.as_str()
+        };
+        let note = format!("{days} days overdue (due {}), {sent}", f.due_date);
         gov.finding_event(f.id, "system", "escalate", &f.status, &note)?;
         gov.audit(
             "system",
