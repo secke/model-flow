@@ -2,7 +2,7 @@
 
 **Question.** Market risk was the subject of experiments 01 to 07. Credit risk under IFRS 9 is a large part of a validation team's work: the expected credit loss (ECL) of a loan book, the PD, LGD and EAD models behind it, and the staging between 12-month and lifetime ECL. What can a validator check with ModelFlow on a real loan book, and what does it find on a simple model?
 
-**Date run:** 2026-11-06 · **ModelFlow:** v0.23.0 · **Engine:** quantparity 0.6.0
+**Date run:** 2026-11-06 · **ModelFlow:** v0.24.0 · **Engine:** quantparity 0.6.0
 
 ## What this experiment added
 
@@ -20,7 +20,7 @@ ModelFlow exposes them as four built-in steps: `ecl` (recomputation, reconciliat
 ```bash
 python3 fetch.py                                # Lending Club loans: 1.7 GB download, then about a minute
 MF=../../target/release/mf
-$MF run ifrs9.toml                              # 14 steps, 90 s
+$MF run ifrs9.toml                              # 15 steps, 45 s on 8 cores
 $MF verify ifrs9.toml
 python3 summarize.py                            # results/summary.md, results/summary.json
 pip install numpy pandas && python3 reference/ecl_check.py   # results/reference_ecl.md
@@ -43,13 +43,14 @@ The model under validation, [`model/ifrs9_model.py`](model/ifrs9_model.py), is t
 The pipeline [`ifrs9.toml`](ifrs9.toml) validates it out of time, on the 546,018 loans of the 2013–2015 vintages. Each loan is taken at its issue date, when it is in stage 1:
 
 - **`ecl`** recomputes the ECL with the model's PD curves and LGDs. It uses monthly periods with a constant hazard rate within each year, the instalments of the loan, and discounting at its rate. It then reconciles the result with the model's figure. Two more `ecl` steps repeat the computation, one with the model's own conventions and one without discounting.
+- **`sensitivity`** reruns the `ecl` step with one quantity shocked at a time: the PD curves (× 0.8 to 1.2), the LGDs (× 0.9, 1.1), the loan rate (−4 to +4 points, which moves both the amortization and the discounting) and the stage of every loan (all in stage 2). The ECL must rise with the PDs, the LGDs and the stage.
 - **ECL against losses:** the realized losses, discounted to the issue date at the loan rate, are compared with the 12-month and lifetime ECL, by grade and by vintage.
 - **`pd_calibration`**, run twice, compares the PDs with the observed default rates by grade, over 12 months and over the life of the loan, with the Jeffreys test of the ECB instructions (`test = "jeffreys"`; the exact binomial p-value is reported beside it). `pd_discrimination` measures how well the lifetime PD ranks the loans.
 - **`lgd_backtest`**, run three times, compares the LGDs with the realized LGDs of the 76,818 test defaults, by grade and by year of default, then by year of default on the 71,398 defaults whose workout had lasted at least 12 months at the data date (`min_workout_months`).
 
 ## Results
 
-[`results/summary.md`](results/summary.md), [`results/summary.json`](results/summary.json), [`results/reference_ecl.md`](results/reference_ecl.md). Run fingerprint `dce15d9c7f35ec40`, replayed identically by `mf verify`.
+[`results/summary.md`](results/summary.md), [`results/summary.json`](results/summary.json), [`results/reference_ecl.md`](results/reference_ecl.md). Run fingerprint `1ba36cd644759736`, replayed identically by `mf verify`.
 
 The ECL recomputed by ModelFlow agrees with an independent pandas / numpy computation from the raw file (default dates, LGDs, PD curves, ECL) to 4e-13 in relative terms, in total and by grade.
 
@@ -84,6 +85,7 @@ The ECL recomputed by ModelFlow agrees with an independent pandas / numpy comput
 4. **The LGD is conservative but does not rank.** The model's LGD by grade, 87.6% to 91.6%, is higher than the realized one overall: 89.0% against 90.5%, t = −32. Only grade F is underestimated, by one point (p = 0.002). But the concordance of estimated and realized LGDs is 0.518, close to 0.5, which means no ranking power. Realized LGDs of these unsecured loans pile up at the top: 25% recover nothing, 90% lose at least 80%, and the median is 91%. An LGD by grade is then little more than a constant. To rank defaults, an LGD model would need drivers the grade does not carry, such as the amount repaid before default or the time to default.
 5. **Workouts near the data cut-off bias realized LGDs upward.** The 585 defaults dated 2019, in the last months before the March 2019 snapshot, have a realized LGD of 93.1%, against 87.4% to 89.8% for 2014–2018. Recoveries come after the charge-off, and those had not come in yet. The LGD backtest by year of default fails on 2019 for that reason, not because the model is wrong. A validator must leave out incomplete workouts, or the backtest will find a bias that is not there. With `min_workout_months = 12`, the step leaves out 5,420 defaults (all 585 of 2019, 4,835 of 2018) and 2019 no longer appears; the overall result does not change (89.1% realized, t = −30.5). The defaults of 2013 are also high (91.9%, p = 0.0008), but they are of another kind: all of them occur within twelve months of issue.
 6. **Ranking power is moderate.** The lifetime PD by grade has an AUC of 0.657 and a Gini of 0.31, against a pass threshold of 0.40 (`warn`). That is low for a scorecard, but it is what seven grades can carry.
+7. **The stage, not the parameters, drives the ECL.** The recomputed ECL is proportional to the PDs and the LGDs (elasticities 1.000 to 1.005, monotonic as expected), so the 13% lifetime shortfall of finding 3 is the PD shortfall: lifetime PDs about 1.13 times higher would cover the lifetime losses. The loan rate barely matters: 2 more points lower the lifetime ECL by 1.2%, as the extra discounting outweighs the slower amortization. Moving every loan to stage 2 multiplies the ECL by 2.37, from 151 to 358 million USD, more than any ±20% shock to a parameter. The allocation between stages is the largest source of uncertainty in this book's ECL, and it is the one the Lending Club file cannot test (below).
 
 **What the data cannot test.** Staging needs each facility's days past due and current PD at the reporting date, and the file only has the last payment date and the March 2019 status. The `staging_check` and `ccf_backtest` steps are therefore validated in quantparity, on synthetic data, and not here. Lending Club loans are fully drawn at issue, so they have no CCF. Freddie Mac's single-family loan-level dataset has monthly delinquency and balances, which is enough for staging and SICR. It needs a (free) registration.
 
@@ -95,4 +97,5 @@ The ECL recomputed by ModelFlow agrees with an independent pandas / numpy comput
 | A reconciliation that only compares totals cannot say why the ECLs differ | **added**: `ecl` takes the conventions as parameters (`repayment`, `periods_per_year`, `discount`); rerun with the model's conventions, it isolates the methodological gap (finding 1) |
 | An ECL checked against realized losses in total hides a miscalibration by grade | **added**: `ecl` with `segments` and `realized_12m` / `realized_lifetime` columns (findings 2, 3) |
 | The ECB instructions test PDs by grade with the Jeffreys test, not the exact binomial test | **added** in v0.23 / quantparity 0.6.0: `test = "jeffreys"` in `pd_calibration`, reconciled with `scipy.stats.beta.cdf` |
+| No way to test how the ECL responds to its inputs without editing the model or the data | **added** in v0.24: the `sensitivity` step reruns any step with a shocked input or parameter, with expected directions and bounds (finding 7) |
 | Recent defaults bias the LGD backtest | **added**: `lgd_backtest` takes a `workout_months` column and leaves out, and counts, the defaults with a shorter workout than `min_workout_months` (finding 5) |

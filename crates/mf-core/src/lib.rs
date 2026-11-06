@@ -144,6 +144,11 @@ impl Pipeline {
         self
     }
 
+    pub fn boxed(mut self, s: Box<dyn Step>) -> Self {
+        self.steps.push(s);
+        self
+    }
+
     /// Stable topological order (Kahn, insertion order breaks ties).
     fn order(&self) -> Result<Vec<usize>, Error> {
         let mut idx: HashMap<&str, usize> = HashMap::new();

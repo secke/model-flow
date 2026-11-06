@@ -46,6 +46,7 @@ ModelFlow's examples use synthetic data, which proves that the code works but no
 | 08 | No credit risk step beyond PD discrimination and calibration | added in v0.22 / quantparity 0.5.0: `ecl` (recomputation with explicit conventions, reconciliation, realized losses by segment), `lgd_backtest`, `ccf_backtest`, `staging_check`, each reconciled with numpy or scipy |
 | 08 | Defaults close to the data date bias the LGD backtest upward | added in v0.23: `min_workout_months` in `lgd_backtest` |
 | 08 | PD calibration by grade lacked the Jeffreys test of the ECB instructions | added in v0.23 / quantparity 0.6.0: `test = "jeffreys"` in `pd_calibration` |
+| 08 | How the ECL responds to its inputs could only be tested by editing the model or the data | added in v0.24: the `sensitivity` step (expected directions, bounds), on any step of a pipeline |
 
 ## Backlog
 

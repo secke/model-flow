@@ -1,5 +1,6 @@
+use crate::sensitivity::SensitivityStep;
 use crate::steps::{BuiltinStep, JsonStep, Limits, ProcessStep, TableFormat, TableStep};
-use mf_core::{Manifest, Mismatch, Pipeline};
+use mf_core::{Manifest, Mismatch, Pipeline, Step};
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -56,6 +57,14 @@ pub struct StepSpec {
     pub cpu_secs: Option<u64>,
     pub file_size_mb: Option<u64>,
     pub max_output_mb: Option<u64>,
+    // sensitivity
+    /// Step whose model is rerun under the scenarios.
+    pub target: Option<String>,
+    /// Paths in the target's output to measure (`mf diff` notation, wildcards).
+    #[serde(default)]
+    pub outputs: Vec<String>,
+    #[serde(default, rename = "scenario")]
+    pub scenarios: Vec<crate::sensitivity::Scenario>,
 }
 
 pub fn parse(text: &str) -> Result<PipelineSpec, String> {
@@ -188,77 +197,116 @@ pub fn build_at(spec: &PipelineSpec, base: &Path, as_of: Option<&str>) -> Result
     }
     let mut p = Pipeline::new();
     for s in &spec.steps {
-        let path = dated_path(s, as_of)?;
-        let need = |o: &Option<String>, f: &str| o.clone().ok_or(format!("step {}: field `{f}` is required", s.name));
-        p = match s.kind.as_str() {
-            "csv" | "parquet" => {
-                let (columns, table) = match (&s.column, s.columns.is_empty()) {
-                    (Some(c), true) => (vec![c.clone()], false),
-                    (None, false) => (s.columns.clone(), true),
-                    _ => return Err(format!("step {}: specify `column` or `columns`", s.name)),
-                };
-                let format = if s.kind == "parquet" {
-                    TableFormat::Parquet
-                } else {
-                    let d = s.delimiter.as_deref().unwrap_or(",");
-                    if d.len() != 1 {
-                        return Err(format!("step {}: `delimiter` must be an ASCII character", s.name));
-                    }
-                    TableFormat::Csv {
-                        delimiter: d.as_bytes()[0],
-                    }
-                };
-                p.step(TableStep {
-                    name: s.name.clone(),
-                    version: s.version.clone(),
-                    path: base.join(need(&path, "path")?),
-                    columns,
-                    table,
-                    format,
-                })
-            }
-            "json" => p.step(JsonStep {
+        p = p.boxed(build_step(&spec.steps, s, base, as_of)?);
+    }
+    Ok(p)
+}
+
+/// One step of the pipeline, built on its own (a `sensitivity` step rebuilds its target with it).
+pub(crate) fn build_step(
+    steps: &[StepSpec],
+    s: &StepSpec,
+    base: &Path,
+    as_of: Option<&str>,
+) -> Result<Box<dyn Step + Send + Sync>, String> {
+    let path = dated_path(s, as_of)?;
+    let need = |o: &Option<String>, f: &str| o.clone().ok_or(format!("step {}: field `{f}` is required", s.name));
+    Ok(match s.kind.as_str() {
+        "csv" | "parquet" => {
+            let (columns, table) = match (&s.column, s.columns.is_empty()) {
+                (Some(c), true) => (vec![c.clone()], false),
+                (None, false) => (s.columns.clone(), true),
+                _ => return Err(format!("step {}: specify `column` or `columns`", s.name)),
+            };
+            let format = if s.kind == "parquet" {
+                TableFormat::Parquet
+            } else {
+                let d = s.delimiter.as_deref().unwrap_or(",");
+                if d.len() != 1 {
+                    return Err(format!("step {}: `delimiter` must be an ASCII character", s.name));
+                }
+                TableFormat::Csv {
+                    delimiter: d.as_bytes()[0],
+                }
+            };
+            Box::new(TableStep {
                 name: s.name.clone(),
                 version: s.version.clone(),
                 path: base.join(need(&path, "path")?),
-            }),
-            "process" => {
-                let command = s
-                    .command
-                    .clone()
-                    .filter(|c| !c.is_empty())
-                    .ok_or(format!("step {}: `command` is required", s.name))?;
-                p.step(ProcessStep {
-                    name: s.name.clone(),
-                    version: s.version.clone(),
-                    deps: s.deps.clone(),
-                    command,
-                    code: s.code.iter().map(|c| base.join(c)).collect(),
-                    params: s.params.clone(),
-                    cwd: base.to_path_buf(),
-                    as_of: as_of.map(str::to_string),
-                    timeout: std::time::Duration::from_secs(s.timeout_secs.unwrap_or(300)),
-                    env: s.env.clone(),
-                    pass_env: s.pass_env.clone(),
-                    limits: Limits {
-                        memory_mb: s.memory_mb,
-                        cpu_secs: s.cpu_secs.or(Some(s.timeout_secs.unwrap_or(300))),
-                        file_size_mb: s.file_size_mb,
-                        max_output_mb: s.max_output_mb.unwrap_or(256),
-                    },
-                })
-            }
-            k if BuiltinStep::KINDS.contains(&k) => p.step(BuiltinStep {
+                columns,
+                table,
+                format,
+            })
+        }
+        "json" => Box::new(JsonStep {
+            name: s.name.clone(),
+            version: s.version.clone(),
+            path: base.join(need(&path, "path")?),
+        }),
+        "process" => {
+            let command = s
+                .command
+                .clone()
+                .filter(|c| !c.is_empty())
+                .ok_or(format!("step {}: `command` is required", s.name))?;
+            Box::new(ProcessStep {
                 name: s.name.clone(),
                 version: s.version.clone(),
                 deps: s.deps.clone(),
-                kind: k.to_string(),
+                command,
+                code: s.code.iter().map(|c| base.join(c)).collect(),
                 params: s.params.clone(),
-            }),
-            k => return Err(format!("step {}: unknown type `{k}`", s.name)),
-        };
-    }
-    Ok(p)
+                cwd: base.to_path_buf(),
+                as_of: as_of.map(str::to_string),
+                timeout: std::time::Duration::from_secs(s.timeout_secs.unwrap_or(300)),
+                env: s.env.clone(),
+                pass_env: s.pass_env.clone(),
+                limits: Limits {
+                    memory_mb: s.memory_mb,
+                    cpu_secs: s.cpu_secs.or(Some(s.timeout_secs.unwrap_or(300))),
+                    file_size_mb: s.file_size_mb,
+                    max_output_mb: s.max_output_mb.unwrap_or(256),
+                },
+            })
+        }
+        k if BuiltinStep::KINDS.contains(&k) => Box::new(BuiltinStep {
+            name: s.name.clone(),
+            version: s.version.clone(),
+            deps: s.deps.clone(),
+            kind: k.to_string(),
+            params: s.params.clone(),
+        }),
+        "sensitivity" => {
+            let t = need(&s.target, "target")?;
+            let target = steps
+                .iter()
+                .find(|x| x.name == t)
+                .ok_or(format!("step {}: unknown target `{t}`", s.name))?;
+            if target.kind == "sensitivity" {
+                return Err(format!("step {}: the target cannot be a sensitivity step", s.name));
+            }
+            if s.scenarios.is_empty() || s.outputs.is_empty() {
+                return Err(format!(
+                    "step {}: give `outputs` and at least one `[[step.scenario]]`",
+                    s.name
+                ));
+            }
+            let mut deps = target.deps.clone();
+            deps.push(target.name.clone());
+            Box::new(SensitivityStep {
+                name: s.name.clone(),
+                version: s.version.clone(),
+                deps,
+                target_hash: build_step(&[], target, base, as_of)?.code_hash(),
+                target: target.clone(),
+                base: base.to_path_buf(),
+                as_of: as_of.map(str::to_string),
+                scenarios: s.scenarios.clone(),
+                outputs: s.outputs.clone(),
+            })
+        }
+        k => return Err(format!("step {}: unknown type `{k}`", s.name)),
+    })
 }
 
 #[cfg(test)]

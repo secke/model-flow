@@ -1,5 +1,5 @@
 {
- "run_hash": "dce15d9c7f35ec406c9a947a47ecaa2a8d3be3ee8d6edeee59932cc751e63779",
+ "run_hash": "1ba36cd644759736f92a0ce8d6921d90af80d82a679d0e2d650fbf68c8c3f693",
  "status": {
   "loans": null,
   "outcomes": null,
@@ -14,7 +14,8 @@
   "pd_ranking": "warn",
   "lgd_by_grade": "fail",
   "lgd_by_default_year": "fail",
-  "lgd_completed_workouts": "fail"
+  "lgd_completed_workouts": "fail",
+  "ecl_sensitivity": "pass"
  },
  "curves": {
   "1": [
@@ -680,5 +681,302 @@
    }
   ],
   "status": "fail"
+ },
+ "sensitivity": {
+  "base": {
+   "total.ecl": 151011884.1665532,
+   "total.ecl_lifetime": 358174672.5354236,
+   "total.realized_to_ecl_lifetime": 1.1318212992593997
+  },
+  "scenarios": [
+   {
+    "expect": {
+     "total.ecl*": "increase",
+     "total.realized_to_ecl_lifetime": "decrease"
+    },
+    "name": "PD curves",
+    "operation": "multiply",
+    "points": [
+     {
+      "outputs": {
+       "total.ecl": {
+        "change": -30236762.56952873,
+        "elasticity": 1.001138510932695,
+        "relative_change": -0.20022770218653893,
+        "value": 120775121.59702447
+       },
+       "total.ecl_lifetime": {
+        "change": -71850470.82454234,
+        "elasticity": 1.0030088157257453,
+        "relative_change": -0.200601763145149,
+        "value": 286324201.71088123
+       },
+       "total.realized_to_ecl_lifetime": {
+        "change": 0.28402032645200115,
+        "elasticity": -1.2547048135507266,
+        "relative_change": 0.25094096271014527,
+        "value": 1.4158416257114008
+       }
+      },
+      "shock": 0.8
+     },
+     {
+      "outputs": {
+       "total.ecl": {
+        "change": -15120574.751538813,
+        "elasticity": 1.0012837622012658,
+        "relative_change": -0.10012837622012656,
+        "value": 135891309.4150144
+       },
+       "total.ecl_lifetime": {
+        "change": -35939861.9451077,
+        "elasticity": 1.003417178850167,
+        "relative_change": -0.10034171788501667,
+        "value": 322234810.5903159
+       },
+       "total.realized_to_ecl_lifetime": {
+        "change": 0.1262355894057392,
+        "elasticity": -1.1153314528392486,
+        "relative_change": 0.11153314528392484,
+        "value": 1.2580568886651389
+       }
+      },
+      "shock": 0.9
+     },
+     {
+      "outputs": {
+       "total.ecl": {
+        "change": 15124992.474341452,
+        "elasticity": 1.0015763036013685,
+        "relative_change": 0.10015763036013695,
+        "value": 166136876.64089465
+       },
+       "total.ecl_lifetime": {
+        "change": 35970000.81859344,
+        "elasticity": 1.0042586362673638,
+        "relative_change": 0.10042586362673647,
+        "value": 394144673.354017
+       },
+       "total.realized_to_ecl_lifetime": {
+        "change": -0.10329103959320873,
+        "elasticity": -0.9126090811402515,
+        "relative_change": -0.09126090811402524,
+        "value": 1.028530259666191
+       }
+      },
+      "shock": 1.1
+     },
+     {
+      "outputs": {
+       "total.ecl": {
+        "change": 30254433.93488133,
+        "elasticity": 1.0017236094317346,
+        "relative_change": 0.20034472188634686,
+        "value": 181266318.10143453
+       },
+       "total.ecl_lifetime": {
+        "change": 71971076.75007164,
+        "elasticity": 1.0046924345684116,
+        "relative_change": 0.20093848691368227,
+        "value": 430145749.2854952
+       },
+       "total.realized_to_ecl_lifetime": {
+        "change": -0.18937394530033747,
+        "elasticity": -0.8365894219531528,
+        "relative_change": -0.16731788439063053,
+        "value": 0.9424473539590622
+       }
+      },
+      "shock": 1.2
+     }
+    ],
+    "shocked": "input pd_curves at /curves",
+    "status": "pass",
+    "violations": []
+   },
+   {
+    "expect": {
+     "total.ecl*": "increase",
+     "total.realized_to_ecl_lifetime": "decrease"
+    },
+    "name": "LGD",
+    "operation": "multiply",
+    "points": [
+     {
+      "outputs": {
+       "total.ecl": {
+        "change": -15101188.416686893,
+        "elasticity": 1.000000000002091,
+        "relative_change": -0.10000000000020907,
+        "value": 135910695.7498663
+       },
+       "total.ecl_lifetime": {
+        "change": -35817467.253552675,
+        "elasticity": 1.0000000000002882,
+        "relative_change": -0.1000000000000288,
+        "value": 322357205.2818709
+       },
+       "total.realized_to_ecl_lifetime": {
+        "change": 0.1257579221399736,
+        "elasticity": -1.1111111111114675,
+        "relative_change": 0.11111111111114673,
+        "value": 1.2575792213993733
+       }
+      },
+      "shock": 0.9
+     },
+     {
+      "outputs": {
+       "total.ecl": {
+        "change": 15101188.41659224,
+        "elasticity": 0.999999999995822,
+        "relative_change": 0.09999999999958228,
+        "value": 166113072.58314544
+       },
+       "total.ecl_lifetime": {
+        "change": 35817467.25357419,
+        "elasticity": 1.000000000000888,
+        "relative_change": 0.10000000000008888,
+        "value": 393992139.78899777
+       },
+       "total.realized_to_ecl_lifetime": {
+        "change": -0.10289284538730126,
+        "elasticity": -0.9090909090916426,
+        "relative_change": -0.09090909090916434,
+        "value": 1.0289284538720984
+       }
+      },
+      "shock": 1.1
+     }
+    ],
+    "shocked": "input book, column lgd",
+    "status": "pass",
+    "violations": []
+   },
+   {
+    "expect": null,
+    "name": "loan rate",
+    "operation": "add",
+    "points": [
+     {
+      "outputs": {
+       "total.ecl": {
+        "change": 1705691.311084181,
+        "relative_change": 0.011295079989883109,
+        "value": 152717575.47763738
+       },
+       "total.ecl_lifetime": {
+        "change": 8840990.88487637,
+        "relative_change": 0.0246834619050346,
+        "value": 367015663.42029995
+       },
+       "total.realized_to_ecl_lifetime": {
+        "change": -0.02726429083927706,
+        "relative_change": -0.0240888653156795,
+        "value": 1.1045570084201226
+       }
+      },
+      "shock": -0.04
+     },
+     {
+      "outputs": {
+       "total.ecl": {
+        "change": 846761.5541071594,
+        "relative_change": 0.005607251103318821,
+        "value": 151858645.72066036
+       },
+       "total.ecl_lifetime": {
+        "change": 4369357.548181474,
+        "relative_change": 0.012198957333448371,
+        "value": 362544030.08360505
+       },
+       "total.realized_to_ecl_lifetime": {
+        "change": -0.013640638175647757,
+        "relative_change": -0.012051936277019547,
+        "value": 1.118180661083752
+       }
+      },
+      "shock": -0.02
+     },
+     {
+      "outputs": {
+       "total.ecl": {
+        "change": -834790.9906932116,
+        "relative_change": -0.0055279820876382715,
+        "value": 150177093.17586
+       },
+       "total.ecl_lifetime": {
+        "change": -4270054.082674503,
+        "relative_change": -0.011921708624587891,
+        "value": 353904618.4527491
+       },
+       "total.realized_to_ecl_lifetime": {
+        "change": 0.013656047160079288,
+        "relative_change": 0.01206555060327548,
+        "value": 1.145477346419479
+       }
+      },
+      "shock": 0.02
+     },
+     {
+      "outputs": {
+       "total.ecl": {
+        "change": -1657807.1725578904,
+        "relative_change": -0.010977991445557164,
+        "value": 149354076.9939953
+       },
+       "total.ecl_lifetime": {
+        "change": -8443679.29110074,
+        "relative_change": -0.023574194209015877,
+        "value": 349730993.24432284
+       },
+       "total.realized_to_ecl_lifetime": {
+        "change": 0.02732596266956233,
+        "relative_change": 0.024143354332917137,
+        "value": 1.159147261928962
+       }
+      },
+      "shock": 0.04
+     }
+    ],
+    "shocked": "input book, column eir",
+    "status": "pass",
+    "violations": []
+   },
+   {
+    "expect": {
+     "total.ecl": "increase"
+    },
+    "name": "stage 2",
+    "operation": "set",
+    "points": [
+     {
+      "outputs": {
+       "total.ecl": {
+        "change": 207162788.36887038,
+        "relative_change": 1.3718310284797688,
+        "value": 358174672.5354236
+       },
+       "total.ecl_lifetime": {
+        "change": 0.0,
+        "relative_change": 0.0,
+        "value": 358174672.5354236
+       },
+       "total.realized_to_ecl_lifetime": {
+        "change": 0.0,
+        "relative_change": 0.0,
+        "value": 1.1318212992593997
+       }
+      },
+      "shock": 2.0
+     }
+    ],
+    "shocked": "input book, column stage",
+    "status": "pass",
+    "violations": []
+   }
+  ],
+  "status": "pass",
+  "target": "ecl"
  }
 }

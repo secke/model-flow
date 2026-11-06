@@ -1,4 +1,4 @@
-# Lending Club IFRS 9 validation: run `dce15d9c7f35ec40`
+# Lending Club IFRS 9 validation: run `1ba36cd644759736`
 
 Test book: 546,018 loans of the 2013-2015 vintages, 6,942.4 million USD lent.
 
@@ -97,3 +97,20 @@ Concordance of the estimated and realized LGDs: 0.518.
 | **all** | 71,398 | 90.4% | 89.1% | -30.5 | 1.0e+00 | pass |
 
 Concordance of the estimated and realized LGDs: 0.519. Defaults left out, workout under 12 months at the data date: 5,420.
+
+## Sensitivity of the recomputed ECL (each quantity shocked alone, the model rerun)
+
+| Scenario | Shock | 12-month ECL | Change | Lifetime ECL | Change | Realized / lifetime ECL | Status |
+|---|---|---:|---:|---:|---:|---:|---|
+| base | | 151.0 | | 358.2 | | 1.132 | |
+| PD curves | × 0.8 | 120.8 | -20.0% | 286.3 | -20.1% | 1.416 | pass |
+| PD curves | × 0.9 | 135.9 | -10.0% | 322.2 | -10.0% | 1.258 | pass |
+| PD curves | × 1.1 | 166.1 | 10.0% | 394.1 | 10.0% | 1.029 | pass |
+| PD curves | × 1.2 | 181.3 | 20.0% | 430.1 | 20.1% | 0.942 | pass |
+| LGD | × 0.9 | 135.9 | -10.0% | 322.4 | -10.0% | 1.258 | pass |
+| LGD | × 1.1 | 166.1 | 10.0% | 394.0 | 10.0% | 1.029 | pass |
+| loan rate | -0.04 | 152.7 | 1.1% | 367.0 | 2.5% | 1.105 | pass |
+| loan rate | -0.02 | 151.9 | 0.6% | 362.5 | 1.2% | 1.118 | pass |
+| loan rate | +0.02 | 150.2 | -0.6% | 353.9 | -1.2% | 1.145 | pass |
+| loan rate | +0.04 | 149.4 | -1.1% | 349.7 | -2.4% | 1.159 | pass |
+| stage 2 | = 2 | 358.2 | 137.2% | 358.2 | 0.0% | 1.132 | pass |

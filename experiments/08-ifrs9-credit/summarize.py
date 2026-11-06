@@ -81,6 +81,21 @@ for key, title, label in [("lgd_by_grade", "grade", lambda s: G[s - 1]), ("lgd_b
               + (f" Defaults left out, workout under 12 months at the data date: {b['excluded_incomplete']:,}." if b.get("excluded_incomplete") else "")]
     summary[key] = b
 
+sens = out["ecl_sensitivity"]
+lines += ["", "## Sensitivity of the recomputed ECL (each quantity shocked alone, the model rerun)", "",
+          "| Scenario | Shock | 12-month ECL | Change | Lifetime ECL | Change | Realized / lifetime ECL | Status |",
+          "|---|---|---:|---:|---:|---:|---:|---|"]
+b0 = sens["base"]
+lines.append(f"| base | | {m(b0['total.ecl'])} | | {m(b0['total.ecl_lifetime'])} | | {b0['total.realized_to_ecl_lifetime']:.3f} | |")
+for sc in sens["scenarios"]:
+    for p in sc["points"]:
+        o = p["outputs"]
+        shock = {"multiply": f"× {p['shock']:g}", "add": f"{p['shock']:+g}", "set": f"= {p['shock']:g}"}[sc["operation"]]
+        lines.append(f"| {sc['name']} | {shock} | {m(o['total.ecl']['value'])} | {pct(o['total.ecl']['relative_change'], 1)} | "
+                     f"{m(o['total.ecl_lifetime']['value'])} | {pct(o['total.ecl_lifetime']['relative_change'], 1)} | "
+                     f"{o['total.realized_to_ecl_lifetime']['value']:.3f} | {sc['status']} |")
+summary["sensitivity"] = sens
+
 (HERE / "results").mkdir(exist_ok=True)
 (HERE / "results/summary.md").write_text("\n".join(lines) + "\n")
 (HERE / "results/summary.json").write_text(json.dumps(summary, indent=1) + "\n")

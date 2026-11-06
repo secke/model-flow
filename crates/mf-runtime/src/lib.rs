@@ -6,6 +6,7 @@ pub mod diff;
 pub mod monitor;
 pub mod pg;
 pub mod report;
+pub mod sensitivity;
 pub mod spec;
 pub mod steps;
 pub mod store;

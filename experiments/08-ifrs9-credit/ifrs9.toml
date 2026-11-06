@@ -56,6 +56,42 @@ version = "1.0.0"
 deps = ["book", "pd_curves"]
 params = { pd_curves = "pd_curves", repayment = "annuity", periods_per_year = 12, segments = ["grade", "vintage"] }
 
+# Sensitivity of the recomputed ECL: PD curves, LGD, loan rate (amortization and discounting at
+# once), and the whole book moved to stage 2.
+[[step]]
+name = "ecl_sensitivity"
+kind = "sensitivity"
+version = "1.0.0"
+target = "ecl"
+outputs = ["total.ecl", "total.ecl_lifetime", "total.realized_to_ecl_lifetime"]
+
+[[step.scenario]]
+name = "PD curves"
+input = "pd_curves"
+pointer = "/curves"
+multiply = [0.8, 0.9, 1.1, 1.2]
+expect = { "total.ecl*" = "increase", "total.realized_to_ecl_lifetime" = "decrease" }
+
+[[step.scenario]]
+name = "LGD"
+input = "book"
+column = "lgd"
+multiply = [0.9, 1.1]
+expect = { "total.ecl*" = "increase", "total.realized_to_ecl_lifetime" = "decrease" }
+
+[[step.scenario]]
+name = "loan rate"
+input = "book"
+column = "eir"
+add = [-0.04, -0.02, 0.02, 0.04]
+
+[[step.scenario]]
+name = "stage 2"
+input = "book"
+column = "stage"
+set = 2
+expect = { "total.ecl" = "increase" }
+
 # The model's figure, with its own conventions (no amortization, no discounting): the recomputation
 # must give it back.
 [[step]]

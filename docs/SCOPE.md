@@ -12,7 +12,7 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 
 > Positioning and roadmap: [VISION.md](VISION.md).
 
-## Status (v0.23)
+## Status (v0.24)
 - `mf-core`: DAG, fingerprints of inputs, outputs and code, manifest, replay verification.
 - [`quantparity`](https://github.com/secke/quantparity) (external dependency, cross-checked against QuantLib): historical VaR; Kupiec, Christoffersen, Basel traffic light; PSI; VaR / ES forecasts (EWMA, GARCH or GJR-GARCH volatility with normal or Student-t innovations, filtered historical simulation; GARCH reconciled with the Python `arch` package, warning on fits at the stationarity bound); Acerbi-Székely expected shortfall backtests, with Z2 p-values simulated from the forecast distribution (by default for `var_model` forecasts); AUC, Gini, KS; per-grade binomial or Jeffreys calibration and Hosmer-Lemeshow; IFRS 9 ECL (PD curves, migration matrices, amortizing exposures, discounting at the effective interest rate), LGD and CCF backtests (incomplete workouts left out), staging check from the SICR criteria; reference pricers (BSM and Greeks, Black-76, American CRR, bonds, implied volatility), yield curves (deposit + swap bootstrap), interest rate swaps and zero-coupons with DV01, pricer benchmark with per-product tolerances.
 - `mf-runtime`: TOML pipelines, CSV steps (series or table), built-in steps, external processes with a timeout, SQLite storage, HTML validation report.
@@ -27,6 +27,7 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 - Content-addressed output storage with integrity checks; isolation of external processes; RFC 4180 CSV and Parquet.
 - API: run queue, rate limiting, native TLS, OIDC single sign-on (groups to roles, segregation of duties).
 - Portfolio risk: historical VaR/ES by full revaluation, sensitivities, stress tests with limits, P&L attribution (FRTB).
+- Sensitivity analysis of any step (`sensitivity`): a shocked input or parameter, the model rerun in parallel, expected directions (monotonicity) and bounds on the change.
 - Model inventory (statuses, risk tiers, reviews), scheduled runs and webhook alerts.
 - Validation findings: severity, remediation owner and deadline, remediation evidenced by a reproducible run, closure review by a validator, escalation of overdue findings, approval blocked by critical and high findings, governance report (JSON, Markdown).
 - Validator web UI (SSO PKCE, triggering, report, replay, decisions, audit), tested end to end.
@@ -47,7 +48,7 @@ Decision 1 settled: existing models are integrated as **external processes** (JS
 | Week | Deliverable |
 |---|---|
 | 1-2 | ~~External steps, CSV/Parquet, SQLite and PostgreSQL, timeout, isolation, content-addressed storage~~ (done) |
-| 3-4 | ~~Christoffersen, traffic light, PSI, Gini/KS, PD calibration~~ (done); ~~challenger models, LGD / CCF backtests, IFRS 9 ECL and staging~~ (done); remaining: sensitivity tests |
+| 3-4 | ~~Christoffersen, traffic light, PSI, Gini/KS, PD calibration~~ (done); ~~challenger models, LGD / CCF backtests, IFRS 9 ECL and staging, sensitivity analysis~~ (done) |
 | 5 | ~~Reference pricers, QuantLib validation, curves, swaps, OIS multi-curve, market conventions~~ (done); remaining: historical fixings, swaptions, caps/floors, FX |
 | 6 | ~~HTML validation report~~ (done); remaining: PDF export, model inventory, signed audit trail |
 | 7 | ~~REST API, roles, decisions, audit, queue, rate limiting, TLS, OIDC SSO, web UI, inventory, scheduling, alerts~~ (done) |

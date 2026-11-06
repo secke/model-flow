@@ -130,7 +130,7 @@ fn param_str<'a>(p: &'a Value, k: &str, default: &'a str) -> &'a str {
 /// changes their code fingerprint, which replay reports.
 pub const ENGINE: &str = concat!("mf-runtime ", env!("CARGO_PKG_VERSION"));
 
-fn engine_hash(kind: &str) -> Option<String> {
+pub(crate) fn engine_hash(kind: &str) -> Option<String> {
     Some(hash_bytes(format!("{ENGINE} {kind}").as_bytes()))
 }
 
