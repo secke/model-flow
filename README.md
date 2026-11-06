@@ -211,7 +211,7 @@ params = { returns = "returns", forecasts = "ewma_model", alpha = 0.99 }
 | `kupiec_backtest` | rolling backtest of historical VaR | `alpha`, `window`, `dates` (optional) |
 | `backtest_forecasts` | backtest of a model's VaR forecasts | `returns`, `forecasts`, `alpha`, `dates` (optional), `from` (first return evaluated) |
 | `var_model` | one-day VaR and ES forecasts: EWMA, GARCH(1,1) or GJR-GARCH(1,1) volatility with normal, Student-t (unit variance) or filtered historical simulation innovations; GARCH filters are fitted by quasi-maximum likelihood on the warm-up returns and refitted every `refit` days, the fits are in the output; a GARCH model warns when a fit reaches the stationarity bound (persistence ≥ `max_persistence`: no long-run variance) | `volatility` (`ewma`, `garch`, `gjr`), `max_persistence` (0.999), `dates`, `distribution` (`normal`, `t`, `fhs`), `lambda` (0.94), `warmup` (30 for EWMA, 500 for GARCH), `refit` (250), `fit_window` (all past returns), `alpha` (0.99), `es_alpha` (0.975), `nu`, `window`, `min_residuals` (250) |
-| `es_backtest` | expected shortfall backtest (Acerbi-Székely Z1, Z2), on the whole sample and by 250-day window; zones from the fixed thresholds (-0.70, -1.8), or, with `simulations`, p-values of Z2 simulated from the forecast distribution of a `var_model` step (the status then follows the simulated zone: green p ≥ 5%, yellow p ≥ 0.01%) | `returns`, `forecasts` (`es`, `es_var`), `alpha` (default: the forecasts' ES level), `dates`, `from`, `simulations` (0: off; 100,000 for a reliable red zone), `seed` (1) |
+| `es_backtest` | expected shortfall backtest (Acerbi-Székely Z1, Z2), on the whole sample and by 250-day window. Forecasts of a `var_model` step get p-values of Z2 simulated from their forecast distribution (green p ≥ 5%, yellow p ≥ 0.01%), by default 10,000 samples, 100,000 when p is near a zone threshold (below 0.1%, or 4% to 6%). Otherwise the windows use the fixed 250-day thresholds (-0.70, -1.8), and a longer sample takes the zone of its latest window; `zone_basis` says which | `returns`, `forecasts` (`es`, `es_var`), `alpha` (default: the forecasts' ES level), `dates`, `from`, `simulations` (automatic; 0: off; n: exactly n samples), `seed` (1) |
 | `psi` | Population Stability Index | `baseline`, `current`, `column`, `bins` |
 | `pd_discrimination` | AUC, Gini, KS | `score`, `default`, `min_gini_pass`, `min_gini_warn` |
 | `pd_calibration` | per-grade binomial test, Hosmer-Lemeshow | `grade`, `pd`, `default` |
@@ -487,8 +487,8 @@ The schema is created at startup under an advisory lock, so several instances ca
 ## Deployment
 
 ```bash
-docker build -t modelflow:0.19.0 .
-docker run --rm modelflow:0.19.0 new-token          # fill in deploy/server.docker.toml
+docker build -t modelflow:0.20.0 .
+docker run --rm modelflow:0.20.0 new-token          # fill in deploy/server.docker.toml
 docker compose up --build                          # http://127.0.0.1:8080
 kubectl apply -k deploy/k8s                        # after filling in deploy/k8s/secret.yaml
 ```

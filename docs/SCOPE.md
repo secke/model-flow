@@ -12,9 +12,9 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 
 > Positioning and roadmap: [VISION.md](VISION.md).
 
-## Status (v0.19)
+## Status (v0.20)
 - `mf-core`: DAG, fingerprints of inputs, outputs and code, manifest, replay verification.
-- [`quantparity`](https://github.com/secke/quantparity) (external dependency, cross-checked against QuantLib): historical VaR; Kupiec, Christoffersen, Basel traffic light; PSI; VaR / ES forecasts (EWMA, GARCH or GJR-GARCH volatility with normal or Student-t innovations, filtered historical simulation; GARCH reconciled with the Python `arch` package, warning on fits at the stationarity bound); Acerbi-Székely expected shortfall backtests, with Z2 p-values simulated from the forecast distribution; AUC, Gini, KS; per-grade binomial calibration and Hosmer-Lemeshow; reference pricers (BSM and Greeks, Black-76, American CRR, bonds, implied volatility), yield curves (deposit + swap bootstrap), interest rate swaps and zero-coupons with DV01, pricer benchmark with per-product tolerances.
+- [`quantparity`](https://github.com/secke/quantparity) (external dependency, cross-checked against QuantLib): historical VaR; Kupiec, Christoffersen, Basel traffic light; PSI; VaR / ES forecasts (EWMA, GARCH or GJR-GARCH volatility with normal or Student-t innovations, filtered historical simulation; GARCH reconciled with the Python `arch` package, warning on fits at the stationarity bound); Acerbi-Székely expected shortfall backtests, with Z2 p-values simulated from the forecast distribution (by default for `var_model` forecasts); AUC, Gini, KS; per-grade binomial calibration and Hosmer-Lemeshow; reference pricers (BSM and Greeks, Black-76, American CRR, bonds, implied volatility), yield curves (deposit + swap bootstrap), interest rate swaps and zero-coupons with DV01, pricer benchmark with per-product tolerances.
 - `mf-runtime`: TOML pipelines, CSV steps (series or table), built-in steps, external processes with a timeout, SQLite storage, HTML validation report.
 - `mf-server`: REST API, hashed tokens, roles (model owner, validator, auditor, admin), validation decisions with segregation of duties, append-only audit log.
 - `mf-cli`: `mf run | verify | runs | show | report | diff | series | alerts`.

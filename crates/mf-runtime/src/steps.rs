@@ -561,36 +561,55 @@ impl Step for BuiltinStep {
                 let realized = &r[start..start + es.len()];
                 let mut out = self.json(es_backtest(realized, &es_var, &es, conf), "invalid forecasts")?;
                 // Z2 p-values by simulation from the forecast distribution of a `var_model` step.
-                let simulations = param_f64(&self.params, "simulations", 0.0) as usize;
+                // `simulations` absent: automatic for `var_model` forecasts (10,000 samples, 100,000
+                // when p is close to a zone threshold: below 0.1%, or between 4% and 6%); 0: off; n:
+                // exactly n samples.
+                let requested = match self.params.get("simulations") {
+                    None => None,
+                    Some(v) => Some(
+                        v.as_u64()
+                            .ok_or_else(|| err(&self.name, "`simulations`: a number of samples"))?
+                            as usize,
+                    ),
+                };
                 let seed = param_f64(&self.params, "seed", 1.0) as u64;
-                let null = if simulations > 0 {
-                    let model: VarForecasts = serde_json::from_value(f.clone()).map_err(|_| {
-                        err(
-                            &self.name,
-                            "`simulations` needs the forecasts of a `var_model` step: their model is simulated",
-                        )
-                    })?;
-                    if model.es_confidence != conf {
+                let model = serde_json::from_value::<VarForecasts>(f.clone()).ok();
+                let null = match (requested, model) {
+                    (Some(0), _) | (None, None) => None,
+                    (Some(_), None) => {
                         return Err(err(
                             &self.name,
-                            "`simulations`: `alpha` must be the forecasts' ES level",
-                        ));
+                            "`simulations` needs the forecasts of a `var_model` step: their model is simulated",
+                        ))
                     }
-                    Some(Z2Null::new(&r, &model).map_err(|e| err(&self.name, e))?)
-                } else {
-                    None
+                    (_, Some(m)) if m.es_confidence != conf => {
+                        if requested.is_some() {
+                            return Err(err(
+                                &self.name,
+                                "`simulations`: `alpha` must be the forecasts' ES level",
+                            ));
+                        }
+                        None
+                    }
+                    (_, Some(m)) => Some(Z2Null::new(&r, &m).map_err(|e| err(&self.name, e))?),
                 };
-                let simulate = |z2: f64, a: usize, b: usize| {
-                    null.as_ref()
-                        .map(|n| n.test(z2, start + a, start + b, simulations, seed))
-                        .transpose()
-                        .map_err(|e| err(&self.name, e))
+                let simulate = |z2: f64, a: usize, b: usize| -> Result<Option<Value>, Error> {
+                    let Some(null) = &null else { return Ok(None) };
+                    let run = |k: usize| {
+                        null.test(z2, start + a, start + b, k, seed)
+                            .map_err(|e| err(&self.name, e))
+                    };
+                    let s = match requested {
+                        Some(k) => run(k)?,
+                        None => match run(10_000)? {
+                            s if s.p_value < 1e-3 || (0.04..=0.06).contains(&s.p_value) => run(100_000)?,
+                            s => s,
+                        },
+                    };
+                    Ok(Some(serde_json::to_value(s).unwrap()))
                 };
                 let n = realized.len();
-                if let Some(s) = simulate(out["z2"].as_f64().unwrap_or(f64::NAN), 0, n)? {
-                    out["status"] = json!(s.status);
-                    out["simulated"] = serde_json::to_value(s).unwrap();
-                }
+                let simulated = simulate(out["z2"].as_f64().unwrap_or(f64::NAN), 0, n)?;
                 let dates = self.dates(inputs)?;
                 let date = |i: usize| dates.as_ref().and_then(|d| d.get(start + i)).map(|d| date_label(*d));
                 let windows = (0..n / BASEL_WINDOW)
@@ -602,9 +621,9 @@ impl Step for BuiltinStep {
                         let mut w = json!({"exceptions": t.exceptions, "z2": t.z2, "z1": t.z1, "zone": t.zone,
                                            "status": t.status});
                         if let Some(s) = simulate(t.z2, a, b)? {
-                            w["p_value"] = json!(s.p_value);
-                            w["simulated_zone"] = json!(s.zone);
-                            w["status"] = json!(s.status);
+                            w["p_value"] = s["p_value"].clone();
+                            w["simulated_zone"] = s["zone"].clone();
+                            w["status"] = s["status"].clone();
                         }
                         match (date(a), date(b - 1)) {
                             (Some(x), Some(y)) => {
@@ -619,6 +638,23 @@ impl Step for BuiltinStep {
                         Ok(w)
                     })
                     .collect::<Result<Vec<Value>, Error>>()?;
+                // Whole-sample verdict: the simulated one; without simulation, the fixed thresholds
+                // hold for 250 days only, so a longer sample takes the zone of its latest window.
+                let basis = match (simulated, windows.last()) {
+                    (Some(s), _) => {
+                        out["zone"] = s["zone"].clone();
+                        out["status"] = s["status"].clone();
+                        out["simulated"] = s;
+                        "simulation"
+                    }
+                    (None, Some(last)) if n > BASEL_WINDOW => {
+                        out["zone"] = last["zone"].clone();
+                        out["status"] = last["status"].clone();
+                        "latest 250-day window"
+                    }
+                    _ => "fixed thresholds",
+                };
+                out["zone_basis"] = json!(basis);
                 if let Some(last) = windows.last() {
                     out["latest_window"] = last.clone();
                 }
@@ -1263,7 +1299,7 @@ mod tests {
             i.insert("f".to_string(), f);
             let var = builtin("backtest_forecasts", &["r", "f"], json!({})).run(&i).unwrap();
             assert!(var["traffic_light"]["zone"].is_string());
-            let es = builtin("es_backtest", &["r", "f", "d"], json!({"dates": "d"}))
+            let es = builtin("es_backtest", &["r", "f", "d"], json!({"dates": "d", "simulations": 0}))
                 .run(&i)
                 .unwrap();
             assert_eq!(es["confidence"], 0.975);
@@ -1326,7 +1362,7 @@ mod tests {
             .run(&i)
             .unwrap();
         assert_eq!(late["observations"], 620);
-        let es = builtin("es_backtest", &["r", "f"], json!({"from": 280}))
+        let es = builtin("es_backtest", &["r", "f"], json!({"from": 280, "simulations": 0}))
             .run(&i)
             .unwrap();
         assert_eq!(es["observations"], 620);
@@ -1368,6 +1404,28 @@ mod tests {
                     .is_err()
             );
         }
+        // By default, `var_model` forecasts are simulated (10,000 samples, 100,000 near the red zone).
+        let f = builtin("var_model", &["r"], json!({})).run(&i).unwrap();
+        i.insert("f".to_string(), f);
+        let auto = builtin("es_backtest", &["r", "f"], json!({})).run(&i).unwrap();
+        let k = auto["simulated"]["simulations"].as_u64().unwrap();
+        let p = auto["simulated"]["p_value"].as_f64().unwrap();
+        let near = p < 1e-3 || (0.04..=0.06).contains(&p);
+        assert!((k == 10_000 && !near) || k == 100_000, "{k} {p}");
+        assert_eq!(
+            (auto["zone_basis"].as_str(), &auto["zone"]),
+            (Some("simulation"), &auto["simulated"]["zone"])
+        );
+        // Off: the whole sample (more than 250 days) takes the zone of its latest window.
+        let off = builtin("es_backtest", &["r", "f"], json!({"simulations": 0}))
+            .run(&i)
+            .unwrap();
+        assert!(off.get("simulated").is_none());
+        assert_eq!(off["zone_basis"], "latest 250-day window");
+        assert_eq!(
+            (&off["zone"], &off["status"]),
+            (&off["latest_window"]["zone"], &off["latest_window"]["status"])
+        );
         // Forecasts without an ES (a VaR-only external model) cannot be ES-backtested.
         i.insert("f".to_string(), json!({"start": 1, "var": [0.02]}));
         assert!(builtin("es_backtest", &["r", "f"], json!({})).run(&i).is_err());
@@ -1376,7 +1434,9 @@ mod tests {
             "f".to_string(),
             json!({"start": 800, "es": vec![0.03; 100], "es_var": vec![0.02; 100]}),
         );
-        assert!(builtin("es_backtest", &["r", "f"], json!({})).run(&i).is_ok());
+        let ext = builtin("es_backtest", &["r", "f"], json!({})).run(&i).unwrap();
+        assert_eq!(ext["zone_basis"], "fixed thresholds");
+        assert!(ext.get("simulated").is_none());
         let e = builtin("es_backtest", &["r", "f"], json!({"simulations": 100}))
             .run(&i)
             .unwrap_err();
