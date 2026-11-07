@@ -5,6 +5,7 @@ pub mod dated;
 pub mod diff;
 pub mod monitor;
 pub mod pg;
+pub mod quality;
 pub mod report;
 pub mod sensitivity;
 pub mod spec;

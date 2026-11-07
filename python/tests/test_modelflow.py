@@ -132,6 +132,37 @@ def test_pandas_and_numpy_outputs(tmp_path):
     assert out["total"] == -0.5
 
 
+def test_data_quality_of_a_frame(tmp_path):
+    p = mf.Pipeline("quality", workdir=tmp_path)
+
+    @p.step(deps=[])
+    def book():
+        # NaN cannot be recorded: a missing value stays None in an object column.
+        notional = pd.Series([1e6, None, -5.0], dtype=object)
+        return pd.DataFrame({"id": ["T1", "T2", "T2"], "notional": notional, "ccy": ["EUR", "USD", "XXX"]})
+
+    p.add(
+        "checks",
+        "data_quality",
+        deps=["book"],
+        params={"min_rows": 2},
+        rule=[
+            {"column": "id", "unique": True},
+            {"column": "notional", "required": True, "min": 0},
+            {"column": "ccy", "one_of": ["EUR", "USD"], "severity": "warn"},
+        ],
+    )
+    out = p.run().output("checks")
+    checks = {r["rule"]: {c["check"]: c for c in r["checks"]} for r in out["rules"]}
+    assert checks["id"]["unique"]["rows"] == [3]
+    assert checks["notional"]["missing"]["rows"] == [2] and checks["notional"]["min"]["rows"] == [3]
+    assert [r["status"] for r in out["rules"]] == ["fail", "fail", "warn"]
+    assert out["source"] == {"step": "book", "rows": 3}
+    assert "data_quality" in mf.builtin_kinds()
+    with pytest.raises(ValueError, match="no check"):
+        p.add("empty", "data_quality", deps=["book"], rule=[{"column": "id"}])
+
+
 def test_errors(tmp_path):
     p = mf.Pipeline("errors", workdir=tmp_path)
 

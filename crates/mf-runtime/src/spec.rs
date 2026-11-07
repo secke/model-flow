@@ -1,3 +1,4 @@
+use crate::quality::DataQualityStep;
 use crate::sensitivity::SensitivityStep;
 use crate::steps::{BuiltinStep, JsonStep, Limits, ProcessStep, TableFormat, TableStep};
 use mf_core::{Manifest, Mismatch, Pipeline, Step};
@@ -65,6 +66,9 @@ pub struct StepSpec {
     pub outputs: Vec<String>,
     #[serde(default, rename = "scenario")]
     pub scenarios: Vec<crate::sensitivity::Scenario>,
+    // data_quality
+    #[serde(default, rename = "rule")]
+    pub rules: Vec<crate::quality::Rule>,
 }
 
 pub fn parse(text: &str) -> Result<PipelineSpec, String> {
@@ -303,6 +307,33 @@ pub(crate) fn build_step(
                 as_of: as_of.map(str::to_string),
                 scenarios: s.scenarios.clone(),
                 outputs: s.outputs.clone(),
+            })
+        }
+        "data_quality" => {
+            if s.rules.is_empty() {
+                return Err(format!("step {}: give at least one `[[step.rule]]`", s.name));
+            }
+            for r in &s.rules {
+                r.check().map_err(|e| format!("step {}: {e}", s.name))?;
+            }
+            if path.is_some() != s.deps.is_empty() || s.deps.len() > 1 {
+                return Err(format!(
+                    "step {}: give a `path` or one dependency to check, not both",
+                    s.name
+                ));
+            }
+            let d = s.delimiter.as_deref().unwrap_or(",");
+            if d.len() != 1 {
+                return Err(format!("step {}: `delimiter` must be an ASCII character", s.name));
+            }
+            Box::new(DataQualityStep {
+                name: s.name.clone(),
+                version: s.version.clone(),
+                deps: s.deps.clone(),
+                path: path.map(|p| base.join(p)),
+                delimiter: d.as_bytes()[0],
+                rules: s.rules.clone(),
+                params: s.params.clone(),
             })
         }
         k => return Err(format!("step {}: unknown type `{k}`", s.name)),

@@ -12,7 +12,7 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 
 > Positioning and roadmap: [VISION.md](VISION.md).
 
-## Status (v0.24)
+## Status (v0.25)
 - `mf-core`: DAG, fingerprints of inputs, outputs and code, manifest, replay verification.
 - [`quantparity`](https://github.com/secke/quantparity) (external dependency, cross-checked against QuantLib): historical VaR; Kupiec, Christoffersen, Basel traffic light; PSI; VaR / ES forecasts (EWMA, GARCH or GJR-GARCH volatility with normal or Student-t innovations, filtered historical simulation; GARCH reconciled with the Python `arch` package, warning on fits at the stationarity bound); Acerbi-Székely expected shortfall backtests, with Z2 p-values simulated from the forecast distribution (by default for `var_model` forecasts); AUC, Gini, KS; per-grade binomial or Jeffreys calibration and Hosmer-Lemeshow; IFRS 9 ECL (PD curves, migration matrices, amortizing exposures, discounting at the effective interest rate), LGD and CCF backtests (incomplete workouts left out), staging check from the SICR criteria; reference pricers (BSM and Greeks, Black-76, American CRR, bonds, implied volatility), yield curves (deposit + swap bootstrap), interest rate swaps and zero-coupons with DV01, pricer benchmark with per-product tolerances.
 - `mf-runtime`: TOML pipelines, CSV steps (series or table), built-in steps, external processes with a timeout, SQLite storage, HTML validation report.
@@ -28,12 +28,13 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 - API: run queue, rate limiting, native TLS, OIDC single sign-on (groups to roles, segregation of duties).
 - Portfolio risk: historical VaR/ES by full revaluation, sensitivities, stress tests with limits, P&L attribution (FRTB).
 - Sensitivity analysis of any step (`sensitivity`): a shocked input or parameter, the model rerun in parallel, expected directions (monotonicity) and bounds on the change.
+- Data quality of model inputs (`data_quality`): rules on the raw cells of a file or a step's table (completeness with sentinels, type and range, allowed values, uniqueness, consistency between columns with a tolerance, conditional rules), every violation counted with its first lines, column profiles, the SHA-256 of the file checked.
 - Model inventory (statuses, risk tiers, reviews), scheduled runs and webhook alerts.
 - Validation findings: severity, remediation owner and deadline, remediation evidenced by a reproducible run, closure review by a validator, escalation of overdue findings, approval blocked by critical and high findings, governance report (JSON, Markdown).
 - Validator web UI (SSO PKCE, triggering, report, replay, decisions, audit), tested end to end.
 - PostgreSQL storage for history and governance (audit log protected by a trigger), SQLite kept for local use.
 - Deployment: non-root Docker image, hardened docker-compose, Kubernetes manifests (Pod Security restricted, NetworkPolicy).
-- Eight experiments on real data (S&P 500 VaR backtest, ECB AAA curve, change impact with `mf diff`, monthly monitoring of a frozen VaR model, fat-tailed challengers with ES backtests, GARCH and GJR volatility filters, Z2 p-values by simulation, IFRS 9 validation of a consumer loan ECL model on 612,745 Lending Club loans).
+- Nine experiments on real data (S&P 500 VaR backtest, ECB AAA curve, change impact with `mf diff`, monthly monitoring of a frozen VaR model, fat-tailed challengers with ES backtests, GARCH and GJR volatility filters, Z2 p-values by simulation, IFRS 9 validation of a consumer loan ECL model on 612,745 Lending Club loans, data quality of the 2.26 million loans of the raw file).
 - Seven examples: equity desk (VaR), PD scorecard, validation of QuantLib on options and bonds, on a single curve and swaps, in multi-curve, multi-asset portfolio risk, and the equity desk written with the Python SDK.
 - GitHub CI: format, clippy, tests (including PostgreSQL), example runs and reports as artifacts, diff action, Python wheel and tests, Docker image, UI tests.
 

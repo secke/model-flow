@@ -1,7 +1,7 @@
 //! Self-contained HTML validation report (a single page, no external dependency).
 
 use mf_core::{Manifest, Mismatch};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::fmt::Write;
 
 /// Recorded validation decision (approval or rejection).
@@ -130,13 +130,62 @@ fn numeric_summary(a: &[Value]) -> String {
     )
 }
 
+/// Rules of a `data_quality` step, one row per check: the rule, the check, how many rows
+/// break it and the first of them.
+fn quality_rows(rules: &[Value]) -> Option<Value> {
+    let is_rule =
+        |r: &Value| r.get("rule").is_some() && (r.get("checks").is_some() || r.get("missing_columns").is_some());
+    if rules.is_empty() || !rules.iter().all(is_rule) {
+        return None;
+    }
+    let mut out = vec![];
+    for r in rules {
+        let rule = &r["rule"];
+        if let Some(gone) = r.get("missing_columns").and_then(Value::as_array) {
+            let names: Vec<&str> = gone.iter().filter_map(Value::as_str).collect();
+            out.push(json!({"rule": rule, "check": "columns present", "count": gone.len(),
+                            "rows (first)": format!("absent: {}", names.join(", ")), "status": r["status"]}));
+            continue;
+        }
+        for c in r["checks"].as_array().into_iter().flatten() {
+            let rows: Vec<String> = c["rows"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|x| x.to_string())
+                .collect();
+            let more = if c["count"].as_u64().unwrap_or(0) > rows.len() as u64 {
+                ", …"
+            } else {
+                ""
+            };
+            let pct = |k: &str| {
+                c[k].as_f64()
+                    .map(|x| format!("{} %", num(100.0 * x)))
+                    .unwrap_or_default()
+            };
+            out.push(
+                json!({"rule": rule, "check": c["check"], "count": c["count"], "rate": pct("rate"),
+                            "limit": pct("limit"), "rows (first)": format!("{}{more}", rows.join(", ")),
+                            "status": c["status"]}),
+            );
+        }
+    }
+    Some(Value::Array(out))
+}
+
 /// Generic rendering: object → key/value table, array of objects → column table.
 fn render(v: &Value, depth: usize) -> String {
     match v {
         Value::Object(map) => {
             let mut s = String::from("<table class=\"kv\">");
             for (k, x) in map {
+                let quality = match x {
+                    Value::Array(a) if k == "rules" => quality_rows(a),
+                    _ => None,
+                };
                 let cell = match x {
+                    _ if quality.is_some() => render(quality.as_ref().unwrap(), depth + 1),
                     Value::Object(_) if depth < 2 => render(x, depth + 1),
                     Value::Array(a) if a.first().is_some_and(Value::is_object) && depth < 2 => render(x, depth + 1),
                     Value::Array(a) => numeric_summary(a),
@@ -149,7 +198,7 @@ fn render(v: &Value, depth: usize) -> String {
         }
         Value::Array(a) if a.first().is_some_and(Value::is_object) => {
             let rank = |k: &str| match k {
-                "id" | "grade" | "name" | "t" | "instrument" | "year" | "date" | "from" => 0,
+                "id" | "grade" | "name" | "t" | "instrument" | "year" | "date" | "from" | "rule" => 0,
                 "maturity" | "to" => 1,
                 "product" => 1,
                 "status" => 3,
@@ -337,6 +386,21 @@ mod tests {
         assert_eq!(num(0.871585), "0.871585");
         assert_eq!(num(-0.0000001), "-1.000e-7");
         assert_eq!(num(-0.0), "0");
+    }
+
+    #[test]
+    fn quality_rules_one_row_per_check() {
+        let rules = json!([
+            {"rule": "pd", "checks": [{"check": "max", "count": 7, "rate": 0.0007, "limit": 0.0,
+                                        "rows": [4, 9, 12, 20, 31], "status": "fail"}], "status": "fail"},
+            {"rule": "ead", "columns": ["ead"], "missing_columns": ["ead"], "status": "fail"}
+        ]);
+        let html = render(&json!({"rules": rules, "status": "fail"}), 0);
+        assert!(
+            html.contains("<td>pd</td><td>max</td><td>7</td><td>0 %</td><td>0.07 %</td><td>4, 9, 12, 20, 31, …</td>")
+        );
+        assert!(html.contains("absent: ead"));
+        assert!(quality_rows(&[json!({"rule": "x"})]).is_none());
     }
 
     #[test]

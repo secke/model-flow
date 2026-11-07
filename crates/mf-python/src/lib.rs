@@ -975,10 +975,13 @@ fn diff(left: &Bound<'_, PyAny>, right: &Bound<'_, PyAny>, tolerances: Option<&B
     Ok(PyDiff::new(mf_core::diff::diff(&lm, &rm, &rules), ll, rl))
 }
 
-/// Kinds of the built-in steps (VaR, backtests, PD validation, pricing, curves, portfolio risk).
+/// Kinds of the built-in steps (VaR, backtests, PD validation, pricing, curves, portfolio risk,
+/// data quality, sensitivity analysis).
 #[pyfunction]
 fn builtin_kinds() -> Vec<&'static str> {
-    BuiltinStep::KINDS.to_vec()
+    let mut k = BuiltinStep::KINDS.to_vec();
+    k.extend(["data_quality", "sensitivity"]);
+    k
 }
 
 /// Name and version of the engine, as recorded in every manifest.

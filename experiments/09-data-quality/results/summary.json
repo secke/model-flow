@@ -1,0 +1,245 @@
+{
+ "run_hash": "2d47b2234c6f1f5c2bdb9399f9124153ac75d55f2b699d5060db4d9a6ef0d6ed",
+ "engine": "modelflow 0.25.0",
+ "steps": {
+  "raw": {
+   "rows": 2260701,
+   "sha256": "3eae03c28fd9d2e8a076ebeb73507e8d4d0f44d90500decdb0936e0933d1f36a",
+   "status": "fail",
+   "rules": [
+    {
+     "rule": "loan id",
+     "status": "fail",
+     "failed": {
+      "numeric": 33
+     }
+    },
+    {
+     "rule": "member_id",
+     "status": "warn",
+     "failed": {
+      "missing": 2260701
+     }
+    },
+    {
+     "rule": "loan amount (Lending Club: 500 to 40,000 USD)",
+     "status": "fail",
+     "failed": {
+      "missing": 33
+     }
+    },
+    {
+     "rule": "funded_amnt",
+     "status": "fail",
+     "failed": {
+      "missing": 33
+     }
+    },
+    {
+     "rule": "funded_amnt_inv",
+     "status": "pass",
+     "failed": {}
+    },
+    {
+     "rule": "term",
+     "status": "fail",
+     "failed": {
+      "missing": 33
+     }
+    },
+    {
+     "rule": "interest rate (5% to 31%)",
+     "status": "fail",
+     "failed": {
+      "missing": 33
+     }
+    },
+    {
+     "rule": "grade",
+     "status": "fail",
+     "failed": {
+      "missing": 33
+     }
+    },
+    {
+     "rule": "sub_grade",
+     "status": "fail",
+     "failed": {
+      "missing": 33
+     }
+    },
+    {
+     "rule": "loan_status",
+     "status": "fail",
+     "failed": {
+      "missing": 33
+     }
+    },
+    {
+     "rule": "issue_d",
+     "status": "fail",
+     "failed": {
+      "missing": 33
+     }
+    },
+    {
+     "rule": "annual_inc",
+     "status": "fail",
+     "failed": {
+      "missing": 37
+     }
+    },
+    {
+     "rule": "positive annual income",
+     "status": "warn",
+     "failed": {
+      "min": 1668
+     }
+    },
+    {
+     "rule": "positive annual income, individual applications",
+     "status": "pass",
+     "failed": {}
+    },
+    {
+     "rule": "debt-to-income ratio, every loan (0 to 100%)",
+     "status": "warn",
+     "failed": {
+      "min": 2,
+      "max": 2561
+     }
+    },
+    {
+     "rule": "debt-to-income ratio, individual applications",
+     "status": "pass",
+     "failed": {
+      "missing": 1
+     }
+    },
+    {
+     "rule": "debt-to-income ratio, joint applications",
+     "status": "fail",
+     "failed": {
+      "missing": 4
+     }
+    },
+    {
+     "rule": "FICO range",
+     "status": "fail",
+     "failed": {
+      "fico_range_low: missing": 33,
+      "fico_range_high: missing": 33
+     }
+    },
+    {
+     "rule": "fico_range_low",
+     "status": "pass",
+     "failed": {}
+    },
+    {
+     "rule": "revolving utilization (0 to 100%)",
+     "status": "warn",
+     "failed": {
+      "missing": 1835,
+      "max": 7343
+     }
+    },
+    {
+     "rule": "emp_length",
+     "status": "warn",
+     "failed": {
+      "missing": 146940
+     }
+    },
+    {
+     "rule": "principal repaid within the funded amount, exactly",
+     "status": "warn",
+     "failed": {
+      "not_above funded_amnt": 136
+     }
+    },
+    {
+     "rule": "principal repaid within the funded amount, to 0.50 USD",
+     "status": "pass",
+     "failed": {}
+    },
+    {
+     "rule": "out_prncp",
+     "status": "pass",
+     "failed": {}
+    },
+    {
+     "rule": "recoveries, and their collection fee within them",
+     "status": "pass",
+     "failed": {}
+    }
+   ]
+  },
+  "extract": {
+   "rows": 612745,
+   "sha256": "65bb64b0d7f8e987e9e8c1e08f6d6f9266ad3ca6083b516274492bf4cdf639ea",
+   "status": "warn",
+   "rules": [
+    {
+     "rule": "vintage, issue_month, grade, funded, int_rate, defaulted, total_rec_prncp, recoveries",
+     "status": "pass",
+     "failed": {}
+    },
+    {
+     "rule": "vintage",
+     "status": "pass",
+     "failed": {}
+    },
+    {
+     "rule": "grade",
+     "status": "pass",
+     "failed": {}
+    },
+    {
+     "rule": "defaulted",
+     "status": "pass",
+     "failed": {}
+    },
+    {
+     "rule": "int_rate",
+     "status": "pass",
+     "failed": {}
+    },
+    {
+     "rule": "funded",
+     "status": "pass",
+     "failed": {}
+    },
+    {
+     "rule": "last payment after issue",
+     "status": "warn",
+     "failed": {
+      "not_below issue_month": 470
+     }
+    },
+    {
+     "rule": "last payment after issue, -1 for no payment",
+     "status": "pass",
+     "failed": {
+      "missing": 470
+     }
+    },
+    {
+     "rule": "a repaid loan has a last payment",
+     "status": "pass",
+     "failed": {}
+    },
+    {
+     "rule": "total_rec_prncp",
+     "status": "pass",
+     "failed": {}
+    },
+    {
+     "rule": "recoveries",
+     "status": "pass",
+     "failed": {}
+    }
+   ]
+  }
+ }
+}

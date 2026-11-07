@@ -1,0 +1,225 @@
+# Data quality of the Lending Club loan file (2007-2018Q4, 2.26 million loans) used by experiment 08,
+# and of the extract the IFRS 9 models read. Run ../08-ifrs9-credit/fetch.py first.
+name = "lending-club-data-quality"
+
+[[step]]
+name = "raw"
+kind = "data_quality"
+version = "1"
+path = "../08-ifrs9-credit/data/accepted.csv"
+params = { min_rows = 2000000 }
+
+[[step.rule]]
+name = "loan id"
+column = "id"
+required = true
+unique = true
+numeric = true
+
+[[step.rule]]
+column = "member_id"
+required = true
+severity = "warn"
+
+[[step.rule]]
+name = "loan amount (Lending Club: 500 to 40,000 USD)"
+column = "loan_amnt"
+required = true
+min = 500
+max = 40000
+
+[[step.rule]]
+column = "funded_amnt"
+required = true
+not_above = "loan_amnt"
+
+[[step.rule]]
+column = "funded_amnt_inv"
+min = 0
+not_above = "funded_amnt"
+
+[[step.rule]]
+column = "term"
+required = true
+one_of = ["36 months", "60 months"]
+
+[[step.rule]]
+name = "interest rate (5% to 31%)"
+column = "int_rate"
+required = true
+min = 5
+max = 31
+
+[[step.rule]]
+column = "grade"
+required = true
+one_of = ["A", "B", "C", "D", "E", "F", "G"]
+
+[[step.rule]]
+column = "sub_grade"
+required = true
+one_of = ['A1','A2','A3','A4','A5','B1','B2','B3','B4','B5','C1','C2','C3','C4','C5','D1','D2','D3','D4','D5','E1','E2','E3','E4','E5','F1','F2','F3','F4','F5','G1','G2','G3','G4','G5']
+
+[[step.rule]]
+column = "loan_status"
+required = true
+one_of = ['Fully Paid','Charged Off','Current','Late (31-120 days)','Late (16-30 days)','In Grace Period','Default','Does not meet the credit policy. Status:Fully Paid','Does not meet the credit policy. Status:Charged Off']
+
+[[step.rule]]
+column = "issue_d"
+required = true
+
+[[step.rule]]
+column = "annual_inc"
+required = true
+min = 0
+
+[[step.rule]]
+name = "positive annual income"
+column = "annual_inc"
+min = 1
+severity = "warn"
+
+[[step.rule]]
+name = "positive annual income, individual applications"
+column = "annual_inc"
+when = { column = "application_type", one_of = ["Individual"] }
+min = 1
+
+[[step.rule]]
+name = "debt-to-income ratio, every loan (0 to 100%)"
+column = "dti"
+min = 0
+max = 100
+severity = "warn"
+
+[[step.rule]]
+name = "debt-to-income ratio, individual applications"
+column = "dti"
+when = { column = "application_type", one_of = ["Individual"] }
+missing_values = [-1, 999]
+max_missing = 0.001
+min = 0
+max = 100
+
+[[step.rule]]
+name = "debt-to-income ratio, joint applications"
+column = "dti_joint"
+when = { column = "application_type", one_of = ["Joint App"] }
+required = true
+min = 0
+max = 100
+
+[[step.rule]]
+name = "FICO range"
+columns = ["fico_range_low", "fico_range_high"]
+required = true
+min = 300
+max = 850
+
+[[step.rule]]
+column = "fico_range_low"
+not_above = "fico_range_high"
+
+[[step.rule]]
+name = "revolving utilization (0 to 100%)"
+column = "revol_util"
+max_missing = 0.001
+min = 0
+max = 100
+max_rate = 0.001
+severity = "warn"
+
+[[step.rule]]
+column = "emp_length"
+max_missing = 0.05
+severity = "warn"
+
+[[step.rule]]
+name = "principal repaid within the funded amount, exactly"
+column = "total_rec_prncp"
+not_above = "funded_amnt"
+severity = "warn"
+
+[[step.rule]]
+name = "principal repaid within the funded amount, to 0.50 USD"
+column = "total_rec_prncp"
+min = 0
+not_above = "funded_amnt"
+tolerance = 0.5
+
+[[step.rule]]
+column = "out_prncp"
+min = 0
+not_above = "funded_amnt"
+
+[[step.rule]]
+name = "recoveries, and their collection fee within them"
+column = "collection_recovery_fee"
+min = 0
+not_above = "recoveries"
+
+[[step]]
+name = "extract"
+kind = "data_quality"
+version = "1"
+path = "../08-ifrs9-credit/data/loans.csv"
+params = { min_rows = 500000 }
+
+[[step.rule]]
+columns = ["vintage", "issue_month", "grade", "funded", "int_rate", "defaulted", "total_rec_prncp", "recoveries"]
+required = true
+numeric = true
+
+[[step.rule]]
+column = "vintage"
+one_of = [2010, 2011, 2012, 2013, 2014, 2015]
+
+[[step.rule]]
+column = "grade"
+one_of = [1, 2, 3, 4, 5, 6, 7]
+
+[[step.rule]]
+column = "defaulted"
+one_of = [0, 1]
+
+[[step.rule]]
+column = "int_rate"
+min = 0
+max = 1
+
+[[step.rule]]
+column = "funded"
+min = 500
+max = 40000
+
+[[step.rule]]
+name = "last payment after issue"
+column = "last_payment_month"
+required = true
+not_below = "issue_month"
+severity = "warn"
+
+[[step.rule]]
+name = "last payment after issue, -1 for no payment"
+column = "last_payment_month"
+missing_values = [-1]
+max_missing = 0.001
+not_below = "issue_month"
+
+[[step.rule]]
+name = "a repaid loan has a last payment"
+column = "last_payment_month"
+when = { column = "defaulted", one_of = [0] }
+missing_values = [-1]
+required = true
+
+[[step.rule]]
+column = "total_rec_prncp"
+min = 0
+not_above = "funded"
+tolerance = 0.5
+
+[[step.rule]]
+column = "recoveries"
+min = 0

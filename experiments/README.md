@@ -21,6 +21,7 @@ ModelFlow's examples use synthetic data, which proves that the code works but no
 | 06 | [GARCH-type volatility filters](06-garch-filters/README.md) | S&P 500, 2019–2026 (data of 01) | GARCH and GJR filters remove the second-day exceptions of a shock (4 April 2025: EWMA volatility ×1.47 overnight, GJR ×2.50), but with a normal quantile they fail like the champion (34–40 exceptions for 17.6). With filtered historical simulation they pass every test for a 99% VaR 8–9% lower than EWMA FHS. After Covid the GJR fit is at the stationarity bound, in `arch` as in quantparity |
 | 07 | [Z2 p-values by simulation](07-z2-simulated-pvalues/README.md) | S&P 500 (models of 05 and 06) | The fixed Z2 thresholds hold on 250-day windows (1 of 104 window zones changes, at Z2 = −0.704) but are far too lenient on whole samples: over 1,761–2,231 days the 5% quantile is −0.22 to −0.27. Seven of 14 whole-sample verdicts change; the Student-t challengers of 05, "green" on the ES, are rejected (p < 1e-4). Filtered simulations stay green (p = 0.27–0.96) |
 | 08 | [IFRS 9 validation of a consumer loan ECL model](08-ifrs9-credit/README.md) | Lending Club, 612,745 36-month loans issued 2010–2015 | The model's ECL is 22% above the IFRS 9 measurement, entirely explained by no amortization and no discounting (recomputed with its own conventions, ModelFlow gives it back on every loan). Its 12-month ECL covers first-year losses on aggregate (ratio 0.84) but not by grade (0.44 for A, 1.48 for E), and its lifetime ECL is 13% short, 24% for the latest vintage. The LGD is conservative but has no ranking power (concordance 0.52); defaults close to the data cut-off bias realized LGDs upward |
+| 09 | [Data quality of a public loan file](09-data-quality/README.md) | Lending Club raw file, 2,260,701 records, 151 columns | 33 lines are not loans (totals and a heading left from joining 16 quarterly files); experiment 08 missed them only because it filters on the loan term. Joint applications (5.3%) carry a zero income and a debt-to-income ratio above 100% or 999 in the borrower fields: the rules hold once restricted by application type. The borrower identifier is empty on every line. The extract the models read passes, its −1 "no payment" code declared as missing |
 
 ## What the experiments changed in ModelFlow
 
@@ -47,6 +48,7 @@ ModelFlow's examples use synthetic data, which proves that the code works but no
 | 08 | Defaults close to the data date bias the LGD backtest upward | added in v0.23: `min_workout_months` in `lgd_backtest` |
 | 08 | PD calibration by grade lacked the Jeffreys test of the ECB instructions | added in v0.23 / quantparity 0.6.0: `test = "jeffreys"` in `pd_calibration` |
 | 08 | How the ECL responds to its inputs could only be tested by editing the model or the data | added in v0.24: the `sensitivity` step (expected directions, bounds), on any step of a pipeline |
+| 09 | No step checked the data a pipeline reads; the loading steps stop at the first bad cell | added in v0.25: the `data_quality` step, with sentinels, conditional rules and tolerances, line numbers in the file, and one row per check in the report |
 
 ## Backlog
 

@@ -14,6 +14,32 @@ version = "1.0.0"
 path = "data/current.csv"
 columns = ["grade", "pd", "default"]
 
+# Data quality of the current portfolio before validation: complete, valid grades, PDs and flags
+[[step]]
+name = "data_quality"
+kind = "data_quality"
+version = "1.0.0"
+path = "data/current.csv"
+params = { min_rows = 1000 }
+
+[[step.rule]]
+columns = ["grade", "pd", "default"]
+required = true
+numeric = true
+
+[[step.rule]]
+column = "grade"
+one_of = [1, 2, 3, 4, 5, 6, 7]
+
+[[step.rule]]
+column = "pd"
+min = 0.0003
+max = 1
+
+[[step.rule]]
+column = "default"
+one_of = [0, 1]
+
 # Discriminatory power on the current portfolio
 [[step]]
 name = "discrimination"
