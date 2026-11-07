@@ -1,0 +1,330 @@
+{
+ "bridge": [
+  {
+   "step": "Basel CRE52 (quantparity)",
+   "ead": {
+    "CPTY_A": 9967637.429729052,
+    "CPTY_B": 3952440.639550747,
+    "CPTY_C": 8861.402535324858,
+    "CPTY_D": 205721.80175778095
+   }
+  },
+  {
+   "step": "S and E: first and last payment dates, not the start and end of the swap",
+   "ead": {
+    "CPTY_A": 9808615.07138397,
+    "CPTY_B": 3902701.379225699,
+    "CPTY_C": 8165.710230459132,
+    "CPTY_D": 205721.80175778095
+   }
+  },
+  {
+   "step": "Equity and commodity notionals at the forward price, not the current price",
+   "ead": {
+    "CPTY_A": 10254272.181551117,
+    "CPTY_B": 4039672.639853405,
+    "CPTY_C": 8165.710230459132,
+    "CPTY_D": 205721.80175778095
+   }
+  },
+  {
+   "step": "S&P 500 as a single name: factor 32%, correlation 0.5 (index: 20%, 0.8)",
+   "ead": {
+    "CPTY_A": 10806663.875171179,
+    "CPTY_B": 4206174.211199648,
+    "CPTY_C": 8165.710230459132,
+    "CPTY_D": 205721.80175778095
+   }
+  },
+  {
+   "step": "Option delta with expiry and volatility swapped",
+   "ead": {
+    "CPTY_A": 10731867.242647834,
+    "CPTY_B": 4188593.4135133103,
+    "CPTY_C": 8165.710230459132,
+    "CPTY_D": 205721.80175778095
+   }
+  },
+  {
+   "step": "Payer swaptions as puts",
+   "ead": {
+    "CPTY_A": 10185111.330540584,
+    "CPTY_B": 4024710.645021392,
+    "CPTY_C": 8165.710230459132,
+    "CPTY_D": 205721.80175778095
+   }
+  },
+  {
+   "step": "Margined maturity factor in weeks / 52, not business days / 250",
+   "ead": {
+    "CPTY_A": 10185111.330540584,
+    "CPTY_B": 3978536.9193468723,
+    "CPTY_C": 8007.0961256040655,
+    "CPTY_D": 205721.80175778095
+   }
+  },
+  {
+   "step": "Margined EAD not capped at the unmargined EAD",
+   "ead": {
+    "CPTY_A": 10185111.330540584,
+    "CPTY_B": 3978536.9193468723,
+    "CPTY_C": 8007.0961256040655,
+    "CPTY_D": 4282926.200860841
+   }
+  },
+  {
+   "step": "IR add-on: signed sum per currency, no maturity buckets",
+   "ead": {
+    "CPTY_A": 9517142.276301786,
+    "CPTY_B": 3782316.5774505096,
+    "CPTY_C": -129695.75753825677,
+    "CPTY_D": 4282926.200860841
+   }
+  },
+  {
+   "step": "Market value summed in USD, used as EUR",
+   "ead": {
+    "CPTY_A": 9883317.44997403,
+    "CPTY_B": 4148491.751122754,
+    "CPTY_C": -129695.75753825677,
+    "CPTY_D": 4282926.200860841
+   }
+  },
+  {
+   "step": "ORE 1.8.17",
+   "ead": {
+    "CPTY_A": 9883316.689798,
+    "CPTY_B": 4148491.525674,
+    "CPTY_C": -129695.757538,
+    "CPTY_D": 4282926.200861
+   }
+  }
+ ],
+ "basel": {
+  "CPTY_A": {
+   "market_value": 1976421.5259539997,
+   "collateral": 0.0,
+   "replacement_cost": 1976421.5259539997,
+   "add_on": 5143319.495281038,
+   "multiplier": 1.0,
+   "pfe": 5143319.495281038,
+   "ead": 9967637.429729052,
+   "capped": false,
+   "unmargined_ead": null
+  },
+  "CPTY_B": {
+   "market_value": 1976421.5259539997,
+   "collateral": 800000.0,
+   "replacement_cost": 1176421.5259539997,
+   "add_on": 1646750.3594393912,
+   "multiplier": 1.0,
+   "pfe": 1646750.3594393912,
+   "ead": 3952440.639550747,
+   "capped": false,
+   "unmargined_ead": 8847637.429729052
+  },
+  "CPTY_C": {
+   "market_value": -1030915.5517460001,
+   "collateral": 2000000.0,
+   "replacement_cost": 0.0,
+   "add_on": 126583.37197673334,
+   "multiplier": 0.05000319663376611,
+   "pfe": 6329.573239517756,
+   "ead": 8861.402535324858,
+   "capped": false,
+   "unmargined_ead": 42335.76233524062
+  },
+  "CPTY_D": {
+   "market_value": 3789.82026,
+   "collateral": 0.0,
+   "replacement_cost": 3000000.0,
+   "add_on": 60406.04519679214,
+   "multiplier": 1.0,
+   "pfe": 60406.04519679214,
+   "ead": 205721.80175778095,
+   "capped": true,
+   "unmargined_ead": 205721.80175778095
+  }
+ },
+ "ore": {
+  "CPTY_A": {
+   "NPV": 2237975.221438,
+   "RC": 2237975.221438,
+   "AddOn": 4821536.699847,
+   "Multiplier": 1.0,
+   "PFE": 4821536.699847,
+   "EAD": 9883316.689798
+  },
+  "CPTY_B": {
+   "NPV": 2237975.221438,
+   "RC": 1437975.221438,
+   "AddOn": 1525233.011186,
+   "Multiplier": 1.0,
+   "PFE": 1525233.011186,
+   "EAD": 4148491.525674
+  },
+  "CPTY_C": {
+   "NPV": -1167343.823118,
+   "RC": 0.0,
+   "AddOn": -92639.826813,
+   "Multiplier": 1.0,
+   "PFE": -92639.826813,
+   "EAD": -129695.757538
+  },
+  "CPTY_D": {
+   "NPV": 4291.353703,
+   "RC": 3000000.0,
+   "AddOn": 59233.000615,
+   "Multiplier": 1.0,
+   "PFE": 59233.000615,
+   "EAD": 4282926.200861
+  }
+ },
+ "worst_trade_difference": {
+  "delta": 4.126424171009557e-05,
+  "d": 2.3882902502831684e-08,
+  "mf": 4.888482485476686e-08
+ },
+ "hedging_sets": [
+  {
+   "netting_set": "CPTY_A",
+   "asset_class": "IR",
+   "hedging_set": "EUR",
+   "quantparity": 82407.94549787443,
+   "ore": 82408.61832
+  },
+  {
+   "netting_set": "CPTY_A",
+   "asset_class": "IR",
+   "hedging_set": "GBP",
+   "quantparity": -199978.8933622738,
+   "ore": -199978.893362
+  },
+  {
+   "netting_set": "CPTY_A",
+   "asset_class": "IR",
+   "hedging_set": "USD",
+   "quantparity": -10141.84565150959,
+   "ore": -10142.918138
+  },
+  {
+   "netting_set": "CPTY_A",
+   "asset_class": "FX",
+   "hedging_set": "EURGBP",
+   "quantparity": 143603.92226699303,
+   "ore": 143603.922267
+  },
+  {
+   "netting_set": "CPTY_A",
+   "asset_class": "FX",
+   "hedging_set": "EURUSD",
+   "quantparity": 219397.0150948352,
+   "ore": 219396.903545
+  },
+  {
+   "netting_set": "CPTY_A",
+   "asset_class": "FX",
+   "hedging_set": "GBPUSD",
+   "quantparity": 155430.7595706932,
+   "ore": 155430.759571
+  },
+  {
+   "netting_set": "CPTY_A",
+   "asset_class": "Equity",
+   "hedging_set": "Equity",
+   "quantparity": 2347625.2687735604,
+   "ore": 2347625.24247
+  },
+  {
+   "netting_set": "CPTY_A",
+   "asset_class": "Commodity",
+   "hedging_set": "Energy",
+   "quantparity": 1341861.7154014017,
+   "ore": 1341861.709688
+  },
+  {
+   "netting_set": "CPTY_A",
+   "asset_class": "Commodity",
+   "hedging_set": "Metal",
+   "quantparity": 741331.3552414166,
+   "ore": 741331.355486
+  },
+  {
+   "netting_set": "CPTY_B",
+   "asset_class": "IR",
+   "hedging_set": "EUR",
+   "quantparity": 25162.645190158357,
+   "ore": 25162.843117
+  },
+  {
+   "netting_set": "CPTY_B",
+   "asset_class": "IR",
+   "hedging_set": "GBP",
+   "quantparity": -58828.63151313027,
+   "ore": -58828.631513
+  },
+  {
+   "netting_set": "CPTY_B",
+   "asset_class": "IR",
+   "hedging_set": "USD",
+   "quantparity": -2983.469358513088,
+   "ore": -2983.784857
+  },
+  {
+   "netting_set": "CPTY_B",
+   "asset_class": "FX",
+   "hedging_set": "EURGBP",
+   "quantparity": 59419.03106393993,
+   "ore": 59419.031064
+  },
+  {
+   "netting_set": "CPTY_B",
+   "asset_class": "FX",
+   "hedging_set": "EURUSD",
+   "quantparity": 64540.94199187934,
+   "ore": 64540.909177
+  },
+  {
+   "netting_set": "CPTY_B",
+   "asset_class": "FX",
+   "hedging_set": "GBPUSD",
+   "quantparity": 45723.719772894976,
+   "ore": 45723.719773
+  },
+  {
+   "netting_set": "CPTY_B",
+   "asset_class": "Equity",
+   "hedging_set": "Equity",
+   "quantparity": 768878.572304243,
+   "ore": 768878.563229
+  },
+  {
+   "netting_set": "CPTY_B",
+   "asset_class": "Commodity",
+   "hedging_set": "Energy",
+   "quantparity": 405239.8024034152,
+   "ore": 405239.800754
+  },
+  {
+   "netting_set": "CPTY_B",
+   "asset_class": "Commodity",
+   "hedging_set": "Metal",
+   "quantparity": 218080.56037004813,
+   "ore": 218080.560442
+  },
+  {
+   "netting_set": "CPTY_C",
+   "asset_class": "IR",
+   "hedging_set": "EUR",
+   "quantparity": -92639.82681304056,
+   "ore": -92639.826813
+  },
+  {
+   "netting_set": "CPTY_D",
+   "asset_class": "FX",
+   "hedging_set": "EURUSD",
+   "quantparity": 59233.00061488669,
+   "ore": 59233.000615
+  }
+ ]
+}

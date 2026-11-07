@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<SIMMBucketMappings>
+  <Risk_Commodity>
+    <Mapping><Qualifier>Crude oil Americas</Qualifier><Bucket>2</Bucket></Mapping>
+    <Mapping><Qualifier>Precious Metals Gold</Qualifier><Bucket>12</Bucket></Mapping>
+  </Risk_Commodity>
+</SIMMBucketMappings>

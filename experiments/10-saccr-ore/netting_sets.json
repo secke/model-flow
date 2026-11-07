@@ -1,0 +1,529 @@
+{
+ "netting_sets": [
+  {
+   "id": "CPTY_A",
+   "trades": [
+    {
+     "id": "IR_EUR_9M",
+     "market_value": 297888.29353,
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 20000000.0,
+     "maturity": 0.7595628415300546,
+     "start": 0.01092896174863388,
+     "end": 0.7595628415300546,
+     "long": true
+    },
+    {
+     "id": "IR_EUR_3Y",
+     "market_value": 779396.218444,
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 15000000.0,
+     "maturity": 3.0167003518227413,
+     "start": 0.01092896174863388,
+     "end": 3.0167003518227413,
+     "long": true
+    },
+    {
+     "id": "IR_EUR_10Y",
+     "market_value": -896669.433167,
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 10000000.0,
+     "maturity": 10.011220899767947,
+     "start": 0.01092896174863388,
+     "end": 10.011220899767947,
+     "long": false
+    },
+    {
+     "id": "IR_EUR_FWD",
+     "market_value": 551272.131891,
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 8000000.0,
+     "maturity": 12.010928961748634,
+     "start": 2.0112208997679466,
+     "end": 12.010928961748634,
+     "long": true
+    },
+    {
+     "id": "IR_USD_5Y",
+     "market_value": -121061.805748,
+     "asset_class": "ir",
+     "qualifier": "USD",
+     "notional": 10597551.7889109,
+     "maturity": 5.011220899767947,
+     "start": 0.01092896174863388,
+     "end": 5.011220899767947,
+     "long": true
+    },
+    {
+     "id": "IR_GBP_7Y",
+     "market_value": 181587.340689,
+     "asset_class": "ir",
+     "qualifier": "GBP",
+     "notional": 7389726.801800137,
+     "maturity": 7.011220899767947,
+     "start": 0.01092896174863388,
+     "end": 7.011220899767947,
+     "long": false
+    },
+    {
+     "id": "IR_SWPT_EUR",
+     "market_value": 552832.588033,
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 10000000.0,
+     "maturity": 6.011220899767947,
+     "start": 1.0112208997679466,
+     "end": 6.011220899767947,
+     "option": {
+      "kind": "call",
+      "bought": true,
+      "price": 0.019965,
+      "strike": 0.008,
+      "exercise": 1.005741447713152
+     }
+    },
+    {
+     "id": "IR_SWPT_USD",
+     "market_value": -361451.904636,
+     "asset_class": "ir",
+     "qualifier": "USD",
+     "notional": 8831293.15742575,
+     "maturity": 12.010928961748634,
+     "start": 2.0112208997679466,
+     "end": 12.010928961748634,
+     "option": {
+      "kind": "put",
+      "bought": false,
+      "price": 0.019931,
+      "strike": 0.02,
+      "exercise": 2.0057414477131523
+     }
+    },
+    {
+     "id": "FX_EURUSD_1Y",
+     "market_value": 22390.81674,
+     "asset_class": "fx",
+     "qualifier": "EURUSD",
+     "notional": 10155987.131039612,
+     "long": false,
+     "maturity": 1.005741447713152
+    },
+    {
+     "id": "FX_EURGBP_6M",
+     "market_value": -24628.076294,
+     "asset_class": "fx",
+     "qualifier": "EURGBP",
+     "notional": 5049646.64789676,
+     "long": true,
+     "maturity": 0.505464480874317
+    },
+    {
+     "id": "FX_GBPUSD_2Y",
+     "market_value": -105056.111866,
+     "asset_class": "fx",
+     "qualifier": "GBPUSD",
+     "notional": 3885768.9892673297,
+     "long": true,
+     "maturity": 2.0057414477131523
+    },
+    {
+     "id": "FX_OPT_EURUSD",
+     "market_value": 370745.235782,
+     "asset_class": "fx",
+     "qualifier": "EURUSD",
+     "notional": 8124789.70483169,
+     "maturity": 1.005741447713152,
+     "option": {
+      "kind": "call",
+      "bought": true,
+      "price": 1.147378,
+      "strike": 1.15,
+      "exercise": 1.005741447713152
+     }
+    },
+    {
+     "id": "EQ_OPT_SP5_C",
+     "market_value": 462691.304598,
+     "notional": 5689719.579948372,
+     "asset_class": "equity",
+     "qualifier": "SP5",
+     "index": true,
+     "maturity": 1.003001721685755,
+     "option": {
+      "kind": "call",
+      "bought": true,
+      "price": 2123.212112,
+      "strike": 2200.0,
+      "exercise": 1.003001721685755
+     }
+    },
+    {
+     "id": "EQ_OPT_SP5_P",
+     "market_value": -151688.694987,
+     "notional": 3793146.3866322483,
+     "asset_class": "equity",
+     "qualifier": "SP5",
+     "index": true,
+     "maturity": 0.4972677595628415,
+     "option": {
+      "kind": "put",
+      "bought": false,
+      "price": 2138.816923,
+      "strike": 2000.0,
+      "exercise": 0.4972677595628415
+     }
+    },
+    {
+     "id": "EQ_FWD_LHA",
+     "market_value": -98605.0544,
+     "notional": 5100000.0,
+     "asset_class": "equity",
+     "qualifier": "Lufthansa",
+     "index": false,
+     "long": true,
+     "maturity": 0.7540983606557377
+    },
+    {
+     "id": "CO_FWD_WTI",
+     "market_value": 369555.672044,
+     "notional": 4091979.684493221,
+     "asset_class": "commodity",
+     "qualifier": "Crude oil",
+     "sector": "oil_gas",
+     "long": true,
+     "maturity": 1.003001721685755
+    },
+    {
+     "id": "CO_FWD_GOLD",
+     "market_value": 13503.921602,
+     "notional": 4089948.4870670126,
+     "asset_class": "commodity",
+     "qualifier": "Gold",
+     "sector": "metals",
+     "long": false,
+     "maturity": 2.0002619956583576
+    },
+    {
+     "id": "CO_OPT_WTI",
+     "market_value": 133719.083699,
+     "notional": 2727986.456328814,
+     "asset_class": "commodity",
+     "qualifier": "Crude oil",
+     "sector": "oil_gas",
+     "maturity": 0.8306010928961749,
+     "option": {
+      "kind": "call",
+      "bought": true,
+      "price": 39.912258,
+      "strike": 40.0,
+      "exercise": 0.8306010928961749
+     }
+    }
+   ],
+   "collateral": 0.0,
+   "reported_ead": 9883316.689798,
+   "reported_rc": 2237975.221438,
+   "reported_pfe": 4821536.699847
+  },
+  {
+   "id": "CPTY_B",
+   "trades": [
+    {
+     "id": "IR_EUR_9M_B",
+     "market_value": 297888.29353,
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 20000000.0,
+     "maturity": 0.7595628415300546,
+     "start": 0.01092896174863388,
+     "end": 0.7595628415300546,
+     "long": true
+    },
+    {
+     "id": "IR_EUR_3Y_B",
+     "market_value": 779396.218444,
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 15000000.0,
+     "maturity": 3.0167003518227413,
+     "start": 0.01092896174863388,
+     "end": 3.0167003518227413,
+     "long": true
+    },
+    {
+     "id": "IR_EUR_10Y_B",
+     "market_value": -896669.433167,
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 10000000.0,
+     "maturity": 10.011220899767947,
+     "start": 0.01092896174863388,
+     "end": 10.011220899767947,
+     "long": false
+    },
+    {
+     "id": "IR_EUR_FWD_B",
+     "market_value": 551272.131891,
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 8000000.0,
+     "maturity": 12.010928961748634,
+     "start": 2.0112208997679466,
+     "end": 12.010928961748634,
+     "long": true
+    },
+    {
+     "id": "IR_USD_5Y_B",
+     "market_value": -121061.805748,
+     "asset_class": "ir",
+     "qualifier": "USD",
+     "notional": 10597551.7889109,
+     "maturity": 5.011220899767947,
+     "start": 0.01092896174863388,
+     "end": 5.011220899767947,
+     "long": true
+    },
+    {
+     "id": "IR_GBP_7Y_B",
+     "market_value": 181587.340689,
+     "asset_class": "ir",
+     "qualifier": "GBP",
+     "notional": 7389726.801800137,
+     "maturity": 7.011220899767947,
+     "start": 0.01092896174863388,
+     "end": 7.011220899767947,
+     "long": false
+    },
+    {
+     "id": "IR_SWPT_EUR_B",
+     "market_value": 552832.588033,
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 10000000.0,
+     "maturity": 6.011220899767947,
+     "start": 1.0112208997679466,
+     "end": 6.011220899767947,
+     "option": {
+      "kind": "call",
+      "bought": true,
+      "price": 0.019965,
+      "strike": 0.008,
+      "exercise": 1.005741447713152
+     }
+    },
+    {
+     "id": "IR_SWPT_USD_B",
+     "market_value": -361451.904636,
+     "asset_class": "ir",
+     "qualifier": "USD",
+     "notional": 8831293.15742575,
+     "maturity": 12.010928961748634,
+     "start": 2.0112208997679466,
+     "end": 12.010928961748634,
+     "option": {
+      "kind": "put",
+      "bought": false,
+      "price": 0.019931,
+      "strike": 0.02,
+      "exercise": 2.0057414477131523
+     }
+    },
+    {
+     "id": "FX_EURUSD_1Y_B",
+     "market_value": 22390.81674,
+     "asset_class": "fx",
+     "qualifier": "EURUSD",
+     "notional": 10155987.131039612,
+     "long": false,
+     "maturity": 1.005741447713152
+    },
+    {
+     "id": "FX_EURGBP_6M_B",
+     "market_value": -24628.076294,
+     "asset_class": "fx",
+     "qualifier": "EURGBP",
+     "notional": 5049646.64789676,
+     "long": true,
+     "maturity": 0.505464480874317
+    },
+    {
+     "id": "FX_GBPUSD_2Y_B",
+     "market_value": -105056.111866,
+     "asset_class": "fx",
+     "qualifier": "GBPUSD",
+     "notional": 3885768.9892673297,
+     "long": true,
+     "maturity": 2.0057414477131523
+    },
+    {
+     "id": "FX_OPT_EURUSD_B",
+     "market_value": 370745.235782,
+     "asset_class": "fx",
+     "qualifier": "EURUSD",
+     "notional": 8124789.70483169,
+     "maturity": 1.005741447713152,
+     "option": {
+      "kind": "call",
+      "bought": true,
+      "price": 1.147378,
+      "strike": 1.15,
+      "exercise": 1.005741447713152
+     }
+    },
+    {
+     "id": "EQ_OPT_SP5_C_B",
+     "market_value": 462691.304598,
+     "notional": 5689719.579948372,
+     "asset_class": "equity",
+     "qualifier": "SP5",
+     "index": true,
+     "maturity": 1.003001721685755,
+     "option": {
+      "kind": "call",
+      "bought": true,
+      "price": 2123.212112,
+      "strike": 2200.0,
+      "exercise": 1.003001721685755
+     }
+    },
+    {
+     "id": "EQ_OPT_SP5_P_B",
+     "market_value": -151688.694987,
+     "notional": 3793146.3866322483,
+     "asset_class": "equity",
+     "qualifier": "SP5",
+     "index": true,
+     "maturity": 0.4972677595628415,
+     "option": {
+      "kind": "put",
+      "bought": false,
+      "price": 2138.816923,
+      "strike": 2000.0,
+      "exercise": 0.4972677595628415
+     }
+    },
+    {
+     "id": "EQ_FWD_LHA_B",
+     "market_value": -98605.0544,
+     "notional": 5100000.0,
+     "asset_class": "equity",
+     "qualifier": "Lufthansa",
+     "index": false,
+     "long": true,
+     "maturity": 0.7540983606557377
+    },
+    {
+     "id": "CO_FWD_WTI_B",
+     "market_value": 369555.672044,
+     "notional": 4091979.684493221,
+     "asset_class": "commodity",
+     "qualifier": "Crude oil",
+     "sector": "oil_gas",
+     "long": true,
+     "maturity": 1.003001721685755
+    },
+    {
+     "id": "CO_FWD_GOLD_B",
+     "market_value": 13503.921602,
+     "notional": 4089948.4870670126,
+     "asset_class": "commodity",
+     "qualifier": "Gold",
+     "sector": "metals",
+     "long": false,
+     "maturity": 2.0002619956583576
+    },
+    {
+     "id": "CO_OPT_WTI_B",
+     "market_value": 133719.083699,
+     "notional": 2727986.456328814,
+     "asset_class": "commodity",
+     "qualifier": "Crude oil",
+     "sector": "oil_gas",
+     "maturity": 0.8306010928961749,
+     "option": {
+      "kind": "call",
+      "bought": true,
+      "price": 39.912258,
+      "strike": 40.0,
+      "exercise": 0.8306010928961749
+     }
+    }
+   ],
+   "collateral": 800000.0,
+   "margin": {
+    "threshold": 1000000.0,
+    "mta": 250000.0,
+    "nica": 500000.0,
+    "mpor_days": 10.0
+   },
+   "reported_ead": 4148491.525674,
+   "reported_rc": 1437975.221438,
+   "reported_pfe": 1525233.011186
+  },
+  {
+   "id": "CPTY_C",
+   "trades": [
+    {
+     "id": "IR_EUR_5Y_C",
+     "market_value": -2001032.494651,
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 25000000.0,
+     "maturity": 5.011220899767947,
+     "start": 0.01092896174863388,
+     "end": 5.011220899767947,
+     "long": false
+    },
+    {
+     "id": "IR_EUR_2Y_C",
+     "market_value": 970116.942905,
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 25000000.0,
+     "maturity": 2.0112208997679466,
+     "start": 0.01092896174863388,
+     "end": 2.0112208997679466,
+     "long": true
+    }
+   ],
+   "collateral": 2000000.0,
+   "margin": {
+    "threshold": 0.0,
+    "mta": 0.0,
+    "nica": 2000000.0,
+    "mpor_days": 10.0
+   },
+   "reported_ead": -129695.757538,
+   "reported_rc": 0.0,
+   "reported_pfe": -92639.826813
+  },
+  {
+   "id": "CPTY_D",
+   "trades": [
+    {
+     "id": "FX_EURUSD_6M_D",
+     "market_value": 3789.82026,
+     "asset_class": "fx",
+     "qualifier": "EURUSD",
+     "notional": 5033837.099732677,
+     "long": false,
+     "maturity": 0.505464480874317
+    }
+   ],
+   "collateral": 0.0,
+   "margin": {
+    "threshold": 0.0,
+    "mta": 3000000.0,
+    "nica": 0.0,
+    "mpor_days": 10.0
+   },
+   "reported_ead": 4282926.200861,
+   "reported_rc": 3000000.0,
+   "reported_pfe": 59233.000615
+  }
+ ]
+}

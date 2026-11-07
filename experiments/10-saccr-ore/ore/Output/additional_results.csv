@@ -1,0 +1,1106 @@
+#TradeId,ResultId,ResultType,ResultValue
+CO_FWD_GOLD,PricingConfigEngine,string,DiscountingCommodityForwardEngine
+CO_FWD_GOLD,PricingConfigModel,string,DiscountedCashflows
+CO_FWD_GOLD,PricingConfigProductType,string,CommodityForward
+CO_FWD_GOLD,isdaAssetClass,string,Commodity
+CO_FWD_GOLD,isdaBaseProduct,string,Forward
+CO_FWD_GOLD,isdaSubProduct,string,Price Return Basic Performance
+CO_FWD_GOLD,isdaTransaction,string,
+CO_FWD_GOLD,quantity,double,4000.000000
+CO_FWD_GOLD,strike,double,1170.000000
+CO_FWD_GOLD,strikeCurrency,string,USD
+CO_FWD_GOLD,cashFlowResults[0],cashflows,-4663538.461538 USD
+CO_FWD_GOLD,cashFlowResults[1],cashflows,4680000.000000 USD
+CO_FWD_GOLD,currentNotional,double,4663538.461538
+CO_FWD_GOLD,forwardPrice,double,1165.884615
+CO_FWD_GOLD,instMultiplier,double,1.000000
+CO_FWD_GOLD,paymentDateDiscountFactor,double,0.928892
+CO_FWD_GOLD_B,PricingConfigEngine,string,DiscountingCommodityForwardEngine
+CO_FWD_GOLD_B,PricingConfigModel,string,DiscountedCashflows
+CO_FWD_GOLD_B,PricingConfigProductType,string,CommodityForward
+CO_FWD_GOLD_B,isdaAssetClass,string,Commodity
+CO_FWD_GOLD_B,isdaBaseProduct,string,Forward
+CO_FWD_GOLD_B,isdaSubProduct,string,Price Return Basic Performance
+CO_FWD_GOLD_B,isdaTransaction,string,
+CO_FWD_GOLD_B,quantity,double,4000.000000
+CO_FWD_GOLD_B,strike,double,1170.000000
+CO_FWD_GOLD_B,strikeCurrency,string,USD
+CO_FWD_GOLD_B,cashFlowResults[0],cashflows,-4663538.461538 USD
+CO_FWD_GOLD_B,cashFlowResults[1],cashflows,4680000.000000 USD
+CO_FWD_GOLD_B,currentNotional,double,4663538.461538
+CO_FWD_GOLD_B,forwardPrice,double,1165.884615
+CO_FWD_GOLD_B,instMultiplier,double,1.000000
+CO_FWD_GOLD_B,paymentDateDiscountFactor,double,0.928892
+CO_FWD_WTI,PricingConfigEngine,string,DiscountingCommodityForwardEngine
+CO_FWD_WTI,PricingConfigModel,string,DiscountedCashflows
+CO_FWD_WTI,PricingConfigProductType,string,CommodityForward
+CO_FWD_WTI,isdaAssetClass,string,Commodity
+CO_FWD_WTI,isdaBaseProduct,string,Forward
+CO_FWD_WTI,isdaSubProduct,string,Price Return Basic Performance
+CO_FWD_WTI,isdaTransaction,string,
+CO_FWD_WTI,quantity,double,150000.000000
+CO_FWD_WTI,strike,double,38.000000
+CO_FWD_WTI,strikeCurrency,string,USD
+CO_FWD_WTI,cashFlowResults[0],cashflows,6132642.857143 USD
+CO_FWD_WTI,cashFlowResults[1],cashflows,-5700000.000000 USD
+CO_FWD_WTI,currentNotional,double,6132642.857143
+CO_FWD_WTI,forwardPrice,double,40.884286
+CO_FWD_WTI,instMultiplier,double,1.000000
+CO_FWD_WTI,paymentDateDiscountFactor,double,0.967222
+CO_FWD_WTI_B,PricingConfigEngine,string,DiscountingCommodityForwardEngine
+CO_FWD_WTI_B,PricingConfigModel,string,DiscountedCashflows
+CO_FWD_WTI_B,PricingConfigProductType,string,CommodityForward
+CO_FWD_WTI_B,isdaAssetClass,string,Commodity
+CO_FWD_WTI_B,isdaBaseProduct,string,Forward
+CO_FWD_WTI_B,isdaSubProduct,string,Price Return Basic Performance
+CO_FWD_WTI_B,isdaTransaction,string,
+CO_FWD_WTI_B,quantity,double,150000.000000
+CO_FWD_WTI_B,strike,double,38.000000
+CO_FWD_WTI_B,strikeCurrency,string,USD
+CO_FWD_WTI_B,cashFlowResults[0],cashflows,6132642.857143 USD
+CO_FWD_WTI_B,cashFlowResults[1],cashflows,-5700000.000000 USD
+CO_FWD_WTI_B,currentNotional,double,6132642.857143
+CO_FWD_WTI_B,forwardPrice,double,40.884286
+CO_FWD_WTI_B,instMultiplier,double,1.000000
+CO_FWD_WTI_B,paymentDateDiscountFactor,double,0.967222
+CO_OPT_WTI,PricingConfigEngine,string,AnalyticEuropeanEngine
+CO_OPT_WTI,PricingConfigModel,string,BlackScholes
+CO_OPT_WTI,PricingConfigProductType,string,CommodityOption
+CO_OPT_WTI,isdaAssetClass,string,Commodity
+CO_OPT_WTI,isdaBaseProduct,string,Option
+CO_OPT_WTI,isdaSubProduct,string,Price Return Basic Performance
+CO_OPT_WTI,isdaTransaction,string,
+CO_OPT_WTI,quantity,double,100000.000000
+CO_OPT_WTI,strike,double,40.000000
+CO_OPT_WTI,strikeCurrency,string,USD
+CO_OPT_WTI,cashFlowResults[0],cashflows,1.556048  @ 2016-12-05
+CO_OPT_WTI,discountFactor,double,0.973075
+CO_OPT_WTI,dividendDiscount,double,1.257287
+CO_OPT_WTI,forward,double,39.912258
+CO_OPT_WTI,instMultiplier,double,100000.000000
+CO_OPT_WTI,riskFreeDiscount,double,0.973075
+CO_OPT_WTI,spot,double,30.890000
+CO_OPT_WTI,strike,double,40.000000
+CO_OPT_WTI,timeToExpiry,double,0.832877
+CO_OPT_WTI,volatility,double,0.110000
+CO_OPT_WTI_B,PricingConfigEngine,string,AnalyticEuropeanEngine
+CO_OPT_WTI_B,PricingConfigModel,string,BlackScholes
+CO_OPT_WTI_B,PricingConfigProductType,string,CommodityOption
+CO_OPT_WTI_B,isdaAssetClass,string,Commodity
+CO_OPT_WTI_B,isdaBaseProduct,string,Option
+CO_OPT_WTI_B,isdaSubProduct,string,Price Return Basic Performance
+CO_OPT_WTI_B,isdaTransaction,string,
+CO_OPT_WTI_B,quantity,double,100000.000000
+CO_OPT_WTI_B,strike,double,40.000000
+CO_OPT_WTI_B,strikeCurrency,string,USD
+CO_OPT_WTI_B,cashFlowResults[0],cashflows,1.556048  @ 2016-12-05
+CO_OPT_WTI_B,discountFactor,double,0.973075
+CO_OPT_WTI_B,dividendDiscount,double,1.257287
+CO_OPT_WTI_B,forward,double,39.912258
+CO_OPT_WTI_B,instMultiplier,double,100000.000000
+CO_OPT_WTI_B,riskFreeDiscount,double,0.973075
+CO_OPT_WTI_B,spot,double,30.890000
+CO_OPT_WTI_B,strike,double,40.000000
+CO_OPT_WTI_B,timeToExpiry,double,0.832877
+CO_OPT_WTI_B,volatility,double,0.110000
+EQ_FWD_LHA,PricingConfigEngine,string,DiscountingEquityForwardEngine
+EQ_FWD_LHA,PricingConfigModel,string,DiscountedCashflows
+EQ_FWD_LHA,PricingConfigProductType,string,EquityForward
+EQ_FWD_LHA,isdaAssetClass,string,Equity
+EQ_FWD_LHA,isdaBaseProduct,string,Forward
+EQ_FWD_LHA,isdaSubProduct,string,Price Return Basic Performance
+EQ_FWD_LHA,isdaTransaction,string,
+EQ_FWD_LHA,quantity,double,400000.000000
+EQ_FWD_LHA,strike,double,13.000000
+EQ_FWD_LHA,strikeCurrency,string,
+EQ_FWD_LHA,underlyingCurrency,string,EUR
+EQ_FWD_LHA,underlyingSecurityId,string,Lufthansa
+EQ_FWD_LHA,currentNotional,double,5200000.000000
+EQ_FWD_LHA,currentNotionalCurrency,currency,EUR
+EQ_FWD_LHA,discountFactor,double,0.984895
+EQ_FWD_LHA,forwardPrice,double,12.749707
+EQ_FWD_LHA,fxFixingDate,date,null date
+EQ_FWD_LHA,fxRate,double,1.000000
+EQ_FWD_LHA,instMultiplier,double,1.000000
+EQ_FWD_LHA,payCcy,currency,EUR
+EQ_FWD_LHA,paymentDate,date,2016-11-07
+EQ_FWD_LHA,underlyingCcy,currency,EUR
+EQ_FWD_LHA,valueDate,date,2016-11-07
+EQ_FWD_LHA_B,PricingConfigEngine,string,DiscountingEquityForwardEngine
+EQ_FWD_LHA_B,PricingConfigModel,string,DiscountedCashflows
+EQ_FWD_LHA_B,PricingConfigProductType,string,EquityForward
+EQ_FWD_LHA_B,isdaAssetClass,string,Equity
+EQ_FWD_LHA_B,isdaBaseProduct,string,Forward
+EQ_FWD_LHA_B,isdaSubProduct,string,Price Return Basic Performance
+EQ_FWD_LHA_B,isdaTransaction,string,
+EQ_FWD_LHA_B,quantity,double,400000.000000
+EQ_FWD_LHA_B,strike,double,13.000000
+EQ_FWD_LHA_B,strikeCurrency,string,
+EQ_FWD_LHA_B,underlyingCurrency,string,EUR
+EQ_FWD_LHA_B,underlyingSecurityId,string,Lufthansa
+EQ_FWD_LHA_B,currentNotional,double,5200000.000000
+EQ_FWD_LHA_B,currentNotionalCurrency,currency,EUR
+EQ_FWD_LHA_B,discountFactor,double,0.984895
+EQ_FWD_LHA_B,forwardPrice,double,12.749707
+EQ_FWD_LHA_B,fxFixingDate,date,null date
+EQ_FWD_LHA_B,fxRate,double,1.000000
+EQ_FWD_LHA_B,instMultiplier,double,1.000000
+EQ_FWD_LHA_B,payCcy,currency,EUR
+EQ_FWD_LHA_B,paymentDate,date,2016-11-07
+EQ_FWD_LHA_B,underlyingCcy,currency,EUR
+EQ_FWD_LHA_B,valueDate,date,2016-11-07
+EQ_OPT_SP5_C,PricingConfigEngine,string,AnalyticEuropeanEngine
+EQ_OPT_SP5_C,PricingConfigModel,string,BlackScholesMerton
+EQ_OPT_SP5_C,PricingConfigProductType,string,EquityOption
+EQ_OPT_SP5_C,isdaAssetClass,string,Equity
+EQ_OPT_SP5_C,isdaBaseProduct,string,Option
+EQ_OPT_SP5_C,isdaSubProduct,string,Price Return Basic Performance
+EQ_OPT_SP5_C,isdaTransaction,string,
+EQ_OPT_SP5_C,quantity,double,3000.000000
+EQ_OPT_SP5_C,strike,double,2200.000000
+EQ_OPT_SP5_C,strikeCurrency,string,
+EQ_OPT_SP5_C,cashFlowResults[0],cashflows,180.559253  @ 2017-02-06
+EQ_OPT_SP5_C,discountFactor,double,0.967222
+EQ_OPT_SP5_C,dividendDiscount,double,0.983052
+EQ_OPT_SP5_C,forward,double,2123.212112
+EQ_OPT_SP5_C,instMultiplier,double,3000.000000
+EQ_OPT_SP5_C,riskFreeDiscount,double,0.994325
+EQ_OPT_SP5_C,spot,double,2147.560000
+EQ_OPT_SP5_C,strike,double,2200.000000
+EQ_OPT_SP5_C,timeToExpiry,double,1.005479
+EQ_OPT_SP5_C,volatility,double,0.251400
+EQ_OPT_SP5_C_B,PricingConfigEngine,string,AnalyticEuropeanEngine
+EQ_OPT_SP5_C_B,PricingConfigModel,string,BlackScholesMerton
+EQ_OPT_SP5_C_B,PricingConfigProductType,string,EquityOption
+EQ_OPT_SP5_C_B,isdaAssetClass,string,Equity
+EQ_OPT_SP5_C_B,isdaBaseProduct,string,Option
+EQ_OPT_SP5_C_B,isdaSubProduct,string,Price Return Basic Performance
+EQ_OPT_SP5_C_B,isdaTransaction,string,
+EQ_OPT_SP5_C_B,quantity,double,3000.000000
+EQ_OPT_SP5_C_B,strike,double,2200.000000
+EQ_OPT_SP5_C_B,strikeCurrency,string,
+EQ_OPT_SP5_C_B,cashFlowResults[0],cashflows,180.559253  @ 2017-02-06
+EQ_OPT_SP5_C_B,discountFactor,double,0.967222
+EQ_OPT_SP5_C_B,dividendDiscount,double,0.983052
+EQ_OPT_SP5_C_B,forward,double,2123.212112
+EQ_OPT_SP5_C_B,instMultiplier,double,3000.000000
+EQ_OPT_SP5_C_B,riskFreeDiscount,double,0.994325
+EQ_OPT_SP5_C_B,spot,double,2147.560000
+EQ_OPT_SP5_C_B,strike,double,2200.000000
+EQ_OPT_SP5_C_B,timeToExpiry,double,1.005479
+EQ_OPT_SP5_C_B,volatility,double,0.251400
+EQ_OPT_SP5_P,PricingConfigEngine,string,AnalyticEuropeanEngine
+EQ_OPT_SP5_P,PricingConfigModel,string,BlackScholesMerton
+EQ_OPT_SP5_P,PricingConfigProductType,string,EquityOption
+EQ_OPT_SP5_P,isdaAssetClass,string,Equity
+EQ_OPT_SP5_P,isdaBaseProduct,string,Option
+EQ_OPT_SP5_P,isdaSubProduct,string,Price Return Basic Performance
+EQ_OPT_SP5_P,isdaTransaction,string,
+EQ_OPT_SP5_P,quantity,double,2000.000000
+EQ_OPT_SP5_P,strike,double,2000.000000
+EQ_OPT_SP5_P,strikeCurrency,string,
+EQ_OPT_SP5_P,cashFlowResults[0],cashflows,87.260363  @ 2016-08-05
+EQ_OPT_SP5_P,discountFactor,double,0.984197
+EQ_OPT_SP5_P,dividendDiscount,double,0.993312
+EQ_OPT_SP5_P,forward,double,2138.816923
+EQ_OPT_SP5_P,instMultiplier,double,-2000.000000
+EQ_OPT_SP5_P,riskFreeDiscount,double,0.997372
+EQ_OPT_SP5_P,spot,double,2147.560000
+EQ_OPT_SP5_P,strike,double,2000.000000
+EQ_OPT_SP5_P,timeToExpiry,double,0.498630
+EQ_OPT_SP5_P,volatility,double,0.251400
+EQ_OPT_SP5_P_B,PricingConfigEngine,string,AnalyticEuropeanEngine
+EQ_OPT_SP5_P_B,PricingConfigModel,string,BlackScholesMerton
+EQ_OPT_SP5_P_B,PricingConfigProductType,string,EquityOption
+EQ_OPT_SP5_P_B,isdaAssetClass,string,Equity
+EQ_OPT_SP5_P_B,isdaBaseProduct,string,Option
+EQ_OPT_SP5_P_B,isdaSubProduct,string,Price Return Basic Performance
+EQ_OPT_SP5_P_B,isdaTransaction,string,
+EQ_OPT_SP5_P_B,quantity,double,2000.000000
+EQ_OPT_SP5_P_B,strike,double,2000.000000
+EQ_OPT_SP5_P_B,strikeCurrency,string,
+EQ_OPT_SP5_P_B,cashFlowResults[0],cashflows,87.260363  @ 2016-08-05
+EQ_OPT_SP5_P_B,discountFactor,double,0.984197
+EQ_OPT_SP5_P_B,dividendDiscount,double,0.993312
+EQ_OPT_SP5_P_B,forward,double,2138.816923
+EQ_OPT_SP5_P_B,instMultiplier,double,-2000.000000
+EQ_OPT_SP5_P_B,riskFreeDiscount,double,0.997372
+EQ_OPT_SP5_P_B,spot,double,2147.560000
+EQ_OPT_SP5_P_B,strike,double,2000.000000
+EQ_OPT_SP5_P_B,timeToExpiry,double,0.498630
+EQ_OPT_SP5_P_B,volatility,double,0.251400
+FX_EURGBP_6M,PricingConfigEngine,string,DiscountingFxForwardEngine
+FX_EURGBP_6M,PricingConfigModel,string,DiscountedCashflows
+FX_EURGBP_6M,PricingConfigProductType,string,FxForward
+FX_EURGBP_6M,boughtAmount,double,5000000.000000
+FX_EURGBP_6M,boughtCurrency,string,EUR
+FX_EURGBP_6M,isdaAssetClass,string,Foreign Exchange
+FX_EURGBP_6M,isdaBaseProduct,string,Forward
+FX_EURGBP_6M,isdaSubProduct,string,
+FX_EURGBP_6M,isdaTransaction,string,
+FX_EURGBP_6M,payDate,date,2016-08-08
+FX_EURGBP_6M,settlement,string,Physical
+FX_EURGBP_6M,soldAmount,double,4100000.000000
+FX_EURGBP_6M,soldCurrency,string,GBP
+FX_EURGBP_6M,valueDate,string,2016-08-08
+FX_EURGBP_6M,cashFlowResults[0],cashflows,5000000.000000 EUR @ 2016-08-08
+FX_EURGBP_6M,cashFlowResults[1],cashflows,-4100000.000000 GBP @ 2016-08-08
+FX_EURGBP_6M,currency[1],string,GBP
+FX_EURGBP_6M,currency[2],string,EUR
+FX_EURGBP_6M,currentNotional,double,4100000.000000
+FX_EURGBP_6M,discountFactor[1],double,0.984970
+FX_EURGBP_6M,discountFactor[2],double,0.989825
+FX_EURGBP_6M,fairForwardRate,double,0.815940
+FX_EURGBP_6M,fxSpot,double,0.811938
+FX_EURGBP_6M,instMultiplier,double,1.000000
+FX_EURGBP_6M,legNPV[1],double,-4038377.622290
+FX_EURGBP_6M,legNPV[2],double,4018381.151280
+FX_EURGBP_6M,notionalCurrency,string,GBP
+FX_EURGBP_6M_B,PricingConfigEngine,string,DiscountingFxForwardEngine
+FX_EURGBP_6M_B,PricingConfigModel,string,DiscountedCashflows
+FX_EURGBP_6M_B,PricingConfigProductType,string,FxForward
+FX_EURGBP_6M_B,boughtAmount,double,5000000.000000
+FX_EURGBP_6M_B,boughtCurrency,string,EUR
+FX_EURGBP_6M_B,isdaAssetClass,string,Foreign Exchange
+FX_EURGBP_6M_B,isdaBaseProduct,string,Forward
+FX_EURGBP_6M_B,isdaSubProduct,string,
+FX_EURGBP_6M_B,isdaTransaction,string,
+FX_EURGBP_6M_B,payDate,date,2016-08-08
+FX_EURGBP_6M_B,settlement,string,Physical
+FX_EURGBP_6M_B,soldAmount,double,4100000.000000
+FX_EURGBP_6M_B,soldCurrency,string,GBP
+FX_EURGBP_6M_B,valueDate,string,2016-08-08
+FX_EURGBP_6M_B,cashFlowResults[0],cashflows,5000000.000000 EUR @ 2016-08-08
+FX_EURGBP_6M_B,cashFlowResults[1],cashflows,-4100000.000000 GBP @ 2016-08-08
+FX_EURGBP_6M_B,currency[1],string,GBP
+FX_EURGBP_6M_B,currency[2],string,EUR
+FX_EURGBP_6M_B,currentNotional,double,4100000.000000
+FX_EURGBP_6M_B,discountFactor[1],double,0.984970
+FX_EURGBP_6M_B,discountFactor[2],double,0.989825
+FX_EURGBP_6M_B,fairForwardRate,double,0.815940
+FX_EURGBP_6M_B,fxSpot,double,0.811938
+FX_EURGBP_6M_B,instMultiplier,double,1.000000
+FX_EURGBP_6M_B,legNPV[1],double,-4038377.622290
+FX_EURGBP_6M_B,legNPV[2],double,4018381.151280
+FX_EURGBP_6M_B,notionalCurrency,string,GBP
+FX_EURUSD_1Y,PricingConfigEngine,string,DiscountingFxForwardEngine
+FX_EURUSD_1Y,PricingConfigModel,string,DiscountedCashflows
+FX_EURUSD_1Y,PricingConfigProductType,string,FxForward
+FX_EURUSD_1Y,boughtAmount,double,11500000.000000
+FX_EURUSD_1Y,boughtCurrency,string,USD
+FX_EURUSD_1Y,isdaAssetClass,string,Foreign Exchange
+FX_EURUSD_1Y,isdaBaseProduct,string,Forward
+FX_EURUSD_1Y,isdaSubProduct,string,
+FX_EURUSD_1Y,isdaTransaction,string,
+FX_EURUSD_1Y,payDate,date,2017-02-07
+FX_EURUSD_1Y,settlement,string,Physical
+FX_EURUSD_1Y,soldAmount,double,10000000.000000
+FX_EURUSD_1Y,soldCurrency,string,EUR
+FX_EURUSD_1Y,valueDate,string,2017-02-07
+FX_EURUSD_1Y,cashFlowResults[0],cashflows,11500000.000000 USD @ 2017-02-07
+FX_EURUSD_1Y,cashFlowResults[1],cashflows,-10000000.000000 EUR @ 2017-02-07
+FX_EURUSD_1Y,currency[1],string,EUR
+FX_EURUSD_1Y,currency[2],string,USD
+FX_EURUSD_1Y,currentNotional,double,11500000.000000
+FX_EURUSD_1Y,discountFactor[1],double,0.979961
+FX_EURUSD_1Y,discountFactor[2],double,0.967114
+FX_EURUSD_1Y,fairForwardRate,double,0.871552
+FX_EURUSD_1Y,fxSpot,double,0.883129
+FX_EURUSD_1Y,instMultiplier,double,1.000000
+FX_EURUSD_1Y,legNPV[1],double,-9799609.201923
+FX_EURUSD_1Y,legNPV[2],double,9822000.018664
+FX_EURUSD_1Y,notionalCurrency,string,USD
+FX_EURUSD_1Y_B,PricingConfigEngine,string,DiscountingFxForwardEngine
+FX_EURUSD_1Y_B,PricingConfigModel,string,DiscountedCashflows
+FX_EURUSD_1Y_B,PricingConfigProductType,string,FxForward
+FX_EURUSD_1Y_B,boughtAmount,double,11500000.000000
+FX_EURUSD_1Y_B,boughtCurrency,string,USD
+FX_EURUSD_1Y_B,isdaAssetClass,string,Foreign Exchange
+FX_EURUSD_1Y_B,isdaBaseProduct,string,Forward
+FX_EURUSD_1Y_B,isdaSubProduct,string,
+FX_EURUSD_1Y_B,isdaTransaction,string,
+FX_EURUSD_1Y_B,payDate,date,2017-02-07
+FX_EURUSD_1Y_B,settlement,string,Physical
+FX_EURUSD_1Y_B,soldAmount,double,10000000.000000
+FX_EURUSD_1Y_B,soldCurrency,string,EUR
+FX_EURUSD_1Y_B,valueDate,string,2017-02-07
+FX_EURUSD_1Y_B,cashFlowResults[0],cashflows,11500000.000000 USD @ 2017-02-07
+FX_EURUSD_1Y_B,cashFlowResults[1],cashflows,-10000000.000000 EUR @ 2017-02-07
+FX_EURUSD_1Y_B,currency[1],string,EUR
+FX_EURUSD_1Y_B,currency[2],string,USD
+FX_EURUSD_1Y_B,currentNotional,double,11500000.000000
+FX_EURUSD_1Y_B,discountFactor[1],double,0.979961
+FX_EURUSD_1Y_B,discountFactor[2],double,0.967114
+FX_EURUSD_1Y_B,fairForwardRate,double,0.871552
+FX_EURUSD_1Y_B,fxSpot,double,0.883129
+FX_EURUSD_1Y_B,instMultiplier,double,1.000000
+FX_EURUSD_1Y_B,legNPV[1],double,-9799609.201923
+FX_EURUSD_1Y_B,legNPV[2],double,9822000.018664
+FX_EURUSD_1Y_B,notionalCurrency,string,USD
+FX_EURUSD_6M_D,PricingConfigEngine,string,DiscountingFxForwardEngine
+FX_EURUSD_6M_D,PricingConfigModel,string,DiscountedCashflows
+FX_EURUSD_6M_D,PricingConfigProductType,string,FxForward
+FX_EURUSD_6M_D,boughtAmount,double,5700000.000000
+FX_EURUSD_6M_D,boughtCurrency,string,USD
+FX_EURUSD_6M_D,isdaAssetClass,string,Foreign Exchange
+FX_EURUSD_6M_D,isdaBaseProduct,string,Forward
+FX_EURUSD_6M_D,isdaSubProduct,string,
+FX_EURUSD_6M_D,isdaTransaction,string,
+FX_EURUSD_6M_D,payDate,date,2016-08-08
+FX_EURUSD_6M_D,settlement,string,Physical
+FX_EURUSD_6M_D,soldAmount,double,5000000.000000
+FX_EURUSD_6M_D,soldCurrency,string,EUR
+FX_EURUSD_6M_D,valueDate,string,2016-08-08
+FX_EURUSD_6M_D,cashFlowResults[0],cashflows,5700000.000000 USD @ 2016-08-08
+FX_EURUSD_6M_D,cashFlowResults[1],cashflows,-5000000.000000 EUR @ 2016-08-08
+FX_EURUSD_6M_D,currency[1],string,EUR
+FX_EURUSD_6M_D,currency[2],string,USD
+FX_EURUSD_6M_D,currentNotional,double,5700000.000000
+FX_EURUSD_6M_D,discountFactor[1],double,0.989825
+FX_EURUSD_6M_D,discountFactor[2],double,0.983924
+FX_EURUSD_6M_D,fairForwardRate,double,0.877865
+FX_EURUSD_6M_D,fxSpot,double,0.883129
+FX_EURUSD_6M_D,instMultiplier,double,1.000000
+FX_EURUSD_6M_D,legNPV[1],double,-4949123.148911
+FX_EURUSD_6M_D,legNPV[2],double,4952912.969170
+FX_EURUSD_6M_D,notionalCurrency,string,USD
+FX_GBPUSD_2Y,PricingConfigEngine,string,DiscountingFxForwardEngine
+FX_GBPUSD_2Y,PricingConfigModel,string,DiscountedCashflows
+FX_GBPUSD_2Y,PricingConfigProductType,string,FxForward
+FX_GBPUSD_2Y,boughtAmount,double,3000000.000000
+FX_GBPUSD_2Y,boughtCurrency,string,GBP
+FX_GBPUSD_2Y,isdaAssetClass,string,Foreign Exchange
+FX_GBPUSD_2Y,isdaBaseProduct,string,Forward
+FX_GBPUSD_2Y,isdaSubProduct,string,
+FX_GBPUSD_2Y,isdaTransaction,string,
+FX_GBPUSD_2Y,payDate,date,2018-02-07
+FX_GBPUSD_2Y,settlement,string,Physical
+FX_GBPUSD_2Y,soldAmount,double,4400000.000000
+FX_GBPUSD_2Y,soldCurrency,string,USD
+FX_GBPUSD_2Y,valueDate,string,2018-02-07
+FX_GBPUSD_2Y,cashFlowResults[0],cashflows,3000000.000000 GBP @ 2018-02-07
+FX_GBPUSD_2Y,cashFlowResults[1],cashflows,-4400000.000000 USD @ 2018-02-07
+FX_GBPUSD_2Y,currency[1],string,USD
+FX_GBPUSD_2Y,currency[2],string,GBP
+FX_GBPUSD_2Y,currentNotional,double,4400000.000000
+FX_GBPUSD_2Y,discountFactor[1],double,0.928686
+FX_GBPUSD_2Y,discountFactor[2],double,0.948236
+FX_GBPUSD_2Y,fairForwardRate,double,1.423969
+FX_GBPUSD_2Y,fxSpot,double,1.394610
+FX_GBPUSD_2Y,instMultiplier,double,1.000000
+FX_GBPUSD_2Y,legNPV[1],double,-4086216.505383
+FX_GBPUSD_2Y,legNPV[2],double,3967257.582841
+FX_GBPUSD_2Y,notionalCurrency,string,USD
+FX_GBPUSD_2Y_B,PricingConfigEngine,string,DiscountingFxForwardEngine
+FX_GBPUSD_2Y_B,PricingConfigModel,string,DiscountedCashflows
+FX_GBPUSD_2Y_B,PricingConfigProductType,string,FxForward
+FX_GBPUSD_2Y_B,boughtAmount,double,3000000.000000
+FX_GBPUSD_2Y_B,boughtCurrency,string,GBP
+FX_GBPUSD_2Y_B,isdaAssetClass,string,Foreign Exchange
+FX_GBPUSD_2Y_B,isdaBaseProduct,string,Forward
+FX_GBPUSD_2Y_B,isdaSubProduct,string,
+FX_GBPUSD_2Y_B,isdaTransaction,string,
+FX_GBPUSD_2Y_B,payDate,date,2018-02-07
+FX_GBPUSD_2Y_B,settlement,string,Physical
+FX_GBPUSD_2Y_B,soldAmount,double,4400000.000000
+FX_GBPUSD_2Y_B,soldCurrency,string,USD
+FX_GBPUSD_2Y_B,valueDate,string,2018-02-07
+FX_GBPUSD_2Y_B,cashFlowResults[0],cashflows,3000000.000000 GBP @ 2018-02-07
+FX_GBPUSD_2Y_B,cashFlowResults[1],cashflows,-4400000.000000 USD @ 2018-02-07
+FX_GBPUSD_2Y_B,currency[1],string,USD
+FX_GBPUSD_2Y_B,currency[2],string,GBP
+FX_GBPUSD_2Y_B,currentNotional,double,4400000.000000
+FX_GBPUSD_2Y_B,discountFactor[1],double,0.928686
+FX_GBPUSD_2Y_B,discountFactor[2],double,0.948236
+FX_GBPUSD_2Y_B,fairForwardRate,double,1.423969
+FX_GBPUSD_2Y_B,fxSpot,double,1.394610
+FX_GBPUSD_2Y_B,instMultiplier,double,1.000000
+FX_GBPUSD_2Y_B,legNPV[1],double,-4086216.505383
+FX_GBPUSD_2Y_B,legNPV[2],double,3967257.582841
+FX_GBPUSD_2Y_B,notionalCurrency,string,USD
+FX_OPT_EURUSD,PricingConfigEngine,string,AnalyticEuropeanEngine
+FX_OPT_EURUSD,PricingConfigModel,string,GarmanKohlhagen
+FX_OPT_EURUSD,PricingConfigProductType,string,FxOption
+FX_OPT_EURUSD,boughtAmount,double,8000000.000000
+FX_OPT_EURUSD,boughtCurrency,string,EUR
+FX_OPT_EURUSD,isdaAssetClass,string,Foreign Exchange
+FX_OPT_EURUSD,isdaBaseProduct,string,Vanilla Option
+FX_OPT_EURUSD,isdaSubProduct,string,
+FX_OPT_EURUSD,isdaTransaction,string,
+FX_OPT_EURUSD,soldAmount,double,9200000.000000
+FX_OPT_EURUSD,soldCurrency,string,USD
+FX_OPT_EURUSD,cashFlowResults[0],cashflows,0.054260  @ 2017-02-07
+FX_OPT_EURUSD,discountFactor,double,0.967114
+FX_OPT_EURUSD,dividendDiscount,double,0.979961
+FX_OPT_EURUSD,forward,double,1.147378
+FX_OPT_EURUSD,instMultiplier,double,8000000.000000
+FX_OPT_EURUSD,riskFreeDiscount,double,0.967114
+FX_OPT_EURUSD,spot,double,1.132337
+FX_OPT_EURUSD,strike,double,1.150000
+FX_OPT_EURUSD,timeToExpiry,double,1.008219
+FX_OPT_EURUSD,volatility,double,0.120823
+FX_OPT_EURUSD_B,PricingConfigEngine,string,AnalyticEuropeanEngine
+FX_OPT_EURUSD_B,PricingConfigModel,string,GarmanKohlhagen
+FX_OPT_EURUSD_B,PricingConfigProductType,string,FxOption
+FX_OPT_EURUSD_B,boughtAmount,double,8000000.000000
+FX_OPT_EURUSD_B,boughtCurrency,string,EUR
+FX_OPT_EURUSD_B,isdaAssetClass,string,Foreign Exchange
+FX_OPT_EURUSD_B,isdaBaseProduct,string,Vanilla Option
+FX_OPT_EURUSD_B,isdaSubProduct,string,
+FX_OPT_EURUSD_B,isdaTransaction,string,
+FX_OPT_EURUSD_B,soldAmount,double,9200000.000000
+FX_OPT_EURUSD_B,soldCurrency,string,USD
+FX_OPT_EURUSD_B,cashFlowResults[0],cashflows,0.054260  @ 2017-02-07
+FX_OPT_EURUSD_B,discountFactor,double,0.967114
+FX_OPT_EURUSD_B,dividendDiscount,double,0.979961
+FX_OPT_EURUSD_B,forward,double,1.147378
+FX_OPT_EURUSD_B,instMultiplier,double,8000000.000000
+FX_OPT_EURUSD_B,riskFreeDiscount,double,0.967114
+FX_OPT_EURUSD_B,spot,double,1.132337
+FX_OPT_EURUSD_B,strike,double,1.150000
+FX_OPT_EURUSD_B,timeToExpiry,double,1.008219
+FX_OPT_EURUSD_B,volatility,double,0.120823
+IR_EUR_10Y,PV01[1],double,8966.694332
+IR_EUR_10Y,PricingConfigEngine,string,DiscountingSwapEngine
+IR_EUR_10Y,PricingConfigModel,string,DiscountedCashflows
+IR_EUR_10Y,PricingConfigProductType[0],string,CapFloor_as_Swap
+IR_EUR_10Y,PricingConfigProductType[1],string,Swap
+IR_EUR_10Y,amount[1],double,100000.000000
+IR_EUR_10Y,amount[2],double,101111.111111
+IR_EUR_10Y,atmForward,double,0.020000
+IR_EUR_10Y,currentNotional[1],double,10000000.000000
+IR_EUR_10Y,currentNotional[2],double,10000000.000000
+IR_EUR_10Y,index[2],string,Euribor6M Actual/360
+IR_EUR_10Y,isPayer[1],bool,false
+IR_EUR_10Y,isPayer[2],bool,true
+IR_EUR_10Y,isdaAssetClass,string,Interest Rate
+IR_EUR_10Y,isdaBaseProduct,string,IR Swap
+IR_EUR_10Y,isdaSubProduct,string,Fixed Float
+IR_EUR_10Y,isdaTransaction,string,
+IR_EUR_10Y,legNPV[1],double,896669.433167
+IR_EUR_10Y,legNPV[2],double,-1793338.866333
+IR_EUR_10Y,legType[1],string,Fixed
+IR_EUR_10Y,legType[2],string,Floating
+IR_EUR_10Y,notionalCurrency[1],string,EUR
+IR_EUR_10Y,notionalCurrency[2],string,EUR
+IR_EUR_10Y,originalNotional[1],double,10000000.000000
+IR_EUR_10Y,originalNotional[2],double,10000000.000000
+IR_EUR_10Y,paymentDate[1],string,2017-02-09
+IR_EUR_10Y,paymentDate[2],string,2016-08-09
+IR_EUR_10Y,rate[1],double,0.010000
+IR_EUR_10Y,rate[2],double,0.020000
+IR_EUR_10Y,spreadCorrection,double,0.000000
+IR_EUR_10Y,spread[2],double,0.000000
+IR_EUR_10Y,startDate,string,2016-02-09
+IR_EUR_10Y_B,PV01[1],double,8966.694332
+IR_EUR_10Y_B,PricingConfigEngine,string,DiscountingSwapEngine
+IR_EUR_10Y_B,PricingConfigModel,string,DiscountedCashflows
+IR_EUR_10Y_B,PricingConfigProductType[0],string,CapFloor_as_Swap
+IR_EUR_10Y_B,PricingConfigProductType[1],string,Swap
+IR_EUR_10Y_B,amount[1],double,100000.000000
+IR_EUR_10Y_B,amount[2],double,101111.111111
+IR_EUR_10Y_B,atmForward,double,0.020000
+IR_EUR_10Y_B,currentNotional[1],double,10000000.000000
+IR_EUR_10Y_B,currentNotional[2],double,10000000.000000
+IR_EUR_10Y_B,index[2],string,Euribor6M Actual/360
+IR_EUR_10Y_B,isPayer[1],bool,false
+IR_EUR_10Y_B,isPayer[2],bool,true
+IR_EUR_10Y_B,isdaAssetClass,string,Interest Rate
+IR_EUR_10Y_B,isdaBaseProduct,string,IR Swap
+IR_EUR_10Y_B,isdaSubProduct,string,Fixed Float
+IR_EUR_10Y_B,isdaTransaction,string,
+IR_EUR_10Y_B,legNPV[1],double,896669.433167
+IR_EUR_10Y_B,legNPV[2],double,-1793338.866333
+IR_EUR_10Y_B,legType[1],string,Fixed
+IR_EUR_10Y_B,legType[2],string,Floating
+IR_EUR_10Y_B,notionalCurrency[1],string,EUR
+IR_EUR_10Y_B,notionalCurrency[2],string,EUR
+IR_EUR_10Y_B,originalNotional[1],double,10000000.000000
+IR_EUR_10Y_B,originalNotional[2],double,10000000.000000
+IR_EUR_10Y_B,paymentDate[1],string,2017-02-09
+IR_EUR_10Y_B,paymentDate[2],string,2016-08-09
+IR_EUR_10Y_B,rate[1],double,0.010000
+IR_EUR_10Y_B,rate[2],double,0.020000
+IR_EUR_10Y_B,spreadCorrection,double,0.000000
+IR_EUR_10Y_B,spread[2],double,0.000000
+IR_EUR_10Y_B,startDate,string,2016-02-09
+IR_EUR_2Y_C,PV01[1],double,4850.584715
+IR_EUR_2Y_C,PricingConfigEngine,string,DiscountingSwapEngine
+IR_EUR_2Y_C,PricingConfigModel,string,DiscountedCashflows
+IR_EUR_2Y_C,PricingConfigProductType[0],string,CapFloor_as_Swap
+IR_EUR_2Y_C,PricingConfigProductType[1],string,Swap
+IR_EUR_2Y_C,amount[1],double,0.000000
+IR_EUR_2Y_C,amount[2],double,252777.777778
+IR_EUR_2Y_C,atmForward,double,0.020000
+IR_EUR_2Y_C,currentNotional[1],double,25000000.000000
+IR_EUR_2Y_C,currentNotional[2],double,25000000.000000
+IR_EUR_2Y_C,index[2],string,Euribor6M Actual/360
+IR_EUR_2Y_C,isPayer[1],bool,true
+IR_EUR_2Y_C,isPayer[2],bool,false
+IR_EUR_2Y_C,isdaAssetClass,string,Interest Rate
+IR_EUR_2Y_C,isdaBaseProduct,string,IR Swap
+IR_EUR_2Y_C,isdaSubProduct,string,Fixed Float
+IR_EUR_2Y_C,isdaTransaction,string,
+IR_EUR_2Y_C,legNPV[1],double,-0.000000
+IR_EUR_2Y_C,legNPV[2],double,970116.942905
+IR_EUR_2Y_C,legType[1],string,Fixed
+IR_EUR_2Y_C,legType[2],string,Floating
+IR_EUR_2Y_C,notionalCurrency[1],string,EUR
+IR_EUR_2Y_C,notionalCurrency[2],string,EUR
+IR_EUR_2Y_C,originalNotional[1],double,25000000.000000
+IR_EUR_2Y_C,originalNotional[2],double,25000000.000000
+IR_EUR_2Y_C,paymentDate[1],string,2017-02-09
+IR_EUR_2Y_C,paymentDate[2],string,2016-08-09
+IR_EUR_2Y_C,rate[1],double,0.000000
+IR_EUR_2Y_C,rate[2],double,0.020000
+IR_EUR_2Y_C,spreadCorrection,double,-0.000000
+IR_EUR_2Y_C,spread[2],double,0.000000
+IR_EUR_2Y_C,startDate,string,2016-02-09
+IR_EUR_3Y,PV01[1],double,4329.978991
+IR_EUR_3Y,PricingConfigEngine,string,DiscountingSwapEngine
+IR_EUR_3Y,PricingConfigModel,string,DiscountedCashflows
+IR_EUR_3Y,PricingConfigProductType[0],string,CapFloor_as_Swap
+IR_EUR_3Y,PricingConfigProductType[1],string,Swap
+IR_EUR_3Y,amount[1],double,30000.000000
+IR_EUR_3Y,amount[2],double,151666.666667
+IR_EUR_3Y,atmForward,double,0.020000
+IR_EUR_3Y,currentNotional[1],double,15000000.000000
+IR_EUR_3Y,currentNotional[2],double,15000000.000000
+IR_EUR_3Y,index[2],string,Euribor6M Actual/360
+IR_EUR_3Y,isPayer[1],bool,true
+IR_EUR_3Y,isPayer[2],bool,false
+IR_EUR_3Y,isdaAssetClass,string,Interest Rate
+IR_EUR_3Y,isdaBaseProduct,string,IR Swap
+IR_EUR_3Y,isdaSubProduct,string,Fixed Float
+IR_EUR_3Y,isdaTransaction,string,
+IR_EUR_3Y,legNPV[1],double,-86599.579827
+IR_EUR_3Y,legNPV[2],double,865995.798271
+IR_EUR_3Y,legType[1],string,Fixed
+IR_EUR_3Y,legType[2],string,Floating
+IR_EUR_3Y,notionalCurrency[1],string,EUR
+IR_EUR_3Y,notionalCurrency[2],string,EUR
+IR_EUR_3Y,originalNotional[1],double,15000000.000000
+IR_EUR_3Y,originalNotional[2],double,15000000.000000
+IR_EUR_3Y,paymentDate[1],string,2017-02-09
+IR_EUR_3Y,paymentDate[2],string,2016-08-09
+IR_EUR_3Y,rate[1],double,0.002000
+IR_EUR_3Y,rate[2],double,0.020000
+IR_EUR_3Y,spreadCorrection,double,-0.000000
+IR_EUR_3Y,spread[2],double,0.000000
+IR_EUR_3Y,startDate,string,2016-02-09
+IR_EUR_3Y_B,PV01[1],double,4329.978991
+IR_EUR_3Y_B,PricingConfigEngine,string,DiscountingSwapEngine
+IR_EUR_3Y_B,PricingConfigModel,string,DiscountedCashflows
+IR_EUR_3Y_B,PricingConfigProductType[0],string,CapFloor_as_Swap
+IR_EUR_3Y_B,PricingConfigProductType[1],string,Swap
+IR_EUR_3Y_B,amount[1],double,30000.000000
+IR_EUR_3Y_B,amount[2],double,151666.666667
+IR_EUR_3Y_B,atmForward,double,0.020000
+IR_EUR_3Y_B,currentNotional[1],double,15000000.000000
+IR_EUR_3Y_B,currentNotional[2],double,15000000.000000
+IR_EUR_3Y_B,index[2],string,Euribor6M Actual/360
+IR_EUR_3Y_B,isPayer[1],bool,true
+IR_EUR_3Y_B,isPayer[2],bool,false
+IR_EUR_3Y_B,isdaAssetClass,string,Interest Rate
+IR_EUR_3Y_B,isdaBaseProduct,string,IR Swap
+IR_EUR_3Y_B,isdaSubProduct,string,Fixed Float
+IR_EUR_3Y_B,isdaTransaction,string,
+IR_EUR_3Y_B,legNPV[1],double,-86599.579827
+IR_EUR_3Y_B,legNPV[2],double,865995.798271
+IR_EUR_3Y_B,legType[1],string,Fixed
+IR_EUR_3Y_B,legType[2],string,Floating
+IR_EUR_3Y_B,notionalCurrency[1],string,EUR
+IR_EUR_3Y_B,notionalCurrency[2],string,EUR
+IR_EUR_3Y_B,originalNotional[1],double,15000000.000000
+IR_EUR_3Y_B,originalNotional[2],double,15000000.000000
+IR_EUR_3Y_B,paymentDate[1],string,2017-02-09
+IR_EUR_3Y_B,paymentDate[2],string,2016-08-09
+IR_EUR_3Y_B,rate[1],double,0.002000
+IR_EUR_3Y_B,rate[2],double,0.020000
+IR_EUR_3Y_B,spreadCorrection,double,-0.000000
+IR_EUR_3Y_B,spread[2],double,0.000000
+IR_EUR_3Y_B,startDate,string,2016-02-09
+IR_EUR_5Y_C,PV01[1],double,11770.779380
+IR_EUR_5Y_C,PricingConfigEngine,string,DiscountingSwapEngine
+IR_EUR_5Y_C,PricingConfigModel,string,DiscountedCashflows
+IR_EUR_5Y_C,PricingConfigProductType[0],string,CapFloor_as_Swap
+IR_EUR_5Y_C,PricingConfigProductType[1],string,Swap
+IR_EUR_5Y_C,amount[1],double,75000.000000
+IR_EUR_5Y_C,amount[2],double,252777.777778
+IR_EUR_5Y_C,atmForward,double,0.020000
+IR_EUR_5Y_C,currentNotional[1],double,25000000.000000
+IR_EUR_5Y_C,currentNotional[2],double,25000000.000000
+IR_EUR_5Y_C,index[2],string,Euribor6M Actual/360
+IR_EUR_5Y_C,isPayer[1],bool,false
+IR_EUR_5Y_C,isPayer[2],bool,true
+IR_EUR_5Y_C,isdaAssetClass,string,Interest Rate
+IR_EUR_5Y_C,isdaBaseProduct,string,IR Swap
+IR_EUR_5Y_C,isdaSubProduct,string,Fixed Float
+IR_EUR_5Y_C,isdaTransaction,string,
+IR_EUR_5Y_C,legNPV[1],double,353123.381409
+IR_EUR_5Y_C,legNPV[2],double,-2354155.876061
+IR_EUR_5Y_C,legType[1],string,Fixed
+IR_EUR_5Y_C,legType[2],string,Floating
+IR_EUR_5Y_C,notionalCurrency[1],string,EUR
+IR_EUR_5Y_C,notionalCurrency[2],string,EUR
+IR_EUR_5Y_C,originalNotional[1],double,25000000.000000
+IR_EUR_5Y_C,originalNotional[2],double,25000000.000000
+IR_EUR_5Y_C,paymentDate[1],string,2017-02-09
+IR_EUR_5Y_C,paymentDate[2],string,2016-08-09
+IR_EUR_5Y_C,rate[1],double,0.003000
+IR_EUR_5Y_C,rate[2],double,0.020000
+IR_EUR_5Y_C,spreadCorrection,double,0.000000
+IR_EUR_5Y_C,spread[2],double,0.000000
+IR_EUR_5Y_C,startDate,string,2016-02-09
+IR_EUR_9M,PV01[1],double,1477.180767
+IR_EUR_9M,PricingConfigEngine,string,DiscountingSwapEngine
+IR_EUR_9M,PricingConfigModel,string,DiscountedCashflows
+IR_EUR_9M,PricingConfigProductType[0],string,CapFloor_as_Swap
+IR_EUR_9M,PricingConfigProductType[1],string,Swap
+IR_EUR_9M,amount[1],double,0.000000
+IR_EUR_9M,amount[2],double,202222.222222
+IR_EUR_9M,atmForward,double,0.020166
+IR_EUR_9M,currentNotional[1],double,20000000.000000
+IR_EUR_9M,currentNotional[2],double,20000000.000000
+IR_EUR_9M,index[2],string,Euribor6M Actual/360
+IR_EUR_9M,isPayer[1],bool,true
+IR_EUR_9M,isPayer[2],bool,false
+IR_EUR_9M,isdaAssetClass,string,Interest Rate
+IR_EUR_9M,isdaBaseProduct,string,IR Swap
+IR_EUR_9M,isdaSubProduct,string,Fixed Float
+IR_EUR_9M,isdaTransaction,string,
+IR_EUR_9M,legNPV[1],double,-0.000000
+IR_EUR_9M,legNPV[2],double,297888.293530
+IR_EUR_9M,legType[1],string,Fixed
+IR_EUR_9M,legType[2],string,Floating
+IR_EUR_9M,notionalCurrency[1],string,EUR
+IR_EUR_9M,notionalCurrency[2],string,EUR
+IR_EUR_9M,originalNotional[1],double,20000000.000000
+IR_EUR_9M,originalNotional[2],double,20000000.000000
+IR_EUR_9M,paymentDate[1],string,2016-11-09
+IR_EUR_9M,paymentDate[2],string,2016-08-09
+IR_EUR_9M,rate[1],double,0.000000
+IR_EUR_9M,rate[2],double,0.020000
+IR_EUR_9M,spreadCorrection,double,-0.000000
+IR_EUR_9M,spread[2],double,0.000000
+IR_EUR_9M,startDate,string,2016-02-09
+IR_EUR_9M_B,PV01[1],double,1477.180767
+IR_EUR_9M_B,PricingConfigEngine,string,DiscountingSwapEngine
+IR_EUR_9M_B,PricingConfigModel,string,DiscountedCashflows
+IR_EUR_9M_B,PricingConfigProductType[0],string,CapFloor_as_Swap
+IR_EUR_9M_B,PricingConfigProductType[1],string,Swap
+IR_EUR_9M_B,amount[1],double,0.000000
+IR_EUR_9M_B,amount[2],double,202222.222222
+IR_EUR_9M_B,atmForward,double,0.020166
+IR_EUR_9M_B,currentNotional[1],double,20000000.000000
+IR_EUR_9M_B,currentNotional[2],double,20000000.000000
+IR_EUR_9M_B,index[2],string,Euribor6M Actual/360
+IR_EUR_9M_B,isPayer[1],bool,true
+IR_EUR_9M_B,isPayer[2],bool,false
+IR_EUR_9M_B,isdaAssetClass,string,Interest Rate
+IR_EUR_9M_B,isdaBaseProduct,string,IR Swap
+IR_EUR_9M_B,isdaSubProduct,string,Fixed Float
+IR_EUR_9M_B,isdaTransaction,string,
+IR_EUR_9M_B,legNPV[1],double,-0.000000
+IR_EUR_9M_B,legNPV[2],double,297888.293530
+IR_EUR_9M_B,legType[1],string,Fixed
+IR_EUR_9M_B,legType[2],string,Floating
+IR_EUR_9M_B,notionalCurrency[1],string,EUR
+IR_EUR_9M_B,notionalCurrency[2],string,EUR
+IR_EUR_9M_B,originalNotional[1],double,20000000.000000
+IR_EUR_9M_B,originalNotional[2],double,20000000.000000
+IR_EUR_9M_B,paymentDate[1],string,2016-11-09
+IR_EUR_9M_B,paymentDate[2],string,2016-08-09
+IR_EUR_9M_B,rate[1],double,0.000000
+IR_EUR_9M_B,rate[2],double,0.020000
+IR_EUR_9M_B,spreadCorrection,double,-0.000000
+IR_EUR_9M_B,spread[2],double,0.000000
+IR_EUR_9M_B,startDate,string,2016-02-09
+IR_EUR_FWD,PV01[1],double,6890.901649
+IR_EUR_FWD,PricingConfigEngine,string,DiscountingSwapEngine
+IR_EUR_FWD,PricingConfigModel,string,DiscountedCashflows
+IR_EUR_FWD,PricingConfigProductType[0],string,CapFloor_as_Swap
+IR_EUR_FWD,PricingConfigProductType[1],string,Swap
+IR_EUR_FWD,amount[1],double,96533.333333
+IR_EUR_FWD,amount[2],double,78942.699048
+IR_EUR_FWD,atmForward,double,0.020000
+IR_EUR_FWD,currentNotional[1],double,8000000.000000
+IR_EUR_FWD,currentNotional[2],double,8000000.000000
+IR_EUR_FWD,index[2],string,Euribor6M Actual/360
+IR_EUR_FWD,isPayer[1],bool,true
+IR_EUR_FWD,isPayer[2],bool,false
+IR_EUR_FWD,isdaAssetClass,string,Interest Rate
+IR_EUR_FWD,isdaBaseProduct,string,IR Swap
+IR_EUR_FWD,isdaSubProduct,string,Fixed Float
+IR_EUR_FWD,isdaTransaction,string,
+IR_EUR_FWD,legNPV[1],double,-826908.197837
+IR_EUR_FWD,legNPV[2],double,1378180.329728
+IR_EUR_FWD,legType[1],string,Fixed
+IR_EUR_FWD,legType[2],string,Floating
+IR_EUR_FWD,notionalCurrency[1],string,EUR
+IR_EUR_FWD,notionalCurrency[2],string,EUR
+IR_EUR_FWD,originalNotional[1],double,8000000.000000
+IR_EUR_FWD,originalNotional[2],double,8000000.000000
+IR_EUR_FWD,paymentDate[1],string,2019-02-11
+IR_EUR_FWD,paymentDate[2],string,2018-08-09
+IR_EUR_FWD,rate[1],double,0.012000
+IR_EUR_FWD,rate[2],double,0.019627
+IR_EUR_FWD,spreadCorrection,double,-0.000000
+IR_EUR_FWD,spread[2],double,0.000000
+IR_EUR_FWD,startDate,string,2018-02-09
+IR_EUR_FWD_B,PV01[1],double,6890.901649
+IR_EUR_FWD_B,PricingConfigEngine,string,DiscountingSwapEngine
+IR_EUR_FWD_B,PricingConfigModel,string,DiscountedCashflows
+IR_EUR_FWD_B,PricingConfigProductType[0],string,CapFloor_as_Swap
+IR_EUR_FWD_B,PricingConfigProductType[1],string,Swap
+IR_EUR_FWD_B,amount[1],double,96533.333333
+IR_EUR_FWD_B,amount[2],double,78942.699048
+IR_EUR_FWD_B,atmForward,double,0.020000
+IR_EUR_FWD_B,currentNotional[1],double,8000000.000000
+IR_EUR_FWD_B,currentNotional[2],double,8000000.000000
+IR_EUR_FWD_B,index[2],string,Euribor6M Actual/360
+IR_EUR_FWD_B,isPayer[1],bool,true
+IR_EUR_FWD_B,isPayer[2],bool,false
+IR_EUR_FWD_B,isdaAssetClass,string,Interest Rate
+IR_EUR_FWD_B,isdaBaseProduct,string,IR Swap
+IR_EUR_FWD_B,isdaSubProduct,string,Fixed Float
+IR_EUR_FWD_B,isdaTransaction,string,
+IR_EUR_FWD_B,legNPV[1],double,-826908.197837
+IR_EUR_FWD_B,legNPV[2],double,1378180.329728
+IR_EUR_FWD_B,legType[1],string,Fixed
+IR_EUR_FWD_B,legType[2],string,Floating
+IR_EUR_FWD_B,notionalCurrency[1],string,EUR
+IR_EUR_FWD_B,notionalCurrency[2],string,EUR
+IR_EUR_FWD_B,originalNotional[1],double,8000000.000000
+IR_EUR_FWD_B,originalNotional[2],double,8000000.000000
+IR_EUR_FWD_B,paymentDate[1],string,2019-02-11
+IR_EUR_FWD_B,paymentDate[2],string,2018-08-09
+IR_EUR_FWD_B,rate[1],double,0.012000
+IR_EUR_FWD_B,rate[2],double,0.019627
+IR_EUR_FWD_B,spreadCorrection,double,-0.000000
+IR_EUR_FWD_B,spread[2],double,0.000000
+IR_EUR_FWD_B,startDate,string,2018-02-09
+IR_GBP_7Y,PV01[1],double,3786.591584
+IR_GBP_7Y,PricingConfigEngine,string,DiscountingSwapEngine
+IR_GBP_7Y,PricingConfigModel,string,DiscountedCashflows
+IR_GBP_7Y,PricingConfigProductType[0],string,CapFloor_as_Swap
+IR_GBP_7Y,PricingConfigProductType[1],string,Swap
+IR_GBP_7Y,amount[1],double,96000.000000
+IR_GBP_7Y,amount[2],double,27136.200000
+IR_GBP_7Y,atmForward,double,0.012106
+IR_GBP_7Y,currentNotional[1],double,6000000.000000
+IR_GBP_7Y,currentNotional[2],double,6000000.000000
+IR_GBP_7Y,index[2],string,GBPLibor6M Actual/365 (Fixed)
+IR_GBP_7Y,isPayer[1],bool,false
+IR_GBP_7Y,isPayer[2],bool,true
+IR_GBP_7Y,isdaAssetClass,string,Interest Rate
+IR_GBP_7Y,isdaBaseProduct,string,IR Swap
+IR_GBP_7Y,isdaSubProduct,string,Fixed Float
+IR_GBP_7Y,isdaTransaction,string,
+IR_GBP_7Y,legNPV[1],double,605854.653510
+IR_GBP_7Y,legNPV[2],double,-458416.991285
+IR_GBP_7Y,legType[1],string,Fixed
+IR_GBP_7Y,legType[2],string,Floating
+IR_GBP_7Y,notionalCurrency[1],string,GBP
+IR_GBP_7Y,notionalCurrency[2],string,GBP
+IR_GBP_7Y,originalNotional[1],double,6000000.000000
+IR_GBP_7Y,originalNotional[2],double,6000000.000000
+IR_GBP_7Y,paymentDate[1],string,2017-02-09
+IR_GBP_7Y,paymentDate[2],string,2016-08-09
+IR_GBP_7Y,rate[1],double,0.016000
+IR_GBP_7Y,rate[2],double,0.008946
+IR_GBP_7Y,spreadCorrection,double,0.000000
+IR_GBP_7Y,spread[2],double,0.000000
+IR_GBP_7Y,startDate,string,2016-02-09
+IR_GBP_7Y_B,PV01[1],double,3786.591584
+IR_GBP_7Y_B,PricingConfigEngine,string,DiscountingSwapEngine
+IR_GBP_7Y_B,PricingConfigModel,string,DiscountedCashflows
+IR_GBP_7Y_B,PricingConfigProductType[0],string,CapFloor_as_Swap
+IR_GBP_7Y_B,PricingConfigProductType[1],string,Swap
+IR_GBP_7Y_B,amount[1],double,96000.000000
+IR_GBP_7Y_B,amount[2],double,27136.200000
+IR_GBP_7Y_B,atmForward,double,0.012106
+IR_GBP_7Y_B,currentNotional[1],double,6000000.000000
+IR_GBP_7Y_B,currentNotional[2],double,6000000.000000
+IR_GBP_7Y_B,index[2],string,GBPLibor6M Actual/365 (Fixed)
+IR_GBP_7Y_B,isPayer[1],bool,false
+IR_GBP_7Y_B,isPayer[2],bool,true
+IR_GBP_7Y_B,isdaAssetClass,string,Interest Rate
+IR_GBP_7Y_B,isdaBaseProduct,string,IR Swap
+IR_GBP_7Y_B,isdaSubProduct,string,Fixed Float
+IR_GBP_7Y_B,isdaTransaction,string,
+IR_GBP_7Y_B,legNPV[1],double,605854.653510
+IR_GBP_7Y_B,legNPV[2],double,-458416.991285
+IR_GBP_7Y_B,legType[1],string,Fixed
+IR_GBP_7Y_B,legType[2],string,Floating
+IR_GBP_7Y_B,notionalCurrency[1],string,GBP
+IR_GBP_7Y_B,notionalCurrency[2],string,GBP
+IR_GBP_7Y_B,originalNotional[1],double,6000000.000000
+IR_GBP_7Y_B,originalNotional[2],double,6000000.000000
+IR_GBP_7Y_B,paymentDate[1],string,2017-02-09
+IR_GBP_7Y_B,paymentDate[2],string,2016-08-09
+IR_GBP_7Y_B,rate[1],double,0.016000
+IR_GBP_7Y_B,rate[2],double,0.008946
+IR_GBP_7Y_B,spreadCorrection,double,0.000000
+IR_GBP_7Y_B,spread[2],double,0.000000
+IR_GBP_7Y_B,startDate,string,2016-02-09
+IR_SWPT_EUR,PricingConfigEngine,string,BlackBachelierSwaptionEngine
+IR_SWPT_EUR,PricingConfigModel,string,BlackBachelier
+IR_SWPT_EUR,PricingConfigProductType[0],string,EuropeanSwaption
+IR_SWPT_EUR,PricingConfigProductType[1],string,EuropeanSwaption_NonStandard
+IR_SWPT_EUR,amount[1],double,80000.000000
+IR_SWPT_EUR,amount[2],double,97860.757251
+IR_SWPT_EUR,atmForward,double,0.019965
+IR_SWPT_EUR,currentNotional[1],double,10000000.000000
+IR_SWPT_EUR,currentNotional[2],double,10000000.000000
+IR_SWPT_EUR,index[2],string,Euribor6M Actual/360
+IR_SWPT_EUR,isPayer[1],bool,true
+IR_SWPT_EUR,isPayer[2],bool,false
+IR_SWPT_EUR,isdaAssetClass,string,Interest Rate
+IR_SWPT_EUR,isdaBaseProduct,string,Option
+IR_SWPT_EUR,isdaSubProduct,string,Swaption
+IR_SWPT_EUR,isdaTransaction,string,
+IR_SWPT_EUR,legType[1],string,Fixed
+IR_SWPT_EUR,legType[2],string,Floating
+IR_SWPT_EUR,notionalCurrency[1],string,EUR
+IR_SWPT_EUR,notionalCurrency[2],string,EUR
+IR_SWPT_EUR,originalNotional[1],double,10000000.000000
+IR_SWPT_EUR,originalNotional[2],double,10000000.000000
+IR_SWPT_EUR,paymentDate[1],string,2018-02-09
+IR_SWPT_EUR,paymentDate[2],string,2017-08-09
+IR_SWPT_EUR,rate[1],double,0.008000
+IR_SWPT_EUR,rate[2],double,0.019464
+IR_SWPT_EUR,spreadCorrection,double,-0.000000
+IR_SWPT_EUR,spread[2],double,0.000000
+IR_SWPT_EUR,annuity,double,46146859.848621
+IR_SWPT_EUR,atmForward,double,0.019965
+IR_SWPT_EUR,delta,double,45750987.113640
+IR_SWPT_EUR,effectiveAtmForward,double,0.019965
+IR_SWPT_EUR,fixedBps,double,-46146859.848621
+IR_SWPT_EUR,fixedNpv,double,-369174.878789
+IR_SWPT_EUR,floatingNpv,double,921344.790588
+IR_SWPT_EUR,floatingSpreadNpv,double,0.000000
+IR_SWPT_EUR,impliedVolatility,double,0.005000
+IR_SWPT_EUR,instMultiplier,double,1.000000
+IR_SWPT_EUR,simpleCashflowCorrection,double,0.000000
+IR_SWPT_EUR,simpleCfNpv,double,0.000000
+IR_SWPT_EUR,spreadCorrection,double,-0.000000
+IR_SWPT_EUR,stdDev,double,0.005021
+IR_SWPT_EUR,strike,double,0.008000
+IR_SWPT_EUR,swapLength,double,5.000000
+IR_SWPT_EUR,timeToExpiry,double,1.008219
+IR_SWPT_EUR,underlyingNPV,double,552169.911799
+IR_SWPT_EUR,underlyingNpv,double,552169.911799
+IR_SWPT_EUR,vega,double,1079897.706134
+IR_SWPT_EUR,weightedFixedRate,double,0.008000
+IR_SWPT_EUR_B,PricingConfigEngine,string,BlackBachelierSwaptionEngine
+IR_SWPT_EUR_B,PricingConfigModel,string,BlackBachelier
+IR_SWPT_EUR_B,PricingConfigProductType[0],string,EuropeanSwaption
+IR_SWPT_EUR_B,PricingConfigProductType[1],string,EuropeanSwaption_NonStandard
+IR_SWPT_EUR_B,amount[1],double,80000.000000
+IR_SWPT_EUR_B,amount[2],double,97860.757251
+IR_SWPT_EUR_B,atmForward,double,0.019965
+IR_SWPT_EUR_B,currentNotional[1],double,10000000.000000
+IR_SWPT_EUR_B,currentNotional[2],double,10000000.000000
+IR_SWPT_EUR_B,index[2],string,Euribor6M Actual/360
+IR_SWPT_EUR_B,isPayer[1],bool,true
+IR_SWPT_EUR_B,isPayer[2],bool,false
+IR_SWPT_EUR_B,isdaAssetClass,string,Interest Rate
+IR_SWPT_EUR_B,isdaBaseProduct,string,Option
+IR_SWPT_EUR_B,isdaSubProduct,string,Swaption
+IR_SWPT_EUR_B,isdaTransaction,string,
+IR_SWPT_EUR_B,legType[1],string,Fixed
+IR_SWPT_EUR_B,legType[2],string,Floating
+IR_SWPT_EUR_B,notionalCurrency[1],string,EUR
+IR_SWPT_EUR_B,notionalCurrency[2],string,EUR
+IR_SWPT_EUR_B,originalNotional[1],double,10000000.000000
+IR_SWPT_EUR_B,originalNotional[2],double,10000000.000000
+IR_SWPT_EUR_B,paymentDate[1],string,2018-02-09
+IR_SWPT_EUR_B,paymentDate[2],string,2017-08-09
+IR_SWPT_EUR_B,rate[1],double,0.008000
+IR_SWPT_EUR_B,rate[2],double,0.019464
+IR_SWPT_EUR_B,spreadCorrection,double,-0.000000
+IR_SWPT_EUR_B,spread[2],double,0.000000
+IR_SWPT_EUR_B,annuity,double,46146859.848621
+IR_SWPT_EUR_B,atmForward,double,0.019965
+IR_SWPT_EUR_B,delta,double,45750987.113640
+IR_SWPT_EUR_B,effectiveAtmForward,double,0.019965
+IR_SWPT_EUR_B,fixedBps,double,-46146859.848621
+IR_SWPT_EUR_B,fixedNpv,double,-369174.878789
+IR_SWPT_EUR_B,floatingNpv,double,921344.790588
+IR_SWPT_EUR_B,floatingSpreadNpv,double,0.000000
+IR_SWPT_EUR_B,impliedVolatility,double,0.005000
+IR_SWPT_EUR_B,instMultiplier,double,1.000000
+IR_SWPT_EUR_B,simpleCashflowCorrection,double,0.000000
+IR_SWPT_EUR_B,simpleCfNpv,double,0.000000
+IR_SWPT_EUR_B,spreadCorrection,double,-0.000000
+IR_SWPT_EUR_B,stdDev,double,0.005021
+IR_SWPT_EUR_B,strike,double,0.008000
+IR_SWPT_EUR_B,swapLength,double,5.000000
+IR_SWPT_EUR_B,timeToExpiry,double,1.008219
+IR_SWPT_EUR_B,underlyingNPV,double,552169.911799
+IR_SWPT_EUR_B,underlyingNpv,double,552169.911799
+IR_SWPT_EUR_B,vega,double,1079897.706134
+IR_SWPT_EUR_B,weightedFixedRate,double,0.008000
+IR_SWPT_USD,PricingConfigEngine,string,BlackBachelierSwaptionEngine
+IR_SWPT_USD,PricingConfigModel,string,BlackBachelier
+IR_SWPT_USD,PricingConfigProductType[0],string,EuropeanSwaption
+IR_SWPT_USD,PricingConfigProductType[1],string,EuropeanSwaption_NonStandard
+IR_SWPT_USD,amount[1],double,201111.111111
+IR_SWPT_USD,amount[2],double,29737.639784
+IR_SWPT_USD,atmForward,double,0.019931
+IR_SWPT_USD,currentNotional[1],double,10000000.000000
+IR_SWPT_USD,currentNotional[2],double,10000000.000000
+IR_SWPT_USD,index[2],string,USDLibor3M Actual/360
+IR_SWPT_USD,isPayer[1],bool,false
+IR_SWPT_USD,isPayer[2],bool,true
+IR_SWPT_USD,isdaAssetClass,string,Interest Rate
+IR_SWPT_USD,isdaBaseProduct,string,Option
+IR_SWPT_USD,isdaSubProduct,string,Swaption
+IR_SWPT_USD,isdaTransaction,string,
+IR_SWPT_USD,legType[1],string,Fixed
+IR_SWPT_USD,legType[2],string,Floating
+IR_SWPT_USD,notionalCurrency[1],string,USD
+IR_SWPT_USD,notionalCurrency[2],string,USD
+IR_SWPT_USD,originalNotional[1],double,10000000.000000
+IR_SWPT_USD,originalNotional[2],double,10000000.000000
+IR_SWPT_USD,paymentDate[1],string,2019-02-11
+IR_SWPT_USD,paymentDate[2],string,2018-05-09
+IR_SWPT_USD,rate[1],double,0.020000
+IR_SWPT_USD,rate[2],double,0.012029
+IR_SWPT_USD,spreadCorrection,double,0.000000
+IR_SWPT_USD,spread[2],double,0.000000
+IR_SWPT_USD,annuity,double,75642112.222308
+IR_SWPT_USD,atmForward,double,0.019931
+IR_SWPT_USD,delta,double,-27778749.319245
+IR_SWPT_USD,effectiveAtmForward,double,0.019931
+IR_SWPT_USD,fixedBps,double,75642112.222308
+IR_SWPT_USD,fixedNpv,double,1512842.244446
+IR_SWPT_USD,floatingNpv,double,-1507647.166946
+IR_SWPT_USD,floatingSpreadNpv,double,0.000000
+IR_SWPT_USD,impliedVolatility,double,0.485735
+IR_SWPT_USD,instMultiplier,double,-1.000000
+IR_SWPT_USD,simpleCashflowCorrection,double,0.000000
+IR_SWPT_USD,simpleCfNpv,double,0.000000
+IR_SWPT_USD,spreadCorrection,double,0.000000
+IR_SWPT_USD,stdDev,double,0.688343
+IR_SWPT_USD,strike,double,0.020000
+IR_SWPT_USD,swapLength,double,10.000000
+IR_SWPT_USD,timeToExpiry,double,2.008219
+IR_SWPT_USD,underlyingNPV,double,5195.077500
+IR_SWPT_USD,underlyingNpv,double,5195.077500
+IR_SWPT_USD,vega,double,804701.642773
+IR_SWPT_USD,weightedFixedRate,double,0.020000
+IR_SWPT_USD_B,PricingConfigEngine,string,BlackBachelierSwaptionEngine
+IR_SWPT_USD_B,PricingConfigModel,string,BlackBachelier
+IR_SWPT_USD_B,PricingConfigProductType[0],string,EuropeanSwaption
+IR_SWPT_USD_B,PricingConfigProductType[1],string,EuropeanSwaption_NonStandard
+IR_SWPT_USD_B,amount[1],double,201111.111111
+IR_SWPT_USD_B,amount[2],double,29737.639784
+IR_SWPT_USD_B,atmForward,double,0.019931
+IR_SWPT_USD_B,currentNotional[1],double,10000000.000000
+IR_SWPT_USD_B,currentNotional[2],double,10000000.000000
+IR_SWPT_USD_B,index[2],string,USDLibor3M Actual/360
+IR_SWPT_USD_B,isPayer[1],bool,false
+IR_SWPT_USD_B,isPayer[2],bool,true
+IR_SWPT_USD_B,isdaAssetClass,string,Interest Rate
+IR_SWPT_USD_B,isdaBaseProduct,string,Option
+IR_SWPT_USD_B,isdaSubProduct,string,Swaption
+IR_SWPT_USD_B,isdaTransaction,string,
+IR_SWPT_USD_B,legType[1],string,Fixed
+IR_SWPT_USD_B,legType[2],string,Floating
+IR_SWPT_USD_B,notionalCurrency[1],string,USD
+IR_SWPT_USD_B,notionalCurrency[2],string,USD
+IR_SWPT_USD_B,originalNotional[1],double,10000000.000000
+IR_SWPT_USD_B,originalNotional[2],double,10000000.000000
+IR_SWPT_USD_B,paymentDate[1],string,2019-02-11
+IR_SWPT_USD_B,paymentDate[2],string,2018-05-09
+IR_SWPT_USD_B,rate[1],double,0.020000
+IR_SWPT_USD_B,rate[2],double,0.012029
+IR_SWPT_USD_B,spreadCorrection,double,0.000000
+IR_SWPT_USD_B,spread[2],double,0.000000
+IR_SWPT_USD_B,annuity,double,75642112.222308
+IR_SWPT_USD_B,atmForward,double,0.019931
+IR_SWPT_USD_B,delta,double,-27778749.319245
+IR_SWPT_USD_B,effectiveAtmForward,double,0.019931
+IR_SWPT_USD_B,fixedBps,double,75642112.222308
+IR_SWPT_USD_B,fixedNpv,double,1512842.244446
+IR_SWPT_USD_B,floatingNpv,double,-1507647.166946
+IR_SWPT_USD_B,floatingSpreadNpv,double,0.000000
+IR_SWPT_USD_B,impliedVolatility,double,0.485735
+IR_SWPT_USD_B,instMultiplier,double,-1.000000
+IR_SWPT_USD_B,simpleCashflowCorrection,double,0.000000
+IR_SWPT_USD_B,simpleCfNpv,double,0.000000
+IR_SWPT_USD_B,spreadCorrection,double,0.000000
+IR_SWPT_USD_B,stdDev,double,0.688343
+IR_SWPT_USD_B,strike,double,0.020000
+IR_SWPT_USD_B,swapLength,double,10.000000
+IR_SWPT_USD_B,timeToExpiry,double,2.008219
+IR_SWPT_USD_B,underlyingNPV,double,5195.077500
+IR_SWPT_USD_B,underlyingNpv,double,5195.077500
+IR_SWPT_USD_B,vega,double,804701.642773
+IR_SWPT_USD_B,weightedFixedRate,double,0.020000
+IR_USD_5Y,PV01[1],double,5359.032645
+IR_USD_5Y,PricingConfigEngine,string,DiscountingSwapEngine
+IR_USD_5Y,PricingConfigModel,string,DiscountedCashflows
+IR_USD_5Y,PricingConfigProductType[0],string,CapFloor_as_Swap
+IR_USD_5Y,PricingConfigProductType[1],string,Swap
+IR_USD_5Y,amount[1],double,180000.000000
+IR_USD_5Y,amount[2],double,23883.000000
+IR_USD_5Y,atmForward,double,0.012442
+IR_USD_5Y,currentNotional[1],double,12000000.000000
+IR_USD_5Y,currentNotional[2],double,12000000.000000
+IR_USD_5Y,index[2],string,USDLibor3M Actual/360
+IR_USD_5Y,isPayer[1],bool,true
+IR_USD_5Y,isPayer[2],bool,false
+IR_USD_5Y,isdaAssetClass,string,Interest Rate
+IR_USD_5Y,isdaBaseProduct,string,IR Swap
+IR_USD_5Y,isdaSubProduct,string,Fixed Float
+IR_USD_5Y,isdaTransaction,string,
+IR_USD_5Y,legNPV[1],double,-803854.896695
+IR_USD_5Y,legNPV[2],double,666772.134760
+IR_USD_5Y,legType[1],string,Fixed
+IR_USD_5Y,legType[2],string,Floating
+IR_USD_5Y,notionalCurrency[1],string,USD
+IR_USD_5Y,notionalCurrency[2],string,USD
+IR_USD_5Y,originalNotional[1],double,12000000.000000
+IR_USD_5Y,originalNotional[2],double,12000000.000000
+IR_USD_5Y,paymentDate[1],string,2017-02-09
+IR_USD_5Y,paymentDate[2],string,2016-05-09
+IR_USD_5Y,rate[1],double,0.015000
+IR_USD_5Y,rate[2],double,0.007961
+IR_USD_5Y,spreadCorrection,double,-0.000000
+IR_USD_5Y,spread[2],double,0.000000
+IR_USD_5Y,startDate,string,2016-02-09
+IR_USD_5Y_B,PV01[1],double,5359.032645
+IR_USD_5Y_B,PricingConfigEngine,string,DiscountingSwapEngine
+IR_USD_5Y_B,PricingConfigModel,string,DiscountedCashflows
+IR_USD_5Y_B,PricingConfigProductType[0],string,CapFloor_as_Swap
+IR_USD_5Y_B,PricingConfigProductType[1],string,Swap
+IR_USD_5Y_B,amount[1],double,180000.000000
+IR_USD_5Y_B,amount[2],double,23883.000000
+IR_USD_5Y_B,atmForward,double,0.012442
+IR_USD_5Y_B,currentNotional[1],double,12000000.000000
+IR_USD_5Y_B,currentNotional[2],double,12000000.000000
+IR_USD_5Y_B,index[2],string,USDLibor3M Actual/360
+IR_USD_5Y_B,isPayer[1],bool,true
+IR_USD_5Y_B,isPayer[2],bool,false
+IR_USD_5Y_B,isdaAssetClass,string,Interest Rate
+IR_USD_5Y_B,isdaBaseProduct,string,IR Swap
+IR_USD_5Y_B,isdaSubProduct,string,Fixed Float
+IR_USD_5Y_B,isdaTransaction,string,
+IR_USD_5Y_B,legNPV[1],double,-803854.896695
+IR_USD_5Y_B,legNPV[2],double,666772.134760
+IR_USD_5Y_B,legType[1],string,Fixed
+IR_USD_5Y_B,legType[2],string,Floating
+IR_USD_5Y_B,notionalCurrency[1],string,USD
+IR_USD_5Y_B,notionalCurrency[2],string,USD
+IR_USD_5Y_B,originalNotional[1],double,12000000.000000
+IR_USD_5Y_B,originalNotional[2],double,12000000.000000
+IR_USD_5Y_B,paymentDate[1],string,2017-02-09
+IR_USD_5Y_B,paymentDate[2],string,2016-05-09
+IR_USD_5Y_B,rate[1],double,0.015000
+IR_USD_5Y_B,rate[2],double,0.007961
+IR_USD_5Y_B,spreadCorrection,double,-0.000000
+IR_USD_5Y_B,spread[2],double,0.000000
+IR_USD_5Y_B,startDate,string,2016-02-09

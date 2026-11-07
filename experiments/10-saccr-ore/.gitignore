@@ -1,0 +1,7 @@
+# ORE writes logs and many reports; only the five read by compare.py are kept.
+ore/Output/*
+!ore/Output/npv.csv
+!ore/Output/additional_results.csv
+!ore/Output/cashflow.csv
+!ore/Output/saccr.csv
+!ore/Output/saccr_detail.csv

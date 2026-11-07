@@ -35,7 +35,7 @@ A **deterministic** orchestration layer, without generative AI, that plugs into 
 - Validator web UI (SSO PKCE, triggering, report, replay, decisions, audit), tested end to end.
 - PostgreSQL storage for history and governance (audit log protected by a trigger), SQLite kept for local use.
 - Deployment: non-root Docker image, hardened docker-compose, Kubernetes manifests (Pod Security restricted, NetworkPolicy).
-- Nine experiments on real data (S&P 500 VaR backtest, ECB AAA curve, change impact with `mf diff`, monthly monitoring of a frozen VaR model, fat-tailed challengers with ES backtests, GARCH and GJR volatility filters, Z2 p-values by simulation, IFRS 9 validation of a consumer loan ECL model on 612,745 Lending Club loans, data quality of the 2.26 million loans of the raw file).
+- Ten experiments on real data (S&P 500 VaR backtest, ECB AAA curve, change impact with `mf diff`, monthly monitoring of a frozen VaR model, fat-tailed challengers with ES backtests, GARCH and GJR volatility filters, Z2 p-values by simulation, IFRS 9 validation of a consumer loan ECL model on 612,745 Lending Club loans, data quality of the 2.26 million loans of the raw file, SA-CCR of 39 trades against the Open Source Risk Engine).
 - Eight examples: equity desk (VaR), PD scorecard, SA-CCR exposures, validation of QuantLib on options and bonds, on a single curve and swaps, in multi-curve, multi-asset portfolio risk, and the equity desk written with the Python SDK.
 - GitHub CI: format, clippy, tests (including PostgreSQL), example runs and reports as artifacts, diff action, Python wheel and tests, Docker image, UI tests.
 

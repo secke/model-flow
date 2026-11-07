@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<SIMMNameMappings>
+  <Mapping><Name>COMDTY_WTI_USD</Name><Qualifier>Crude oil Americas</Qualifier></Mapping>
+  <Mapping><Name>COMDTY_GOLD_USD</Name><Qualifier>Precious Metals Gold</Qualifier></Mapping>
+  <Mapping><Name>SP5</Name><Qualifier>SP5</Qualifier></Mapping>
+  <Mapping><Name>Lufthansa</Name><Qualifier>Lufthansa</Qualifier></Mapping>
+</SIMMNameMappings>

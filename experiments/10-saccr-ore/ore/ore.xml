@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<ORE>
+  <Setup>
+    <Parameter name="asofDate">2016-02-05</Parameter>
+    <Parameter name="inputPath">Input</Parameter>
+    <Parameter name="outputPath">Output</Parameter>
+    <Parameter name="logFile">log.txt</Parameter>
+    <Parameter name="logMask">31</Parameter>
+    <Parameter name="marketDataFile">../../data/market/market_20160205_flat.txt</Parameter>
+    <Parameter name="fixingDataFile">../../data/market/fixings_20160205.txt</Parameter>
+    <Parameter name="implyTodaysFixings">N</Parameter>
+    <Parameter name="curveConfigFile">../../data/market/curveconfig.xml</Parameter>
+    <Parameter name="conventionsFile">../../data/market/conventions.xml</Parameter>
+    <Parameter name="marketConfigFile">../../data/market/todaysmarket.xml</Parameter>
+    <Parameter name="pricingEnginesFile">../../data/market/pricingengine.xml</Parameter>
+    <Parameter name="portfolioFile">portfolio.xml</Parameter>
+    <Parameter name="counterpartyFile">counterparty.xml</Parameter>
+    <Parameter name="observationModel">Disable</Parameter>
+    <Parameter name="nThreads">1</Parameter>
+  </Setup>
+  <Markets>
+    <Parameter name="lgmcalibration">collateral_inccy</Parameter>
+    <Parameter name="fxcalibration">xois_eur</Parameter>
+    <Parameter name="pricing">xois_eur</Parameter>
+    <Parameter name="simulation">xois_eur</Parameter>
+    <Parameter name="sensitivity">xois_eur</Parameter>
+  </Markets>
+  <Analytics>
+    <Analytic type="npv">
+      <Parameter name="active">Y</Parameter>
+      <Parameter name="baseCurrency">EUR</Parameter>
+      <Parameter name="outputFileName">npv.csv</Parameter>
+    </Analytic>
+    <Analytic type="additionalResults">
+      <Parameter name="active">Y</Parameter>
+      <Parameter name="outputFileName">additional_results.csv</Parameter>
+    </Analytic>
+    <Analytic type="saccr">
+      <Parameter name="active">Y</Parameter>
+      <Parameter name="simmVersion">2.1</Parameter>
+      <Parameter name="nameMappingInputFile">simmnames.xml</Parameter>
+      <Parameter name="bucketMappingInputFile">simmbuckets.xml</Parameter>
+      <Parameter name="csaFile">netting.xml</Parameter>
+      <Parameter name="collateralBalancesFile">collateralbalances.xml</Parameter>
+    </Analytic>
+  </Analytics>
+</ORE>
