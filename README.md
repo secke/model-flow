@@ -95,7 +95,7 @@ The full walkthrough, with the web UI, three roles (model owner, validator, audi
 | `mf-server` | REST API, bearer tokens and OIDC SSO, roles and segregation of duties, validation decisions, findings, append-only audit log, model inventory, scheduler, webhook alerts, web UI |
 | `mf-cli` | the `mf` binary: `run`, `verify`, `runs`, `show`, `report`, `diff`, `series`, `alerts` |
 | `mf-python` | the `modelflow` Python package (PyO3): pipelines, Python functions as steps, runs, replay, diff, reports |
-| [`quantparity`](https://github.com/secke/quantparity) | external dependency, pinned by git revision: BSM, Black-76, CRR, bonds, single and multi-curve (€STR / Euribor), VaR/ES, VaR / ES forecasting models (EWMA, GARCH or GJR volatility; normal, Student-t or filtered historical simulation), stress, FRTB PLA, Kupiec, Christoffersen, Basel traffic light, Acerbi-Székely ES backtests, PSI, AUC/Gini/KS, PD calibration |
+| [`quantparity`](https://github.com/secke/quantparity) | external dependency, pinned by git revision: BSM, Black-76, CRR, bonds, single and multi-curve (€STR / Euribor), VaR/ES, VaR / ES forecasting models (EWMA, GARCH or GJR volatility; normal, Student-t or filtered historical simulation), stress, FRTB PLA, Kupiec, Christoffersen, Basel traffic light, Acerbi-Székely ES backtests, PSI, AUC/Gini/KS, PD calibration, IFRS 9, SA-CCR |
 
 ## Results
 
@@ -176,6 +176,7 @@ Every action, denials included, is appended to the audit log. On PostgreSQL a tr
 | **SR 26-2** (US model risk management): independent validation, effective challenge, model inventory | Model inventory with risk tiers and review dates; validator-only approval; challenger and benchmark pricers as pipeline steps; sensitivity analysis of any model step (`sensitivity`: expected direction, bounds); replayable evidence |
 | **SS1/23** (UK PRA model risk management): model identification, governance, independent validation, use of model risk mitigants | Inventory with status workflow (development → in validation → approved → in use → retired); segregation of duties enforced by the server and at SSO level; overdue reviews flagged; findings with severity, owner, deadline, evidence of remediation, closure review and escalation |
 | **IFRS 9** impairment (5.5) and the ECB's instructions for reporting the validation results of internal models (PD, LGD, CCF back-testing) | `ecl` recomputes the expected credit loss under stated conventions (exposure profile, discounting at the effective interest rate, 12-month or lifetime horizon by stage) and reconciles it with the reported figure; `staging_check` recomputes the stages from the default definition, the 30-day backstop and the SICR thresholds; `lgd_backtest` and `ccf_backtest` run the one-sided t-tests of the ECB instructions by segment, `pd_calibration` a one-sided binomial test or the Jeffreys test of the ECB instructions by grade |
+| **Basel CRE52** (SA-CCR), CRR2 articles 274 to 280, 12 CFR 217.132(c): exposure at default of derivatives | `saccr` recomputes the EAD of each netting set (replacement cost, margined or not, add-ons by asset class and hedging set, multiplier) and reconciles the reported EAD, RC and PFE |
 | **BCBS 239** (risk data aggregation and reporting): accuracy, integrity, traceability | Every input, output and piece of code fingerprinted; lineage through the DAG; data quality rules on the model inputs (`data_quality`: completeness, validity, consistency, the hash of the file checked); integrity checks on stored results; append-only audit log |
 
 ModelFlow is a tool that produces evidence; it does not make an institution compliant on its own.
@@ -242,6 +243,7 @@ params = { returns = "returns", forecasts = "ewma_model", alpha = 0.99 }
 | `stress_test` | named stress scenarios with loss limits | `trades`, `scenarios`, `market` |
 | `pnl_attribution` | FRTB P&L attribution test (Spearman, KS, zones) | `hypothetical`, `risk_theoretical` or `sensitivities` + `scenarios` |
 | `sensitivity` | reruns another step (`target`: a process model or a built-in step) with a shocked input or parameter and measures chosen outputs against the base case; checks an expected direction and a bound on the change (see below) | `target`, `outputs`, `[[step.scenario]]` |
+| `saccr` | SA-CCR exposure at default of derivative netting sets (Basel CRE52): replacement cost (margined or not), effective notionals by trade, add-ons by asset class, hedging set, maturity bucket, entity and commodity type, multiplier, cap at the unmargined EAD; reconciliation with `reported_ead`, `reported_rc`, `reported_pfe` on a netting set (the EAD fails beyond the tolerance, a gap in RC or PFE warns) | input: a netting set, a list, or `{"netting_sets": [...]}` (fields of [`quantparity.saccr_exposure`](https://github.com/secke/quantparity#counterparty-credit-risk-sa-ccr)); `alpha` (1.4), `tolerance` (0.01), `abs_tolerance` (1) |
 | `data_quality` | checks the raw cells of a CSV or Parquet file, or the table of another step, against declared rules: completeness, type and range, allowed values, uniqueness, consistency between columns; counts every violation with the first lines, profiles each column, records the file's SHA-256 (see below) | `path` or one dependency, `delimiter`, `min_rows`, `max_rows`, `[[step.rule]]` |
 
 VaR backtests combine **Kupiec** (POF), **Christoffersen** (independence, conditional coverage) and the **Basel traffic light** (with the multiplier add-on over 250 days at 99%). Besides the summary statistics, both backtests list every exception (`exception_list`: date, return, VaR, excess loss), apply the traffic light to consecutive regulatory 250-day windows ending at the latest observation (`basel_windows`, `latest_basel_window`, with the multiplier add-on) and, when `dates` points to a step with `YYYYMMDD` dates aligned with the returns, break exceptions down by year (`by_year`). The ES backtest counts the losses beyond the VaR at the ES level and compares them with the forecast ES: Z2 = Σ X_t I_t / (T (1-α) ES_t) + 1 is 0 when the ES is right, and its zone is green above -0.70, yellow down to -1.8 and red below, the 5% and 0.01% thresholds of Acerbi and Székely (2014) on 250 days. Every test returns `pass`, `warn` or `fail`. A pricing gap up to `abs + rel × |reference|` passes, up to 10 times that warns, beyond fails; a missing candidate price fails.
@@ -346,6 +348,7 @@ The process receives `{"inputs": {<dep>: <output>}, "params": {...}}` on stdin a
 | `examples/pricing-benchmark` | QuantLib 1.44 validated on 12 trades (European and American options, Black-76, bonds) |
 | `examples/rates-benchmark` | EUR 6M single curve (deposits + swaps), re-pricing, QuantLib validated on 7 swaps and 3 zero-coupons |
 | `examples/multicurve-benchmark` | €STR / Euribor 6M multi-curve with market conventions, QuantLib validated on 8 swaps (2 to 30 years) |
+| `examples/counterparty-saccr` | SA-CCR: the five worked examples of BCBS 279, Annex 4 (rates, credit, commodities, combined, margined), recomputed and reconciled with the published EADs |
 | `examples/portfolio-risk` | multi-asset portfolio: historical VaR/ES by full revaluation, sensitivities, stress tests with limits, PLA test |
 | `examples/python-sdk` | the `var-equity` desk written in Python with the SDK, checked against the TOML pipeline with `mf.diff`, and a challenger model |
 
@@ -583,8 +586,8 @@ The schema is created at startup under an advisory lock, so several instances ca
 ## Deployment
 
 ```bash
-docker build -t modelflow:0.25.0 .
-docker run --rm modelflow:0.25.0 new-token          # fill in deploy/server.docker.toml
+docker build -t modelflow:0.26.0 .
+docker run --rm modelflow:0.26.0 new-token          # fill in deploy/server.docker.toml
 docker compose up --build                          # http://127.0.0.1:8080
 kubectl apply -k deploy/k8s                        # after filling in deploy/k8s/secret.yaml
 ```
@@ -602,7 +605,7 @@ MODELFLOW_TEST_DATABASE_URL=postgres://postgres:pw@127.0.0.1:5432/postgres cargo
 pip install "maturin[patchelf]" pytest numpy pandas && maturin develop --release && pytest python/tests
 ```
 
-CI runs formatting, clippy, the tests on SQLite and PostgreSQL 16, the six examples end to end, the CLI against PostgreSQL, the diff action on an unchanged and a changed model, the Python wheel with its tests and the SDK example, the Docker image (read-only, no capabilities), Kubernetes manifest validation and the Playwright UI test (simulated SSO, owner → validator → auditor). See [CONTRIBUTING.md](CONTRIBUTING.md).
+CI runs formatting, clippy, the tests on SQLite and PostgreSQL 16, the seven pipeline examples end to end, the CLI against PostgreSQL, the diff action on an unchanged and a changed model, the Python wheel with its tests and the SDK example, the Docker image (read-only, no capabilities), Kubernetes manifest validation and the Playwright UI test (simulated SSO, owner → validator → auditor). See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Further reading: [experiments on real data](experiments/README.md), [product vision](docs/VISION.md), [scope and roadmap](docs/SCOPE.md).
 

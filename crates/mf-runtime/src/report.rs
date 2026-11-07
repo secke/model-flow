@@ -174,6 +174,117 @@ fn quality_rows(rules: &[Value]) -> Option<Value> {
     Some(Value::Array(out))
 }
 
+/// Netting sets of a `saccr` step: the exposure of each, its add-ons by hedging set, and the
+/// effective notional of each trade.
+fn saccr_tables(sets: &[Value]) -> Option<String> {
+    if sets.is_empty()
+        || !sets
+            .iter()
+            .all(|n| n.get("replacement_cost").is_some() && n.get("trades").is_some())
+    {
+        return None;
+    }
+    let (mut summary, mut hedging, mut trades) = (vec![], vec![], vec![]);
+    for n in sets {
+        let ns = &n["netting_set"];
+        let rec = n["reconciliation"]["rows"].as_array();
+        let reported = |q: &str| {
+            rec.and_then(|r| r.iter().find(|x| x["quantity"] == q))
+                .map(|x| x["reported"].clone())
+                .unwrap_or(Value::Null)
+        };
+        let mut row = json!({"netting set": ns, "V": n["market_value"], "C": n["collateral"],
+                             "RC": n["replacement_cost"], "add-on": n["add_on"], "multiplier": n["multiplier"],
+                             "PFE": n["pfe"], "EAD": n["ead"], "reported EAD": reported("ead"),
+                             "margined": n["margined"]});
+        if let Some(st) = n["reconciliation"].get("status") {
+            row["status"] = st.clone();
+        }
+        summary.push(row);
+        for c in n["asset_classes"].as_array().into_iter().flatten() {
+            for h in c["hedging_sets"].as_array().into_iter().flatten() {
+                hedging.push(
+                    json!({"netting set": ns, "asset class": c["asset_class"], "hedging set": h["name"],
+                                    "effective notional": h.get("effective_notional").cloned().unwrap_or(Value::Null),
+                                    "add-on": h["add_on"]}),
+                );
+            }
+        }
+        for t in n["trades"].as_array().into_iter().flatten() {
+            trades.push(
+                json!({"netting set": ns, "trade": t["id"], "asset class": t["asset_class"],
+                               "hedging set": t["hedging_set"], "δ": t["delta"], "d": t["adjusted_notional"],
+                               "MF": t["maturity_factor"], "SF": t["supervisory_factor"],
+                               "D": t["effective_notional"]}),
+            );
+        }
+    }
+    // Same columns on every summary row.
+    if summary.iter().any(|r| r.get("status").is_some()) {
+        for r in &mut summary {
+            r.as_object_mut().unwrap().entry("status").or_insert(Value::Null);
+        }
+    }
+    let grid = |rows: Vec<Value>, keys: &[&str]| {
+        let mut s = String::from("<table class=\"grid\"><tr>");
+        keys.iter().for_each(|k| {
+            let _ = write!(s, "<th>{}</th>", esc(k));
+        });
+        s.push_str("</tr>");
+        for r in rows.iter().take(200) {
+            s.push_str("<tr>");
+            for k in keys {
+                let _ = write!(s, "<td>{}</td>", r.get(*k).map(scalar).unwrap_or_default());
+            }
+            s.push_str("</tr>");
+        }
+        s + "</table>"
+    };
+    let mut keys = vec![
+        "netting set",
+        "V",
+        "C",
+        "RC",
+        "add-on",
+        "multiplier",
+        "PFE",
+        "EAD",
+        "reported EAD",
+        "margined",
+    ];
+    if summary[0].get("status").is_some() {
+        keys.push("status");
+    }
+    Some(format!(
+        "{}<p class=\"muted\">Add-ons by hedging set</p>{}<p class=\"muted\">Trades: D = δ × d × MF</p>{}",
+        grid(summary, &keys),
+        grid(
+            hedging,
+            &[
+                "netting set",
+                "asset class",
+                "hedging set",
+                "effective notional",
+                "add-on"
+            ]
+        ),
+        grid(
+            trades,
+            &[
+                "netting set",
+                "trade",
+                "asset class",
+                "hedging set",
+                "δ",
+                "d",
+                "MF",
+                "SF",
+                "D"
+            ]
+        )
+    ))
+}
+
 /// Generic rendering: object → key/value table, array of objects → column table.
 fn render(v: &Value, depth: usize) -> String {
     match v {
@@ -184,8 +295,13 @@ fn render(v: &Value, depth: usize) -> String {
                     Value::Array(a) if k == "rules" => quality_rows(a),
                     _ => None,
                 };
+                let saccr = match x {
+                    Value::Array(a) if k == "netting_sets" => saccr_tables(a),
+                    _ => None,
+                };
                 let cell = match x {
                     _ if quality.is_some() => render(quality.as_ref().unwrap(), depth + 1),
+                    _ if saccr.is_some() => saccr.clone().unwrap(),
                     Value::Object(_) if depth < 2 => render(x, depth + 1),
                     Value::Array(a) if a.first().is_some_and(Value::is_object) && depth < 2 => render(x, depth + 1),
                     Value::Array(a) => numeric_summary(a),
@@ -401,6 +517,22 @@ mod tests {
         );
         assert!(html.contains("absent: ead"));
         assert!(quality_rows(&[json!({"rule": "x"})]).is_none());
+    }
+
+    #[test]
+    fn saccr_netting_sets_as_tables() {
+        let ns = json!([{"netting_set": "A", "market_value": 60, "collateral": 0, "replacement_cost": 60,
+            "add_on": 347, "multiplier": 1, "pfe": 347, "ead": 569, "margined": false,
+            "reconciliation": {"rows": [{"quantity": "ead", "reported": 600}], "status": "fail"},
+            "asset_classes": [{"asset_class": "ir", "hedging_sets": [{"name": "USD", "effective_notional": 59270, "add_on": 296}]}],
+            "trades": [{"id": "1", "asset_class": "ir", "hedging_set": "USD", "delta": 1, "adjusted_notional": 78694,
+                        "maturity_factor": 1, "supervisory_factor": 0.005, "effective_notional": 78694}]}]);
+        let html = render(&json!({"netting_sets": ns}), 0);
+        assert!(html.contains(
+            "<td>A</td><td>60</td><td>0</td><td>60</td><td>347</td><td>1</td><td>347</td><td>569</td><td>600</td>"
+        ));
+        assert!(html.contains("<td>USD</td><td>59\u{202f}270</td><td>296</td>"));
+        assert!(html.contains("<td>1</td><td>ir</td><td>USD</td><td>1</td><td>78\u{202f}694</td>"));
     }
 
     #[test]

@@ -118,6 +118,15 @@ fn backtest_details(realized: &[f64], var: &[f64], alpha: f64, offset: usize, da
     out
 }
 
+fn worst<'a>(a: &'a str, b: &'a str) -> &'a str {
+    let rank = |s: &str| ["pass", "warn", "fail"].iter().position(|x| *x == s).unwrap_or(0);
+    if rank(b) > rank(a) {
+        b
+    } else {
+        a
+    }
+}
+
 fn param_f64(p: &Value, k: &str, default: f64) -> f64 {
     p.get(k).and_then(Value::as_f64).unwrap_or(default)
 }
@@ -309,6 +318,7 @@ impl BuiltinStep {
         "lgd_backtest",
         "ccf_backtest",
         "staging_check",
+        "saccr",
     ];
 
     /// Input named by the `key` parameter, otherwise dependency number `idx`.
@@ -615,6 +625,83 @@ impl BuiltinStep {
             });
         }
         out["status"] = json!(status);
+        Ok(out)
+    }
+
+    /// SA-CCR EAD of each netting set; with `reported_ead` (and `reported_rc`, `reported_pfe`) on a
+    /// netting set, the reconciliation of the bank's figures with the recomputed ones.
+    fn saccr(&self, inputs: &Inputs) -> Result<Value, Error> {
+        let e = |m: String| err(&self.name, m);
+        let doc = self.dep(inputs, "netting_sets", 0)?;
+        let sets: Vec<Value> = match doc {
+            Value::Array(a) => a.clone(),
+            Value::Object(o) if o.contains_key("trades") => vec![doc.clone()],
+            Value::Object(o) => o
+                .get("netting_sets")
+                .and_then(Value::as_array)
+                .cloned()
+                .ok_or_else(|| e("expected a netting set, a list of them or `{\"netting_sets\": [...]}`".into()))?,
+            _ => {
+                return Err(e(
+                    "expected a netting set, a list of them or `{\"netting_sets\": [...]}`".into(),
+                ))
+            }
+        };
+        let alpha = param_f64(&self.params, "alpha", 1.4);
+        let rel_tol = param_f64(&self.params, "tolerance", 0.01);
+        let abs_tol = param_f64(&self.params, "abs_tolerance", 1.0);
+        let (mut total, mut reported_any, mut status) = (0.0, false, "pass");
+        let mut out_sets = vec![];
+        for mut ns in sets {
+            let mut reported = BTreeMap::new();
+            if let Some(o) = ns.as_object_mut() {
+                for k in ["ead", "rc", "pfe"] {
+                    if let Some(v) = o.remove(&format!("reported_{k}")) {
+                        let x = v
+                            .as_f64()
+                            .ok_or_else(|| e(format!("`reported_{k}` must be a number")))?;
+                        reported.insert(k, x);
+                    }
+                }
+            }
+            let ns: quantparity::saccr::NettingSet =
+                serde_json::from_value(ns).map_err(|x| e(format!("netting set: {x}")))?;
+            let x = quantparity::saccr::exposure(&ns, alpha).map_err(e)?;
+            total += x.ead;
+            let mut v = serde_json::to_value(&x).unwrap();
+            if !reported.is_empty() {
+                reported_any = true;
+                let mut rows = vec![];
+                let mut st = "pass";
+                for (k, rep) in &reported {
+                    let ours = match *k {
+                        "ead" => x.ead,
+                        "rc" => x.replacement_cost,
+                        _ => x.pfe,
+                    };
+                    let outside = (ours - rep).abs() > abs_tol.max(rel_tol * rep.abs());
+                    // Only the EAD fails: a gap in its components locates the difference.
+                    let s = match (outside, *k) {
+                        (false, _) => "pass",
+                        (true, "ead") => "fail",
+                        (true, _) => "warn",
+                    };
+                    st = worst(st, s);
+                    rows.push(
+                        json!({"quantity": k, "reported": rep, "recomputed": ours, "difference": ours - rep,
+                                     "relative_difference": (ours - rep) / rep.abs(), "status": s}),
+                    );
+                }
+                status = worst(status, st);
+                v["reconciliation"] =
+                    json!({"rows": rows, "tolerance": rel_tol, "abs_tolerance": abs_tol, "status": st});
+            }
+            out_sets.push(v);
+        }
+        let mut out = json!({"alpha": alpha, "ead": total, "netting_sets": out_sets});
+        if reported_any {
+            out["status"] = json!(status);
+        }
         Ok(out)
     }
 
@@ -1004,6 +1091,7 @@ impl Step for BuiltinStep {
                 Ok(out)
             }
             "staging_check" => self.staging(inputs),
+            "saccr" => self.saccr(inputs),
             "price_portfolio" => {
                 let trades = trades_from_value(self.dep(inputs, "trades", 0)?).map_err(|e| err(&self.name, e))?;
                 let market = self.market(inputs)?;
@@ -1778,6 +1866,52 @@ mod tests {
         assert!(builtin("pd_calibration", &["t"], json!({"test": "exact"}))
             .run(&i)
             .is_err());
+    }
+
+    #[test]
+    fn saccr_step_reconciles_reported_exposures() {
+        // Examples 1 and 2 of BCBS 279, Annex 4: EAD 569 (rates) and 381 (credit).
+        let swap = json!({"asset_class": "ir", "qualifier": "USD", "notional": 10000});
+        let with = |base: &Value, extra: Value| {
+            let mut v = base.clone();
+            v.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            v
+        };
+        let rates = json!({"id": "rates", "reported_ead": 569.0, "reported_rc": 50.0, "trades": [
+            with(&swap, json!({"id": "1", "long": true, "market_value": 30, "maturity": 10})),
+            with(&swap, json!({"id": "2", "long": false, "market_value": -20, "maturity": 4})),
+            {"id": "3", "asset_class": "ir", "qualifier": "EUR", "notional": 5000, "market_value": 50, "maturity": 11,
+             "start": 1, "option": {"kind": "put", "bought": true, "price": 0.06, "strike": 0.05, "exercise": 1}}]});
+        let cds = |id: &str, name: &str, long: bool, mv: f64, m: f64| {
+            json!({"id": id, "asset_class": "credit", "qualifier": name, "notional": 10000, "long": long,
+                   "market_value": mv, "maturity": m})
+        };
+        let credit = json!({"id": "credit", "reported_ead": 400.0, "trades": [
+            with(&cds("4", "Firm A", true, 20.0, 3.0), json!({"rating": "AA"})),
+            with(&cds("5", "Firm B", false, -40.0, 6.0), json!({"rating": "BBB"})),
+            with(&cds("6", "CDX.IG", true, 0.0, 5.0), json!({"index": true, "investment_grade": true}))]});
+        let mut i = BTreeMap::new();
+        i.insert("book".to_string(), json!({"netting_sets": [rates.clone(), credit]}));
+        let o = builtin("saccr", &["book"], json!({})).run(&i).unwrap();
+        let ns = o["netting_sets"].as_array().unwrap();
+        assert!((ns[0]["ead"].as_f64().unwrap() - 569.0).abs() < 0.5);
+        assert!((o["ead"].as_f64().unwrap() - 950.0).abs() < 1.0);
+        // EAD within 1%, but the reported RC of 50 is not the recomputed 60: a warning.
+        assert_eq!(ns[0]["reconciliation"]["status"], "warn");
+        // 400 reported for 381: beyond 1%.
+        assert_eq!(ns[1]["reconciliation"]["rows"][0]["status"], "fail");
+        assert_eq!(o["status"], "fail");
+        // Without reported figures the step is data, without a status.
+        let mut plain = rates;
+        plain.as_object_mut().unwrap().retain(|k, _| !k.starts_with("reported"));
+        i.insert("book".to_string(), plain);
+        let o = builtin("saccr", &["book"], json!({"alpha": 1.0})).run(&i).unwrap();
+        assert!(o.get("status").is_none() && (o["ead"].as_f64().unwrap() - 569.0 / 1.4).abs() < 0.5);
+        i.insert(
+            "book".to_string(),
+            json!({"id": "x", "trades": [{"id": "1", "asset_class": "ir"}]}),
+        );
+        assert!(builtin("saccr", &["book"], json!({})).run(&i).is_err());
     }
 
     #[test]

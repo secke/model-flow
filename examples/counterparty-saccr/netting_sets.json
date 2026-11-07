@@ -1,0 +1,270 @@
+{
+ "netting_sets": [
+  {
+   "id": "example 1: rates",
+   "trades": [
+    {
+     "asset_class": "ir",
+     "qualifier": "USD",
+     "notional": 10000,
+     "id": "IR1",
+     "long": true,
+     "market_value": 30,
+     "maturity": 10
+    },
+    {
+     "asset_class": "ir",
+     "qualifier": "USD",
+     "notional": 10000,
+     "id": "IR2",
+     "long": false,
+     "market_value": -20,
+     "maturity": 4
+    },
+    {
+     "id": "IR3",
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 5000,
+     "market_value": 50,
+     "maturity": 11,
+     "start": 1,
+     "option": {
+      "kind": "put",
+      "bought": true,
+      "price": 0.06,
+      "strike": 0.05,
+      "exercise": 1
+     }
+    }
+   ],
+   "reported_ead": 569,
+   "reported_rc": 60
+  },
+  {
+   "id": "example 2: credit",
+   "trades": [
+    {
+     "id": "CR1",
+     "asset_class": "credit",
+     "qualifier": "Firm A",
+     "rating": "AA",
+     "notional": 10000,
+     "long": true,
+     "market_value": 20,
+     "maturity": 3
+    },
+    {
+     "id": "CR2",
+     "asset_class": "credit",
+     "qualifier": "Firm B",
+     "rating": "BBB",
+     "notional": 10000,
+     "long": false,
+     "market_value": -40,
+     "maturity": 6
+    },
+    {
+     "id": "CR3",
+     "asset_class": "credit",
+     "qualifier": "CDX.IG",
+     "index": true,
+     "investment_grade": true,
+     "notional": 10000,
+     "long": true,
+     "market_value": 0,
+     "maturity": 5
+    }
+   ],
+   "reported_ead": 381,
+   "reported_rc": 0
+  },
+  {
+   "id": "example 3: commodities",
+   "trades": [
+    {
+     "id": "CO1",
+     "asset_class": "commodity",
+     "qualifier": "crude oil",
+     "sector": "oil_gas",
+     "notional": 10000,
+     "long": true,
+     "market_value": -50,
+     "maturity": 0.75
+    },
+    {
+     "id": "CO2",
+     "asset_class": "commodity",
+     "qualifier": "crude oil",
+     "sector": "oil_gas",
+     "notional": 20000,
+     "long": false,
+     "market_value": -30,
+     "maturity": 2
+    },
+    {
+     "id": "CO3",
+     "asset_class": "commodity",
+     "qualifier": "silver",
+     "sector": "metals",
+     "notional": 10000,
+     "long": true,
+     "market_value": 100,
+     "maturity": 5
+    }
+   ],
+   "reported_ead": 5406,
+   "reported_rc": 20
+  },
+  {
+   "id": "example 4: rates and credit",
+   "trades": [
+    {
+     "asset_class": "ir",
+     "qualifier": "USD",
+     "notional": 10000,
+     "id": "IR1",
+     "long": true,
+     "market_value": 30,
+     "maturity": 10
+    },
+    {
+     "asset_class": "ir",
+     "qualifier": "USD",
+     "notional": 10000,
+     "id": "IR2",
+     "long": false,
+     "market_value": -20,
+     "maturity": 4
+    },
+    {
+     "id": "IR3",
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 5000,
+     "market_value": 50,
+     "maturity": 11,
+     "start": 1,
+     "option": {
+      "kind": "put",
+      "bought": true,
+      "price": 0.06,
+      "strike": 0.05,
+      "exercise": 1
+     }
+    },
+    {
+     "id": "CR1",
+     "asset_class": "credit",
+     "qualifier": "Firm A",
+     "rating": "AA",
+     "notional": 10000,
+     "long": true,
+     "market_value": 20,
+     "maturity": 3
+    },
+    {
+     "id": "CR2",
+     "asset_class": "credit",
+     "qualifier": "Firm B",
+     "rating": "BBB",
+     "notional": 10000,
+     "long": false,
+     "market_value": -40,
+     "maturity": 6
+    },
+    {
+     "id": "CR3",
+     "asset_class": "credit",
+     "qualifier": "CDX.IG",
+     "index": true,
+     "investment_grade": true,
+     "notional": 10000,
+     "long": true,
+     "market_value": 0,
+     "maturity": 5
+    }
+   ],
+   "reported_ead": 936,
+   "reported_rc": 40
+  },
+  {
+   "id": "example 5: rates and commodities, margined",
+   "trades": [
+    {
+     "asset_class": "ir",
+     "qualifier": "USD",
+     "notional": 10000,
+     "id": "IR1",
+     "long": true,
+     "market_value": 30,
+     "maturity": 10
+    },
+    {
+     "asset_class": "ir",
+     "qualifier": "USD",
+     "notional": 10000,
+     "id": "IR2",
+     "long": false,
+     "market_value": -20,
+     "maturity": 4
+    },
+    {
+     "id": "IR3",
+     "asset_class": "ir",
+     "qualifier": "EUR",
+     "notional": 5000,
+     "market_value": 50,
+     "maturity": 11,
+     "start": 1,
+     "option": {
+      "kind": "put",
+      "bought": true,
+      "price": 0.06,
+      "strike": 0.05,
+      "exercise": 1
+     }
+    },
+    {
+     "id": "CO1",
+     "asset_class": "commodity",
+     "qualifier": "crude oil",
+     "sector": "oil_gas",
+     "notional": 10000,
+     "long": true,
+     "market_value": -50,
+     "maturity": 0.75
+    },
+    {
+     "id": "CO2",
+     "asset_class": "commodity",
+     "qualifier": "crude oil",
+     "sector": "oil_gas",
+     "notional": 20000,
+     "long": false,
+     "market_value": -30,
+     "maturity": 2
+    },
+    {
+     "id": "CO3",
+     "asset_class": "commodity",
+     "qualifier": "silver",
+     "sector": "metals",
+     "notional": 10000,
+     "long": true,
+     "market_value": 100,
+     "maturity": 5
+    }
+   ],
+   "collateral": 200,
+   "margin": {
+    "threshold": 0,
+    "mta": 5,
+    "nica": 150,
+    "remargin_days": 5
+   },
+   "reported_ead": 1879,
+   "reported_rc": 0
+  }
+ ]
+}

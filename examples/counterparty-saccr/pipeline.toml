@@ -1,0 +1,16 @@
+# SA-CCR exposure at default: the five worked examples of BCBS 279, Annex 4, recomputed and
+# reconciled with the published figures (rounded to the unit, hence a 0.5% tolerance).
+name = "counterparty-saccr"
+
+[[step]]
+name = "netting_sets"
+kind = "json"
+version = "1.0.0"
+path = "netting_sets.json"
+
+[[step]]
+name = "saccr"
+kind = "saccr"
+version = "1.0.0"
+deps = ["netting_sets"]
+params = { alpha = 1.4, tolerance = 0.005, abs_tolerance = 1 }
